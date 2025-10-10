@@ -35,7 +35,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Publish app
-        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release
+        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -p:GHPages=true
+
+      - name: Change base-tag in index.html
+        run: sed -i 's/<base href="\/" \/>/<base href="\/slimsbe\/" \/>/g' ${{ env.PUBLISH_DIR }}/index.html
 
       - name: Generate build info
         run: |
@@ -56,12 +59,6 @@ jobs:
           EOF
           
           sed -i "s|</body>|<script>console.log('🔨 Build Info: Commit $COMMIT_SHORT built at $BUILD_TIME'); console.log('🔍 Verify at: https://github.com/${{ github.repository }}/commit/$COMMIT_HASH');</script></body>|" ${{ env.PUBLISH_DIR }}/index.html
-
-      - name: Rewrite base href
-        uses: SteveSandersonMS/ghaction-rewrite-base-href@v1
-        with:
-          html_path: ${{ env.PUBLISH_DIR }}/index.html
-          base_href: /slimsbe/
 
       - name: Add .nojekyll
         run: touch ${{ env.PUBLISH_DIR }}/.nojekyll
