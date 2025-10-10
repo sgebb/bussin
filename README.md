@@ -2,7 +2,7 @@
 
 A zero-backend, browser-based tool for exploring and managing Azure Service Bus namespaces, queues, topics, and subscriptions.
 
-[![Deploy to GitHub Pages](https://github.com/YOUR_USERNAME/slimsbe/actions/workflows/deploy.yml/badge.svg)](https://github.com/YOUR_USERNAME/slimsbe/actions/workflows/deploy.yml)
+[![Deploy to GitHub Pages](https://github.com/sgebb/slimsbe/actions/workflows/deploy.yml/badge.svg)](https://github.com/sgebb/slimsbe/actions/workflows/deploy.yml)
 
 ## 🚀 Live Demo
 
@@ -68,7 +68,7 @@ You can also check `buildinfo.json` at the root of the deployed site.
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/slimsbe.git
+git clone https://github.com/sgebb/slimsbe.git
 cd slimsbe/ServiceBusExplorer.Blazor
 
 # Run the app
@@ -84,7 +84,7 @@ The app uses a pre-configured Azure AD app registration. If you want to use your
 1. Create an Azure AD app registration
 2. Add redirect URIs:
    - `https://localhost:5001/authentication/login-callback`
-   - `https://YOUR_USERNAME.github.io/slimsbe/authentication/login-callback`
+   - `https://sgebb.github.io/slimsbe/authentication/login-callback`
 3. Request API permissions:
    - `https://management.azure.com/user_impersonation`
    - `https://servicebus.azure.net/user_impersonation`
