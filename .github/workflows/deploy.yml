@@ -28,30 +28,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install wasm-tools workload
-        run: dotnet workload install wasm-tools
-
-      - name: Restore dependencies
-        run: dotnet restore src/ServiceBusExplorer.Blazor.csproj
-
-      - name: Publish
-        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -o publish
-
-      - name: Update base href for GitHub Pages
-        run: |
-          # Find the actual index.html location
-          if [ -f "publish/wwwroot/index.html" ]; then
-            INDEX_PATH="publish/wwwroot/index.html"
-          elif [ -f "publish/index.html" ]; then
-            INDEX_PATH="publish/index.html"
-          else
-            echo "Error: Cannot find index.html"
-            find publish -name "index.html"
-            exit 1
-          fi
-          
-          echo "Found index.html at: $INDEX_PATH"
-          sed -i 's|<base href="/" />|<base href="/slimsbe/" />|' "$INDEX_PATH"
+      - name: Prepare Blazor WASM for GitHub Pages
+        uses: na1307/blazor-github-pages@v3
+        id: prepare
+        with:
+          project-path: src/ServiceBusExplorer.Blazor.csproj
 
       - name: Generate build info
         run: |
@@ -59,17 +40,12 @@ jobs:
           COMMIT_SHORT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          WWWROOT="${{ steps.prepare.outputs.wwwroot-path }}"
           
           echo "Generating build info..."
           echo "Commit: $COMMIT_HASH"
           echo "Time: $BUILD_TIME"
-          
-          # Find the wwwroot directory
-          if [ -d "publish/wwwroot" ]; then
-            WWWROOT="publish/wwwroot"
-          else
-            WWWROOT="publish"
-          fi
+          echo "WWWRoot: $WWWROOT"
           
           # Create buildinfo.json
           cat > $WWWROOT/buildinfo.json << EOF
@@ -88,26 +64,10 @@ jobs:
           
           cat $WWWROOT/buildinfo.json
 
-      - name: Add .nojekyll and 404.html for SPA routing
-        run: |
-          # Find the wwwroot directory
-          if [ -d "publish/wwwroot" ]; then
-            WWWROOT="publish/wwwroot"
-          else
-            WWWROOT="publish"
-          fi
-          
-          touch $WWWROOT/.nojekyll
-          cp $WWWROOT/index.html $WWWROOT/404.html
-          
-          # Set output for next step
-          echo "wwwroot_path=$WWWROOT" >> $GITHUB_OUTPUT
-        id: setup
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ steps.setup.outputs.wwwroot_path }}
+          path: ${{ steps.prepare.outputs.wwwroot-path }}
 
   deploy:
     environment:
