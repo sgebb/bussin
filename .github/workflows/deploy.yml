@@ -28,11 +28,14 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
       - name: Restore dependencies
         run: dotnet restore src/ServiceBusExplorer.Blazor.csproj
 
       - name: Publish
-        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -o publish
+        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -o publish -p:StaticWebAssetBasePath=/slimsbe/
 
       - name: Generate build info
         run: |
@@ -62,13 +65,10 @@ jobs:
           
           cat publish/wwwroot/buildinfo.json
 
-      - name: Update base path for GitHub Pages
+      - name: Add .nojekyll and 404.html for SPA routing
         run: |
-          # Update base href for GitHub Pages subpath
-          sed -i 's|<base href="/" />|<base href="/slimsbe/" />|' publish/wwwroot/index.html
-
-      - name: Add .nojekyll
-        run: touch publish/wwwroot/.nojekyll
+          touch publish/wwwroot/.nojekyll
+          cp publish/wwwroot/index.html publish/wwwroot/404.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
