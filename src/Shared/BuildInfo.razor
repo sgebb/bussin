@@ -1,0 +1,164 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+@if (buildInfo != null)
+{
+    <div class="build-info-badge" @onclick="ToggleDetails">
+        <span class="badge bg-secondary">
+            <span class="me-1">🔨</span>
+            Build: @buildInfo.CommitShort
+        </span>
+    </div>
+
+    @if (showDetails)
+    {
+        <div class="build-info-modal" @onclick="ToggleDetails">
+            <div class="build-info-content" @onclick:stopPropagation>
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Build Information</h5>
+                        <button type="button" class="btn-close btn-close-white" @onclick="ToggleDetails"></button>
+                    </div>
+                    <div class="card-body">
+                        <p class="lead">This build is verifiable and matches the open-source code on GitHub.</p>
+                        
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <th>Commit Hash:</th>
+                                    <td><code>@buildInfo.CommitShort</code></td>
+                                </tr>
+                                <tr>
+                                    <th>Build Time:</th>
+                                    <td>@FormatBuildTime(buildInfo.BuildTime)</td>
+                                </tr>
+                                <tr>
+                                    <th>Branch:</th>
+                                    <td>@buildInfo.Branch</td>
+                                </tr>
+                                <tr>
+                                    <th>Repository:</th>
+                                    <td><a href="https://github.com/@buildInfo.Repository" target="_blank">@buildInfo.Repository</a></td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="alert alert-info">
+                            <strong>🔍 Verify this build:</strong>
+                            <p class="mb-2">Click below to see the exact source code that was used to build this deployment.</p>
+                            <a href="@buildInfo.VerifyUrl" target="_blank" class="btn btn-primary btn-sm">
+                                View Source Code on GitHub
+                            </a>
+                        </div>
+
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                This application is 100% client-side. Your credentials never leave your browser.
+                                All code is open source and auditable.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private BuildInfoModel? buildInfo;
+    private bool showDetails = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            buildInfo = await Http.GetFromJsonAsync<BuildInfoModel>("buildinfo.json");
+        }
+        catch
+        {
+            // buildinfo.json doesn't exist in local dev, only in deployed version
+            buildInfo = new BuildInfoModel
+            {
+                CommitHash = "dev",
+                CommitShort = "dev",
+                BuildTime = DateTime.UtcNow.ToString("o"),
+                Branch = "local",
+                Repository = "local-development",
+                VerifyUrl = "#"
+            };
+        }
+    }
+
+    private void ToggleDetails()
+    {
+        showDetails = !showDetails;
+    }
+
+    private string FormatBuildTime(string? buildTime)
+    {
+        if (string.IsNullOrEmpty(buildTime)) return "Unknown";
+        
+        if (DateTime.TryParse(buildTime, out var dt))
+        {
+            return dt.ToString("yyyy-MM-dd HH:mm:ss UTC");
+        }
+        
+        return buildTime;
+    }
+
+    private class BuildInfoModel
+    {
+        public string CommitHash { get; set; } = "";
+        public string CommitShort { get; set; } = "";
+        public string BuildTime { get; set; } = "";
+        public string Branch { get; set; } = "";
+        public string Repository { get; set; } = "";
+        public string VerifyUrl { get; set; } = "";
+    }
+}
+
+<style>
+    .build-info-badge {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        cursor: pointer;
+        z-index: 1000;
+        transition: transform 0.2s;
+    }
+
+    .build-info-badge:hover {
+        transform: scale(1.1);
+    }
+
+    .build-info-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        padding: 20px;
+    }
+
+    .build-info-content {
+        max-width: 600px;
+        width: 100%;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    @@keyframes slideIn {
+        from {
+            transform: translateY(-20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+</style>

@@ -1,0 +1,366 @@
+@page "/explorer"
+@inject IAuthenticationService AuthService
+@inject IAzureResourceService ResourceService
+@inject IServiceBusOperationsService OperationsService
+@inject NavigationManager Navigation
+
+<PageTitle>Explorer - Service Bus Explorer</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="container-fluid mt-4">
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <button class="btn btn-sm btn-secondary" @onclick="GoBack">
+                        ← Back to Home
+                    </button>
+                    <h2 class="mt-2">Service Bus Explorer</h2>
+                    <p class="text-muted">Namespace: <strong>@NamespaceParam</strong></p>
+                </div>
+            </div>
+
+            @if (isLoadingEntities)
+            {
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="spinner-border text-primary"></div>
+                        <span class="ms-2">Loading queues and topics...</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="row">
+                    <!-- Queues -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">Queues (@queueNames.Count)</h5>
+                            </div>
+                            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                                @if (queueNames.Count == 0)
+                                {
+                                    <p class="text-muted">No queues found</p>
+                                }
+                                else
+                                {
+                                    <div class="list-group">
+                                        @foreach (var queueName in queueNames)
+                                        {
+                                            <a href="#" class="list-group-item list-group-item-action @(selectedQueueName == queueName ? "active" : "")" 
+                                               @onclick="() => SelectQueue(queueName)" @onclick:preventDefault>
+                                                @queueName
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Topics -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0">Topics (@topicNames.Count)</h5>
+                            </div>
+                            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                                @if (topicNames.Count == 0)
+                                {
+                                    <p class="text-muted">No topics found</p>
+                                }
+                                else
+                                {
+                                    <div class="list-group">
+                                        @foreach (var topicName in topicNames)
+                                        {
+                                            <a href="#" class="list-group-item list-group-item-action @(selectedTopicName == topicName ? "active" : "")" 
+                                               @onclick="() => SelectTopic(topicName)" @onclick:preventDefault>
+                                                @topicName
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Subscriptions -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">Subscriptions @(selectedTopicName != null ? $"({subscriptionNames.Count})" : "")</h5>
+                            </div>
+                            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                                @if (selectedTopicName == null)
+                                {
+                                    <p class="text-muted">Select a topic to view subscriptions</p>
+                                }
+                                else if (isLoadingSubscriptions)
+                                {
+                                    <div class="spinner-border spinner-border-sm"></div>
+                                    <span class="ms-2">Loading...</span>
+                                }
+                                else if (subscriptionNames.Count == 0)
+                                {
+                                    <p class="text-muted">No subscriptions found</p>
+                                }
+                                else
+                                {
+                                    <div class="list-group">
+                                        @foreach (var subName in subscriptionNames)
+                                        {
+                                            <a href="#" class="list-group-item list-group-item-action @(selectedSubscriptionName == subName ? "active" : "")" 
+                                               @onclick="() => SelectSubscription(subName)" @onclick:preventDefault>
+                                                @subName
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message Operations -->
+                @if (selectedQueueName != null || selectedSubscriptionName != null)
+                {
+                    <div class="row mt-4">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>@(selectedQueueName != null ? $"Queue: {selectedQueueName}" : $"Subscription: {selectedTopicName}/{selectedSubscriptionName}")</h5>
+                                </div>
+                                <div class="card-body">
+                                    <button class="btn btn-primary me-2" @onclick="PeekMessages" disabled="@isPeeking">
+                                        @if (isPeeking)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                        }
+                                        Peek Messages
+                                    </button>
+
+                                    @if (peekedMessages.Count > 0)
+                                    {
+                                        <div class="mt-3">
+                                            <h6>Messages (@peekedMessages.Count)</h6>
+                                            @foreach (var msg in peekedMessages)
+                                            {
+                                                <div class="card mb-2 message-card">
+                                                    <div class="card-header">
+                                                        <small>
+                                                            Sequence: @msg.SequenceNumber | 
+                                                            Enqueued: @msg.EnqueuedTime?.ToString("yyyy-MM-dd HH:mm:ss") | 
+                                                            ID: @msg.MessageId
+                                                        </small>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <pre class="mb-0"><code>@msg.Body</code></pre>
+                                                        @if (msg.ApplicationProperties?.Count > 0)
+                                                        {
+                                                            <div class="mt-2">
+                                                                <strong>Properties:</strong>
+                                                                <ul class="mb-0">
+                                                                    @foreach (var prop in msg.ApplicationProperties)
+                                                                    {
+                                                                        <li><code>@prop.Key</code>: @prop.Value</li>
+                                                                    }
+                                                                </ul>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-3">
+                    <strong>Error:</strong> @errorMessage
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="container mt-4">
+            <div class="alert alert-warning">Please sign in to access the explorer.</div>
+            <a href="authentication/login" class="btn btn-primary">Sign In</a>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [SupplyParameterFromQuery(Name = "namespace")]
+    public string? NamespaceParam { get; set; }
+    
+    [SupplyParameterFromQuery(Name = "rg")]
+    public string? ResourceGroupParam { get; set; }
+    
+    [SupplyParameterFromQuery(Name = "sub")]
+    public string? SubscriptionIdParam { get; set; }
+    
+    [SupplyParameterFromQuery(Name = "name")]
+    public string? NameParam { get; set; }
+
+    private List<string> queueNames = new();
+    private List<string> topicNames = new();
+    private List<string> subscriptionNames = new();
+    
+    private string? selectedQueueName;
+    private string? selectedTopicName;
+    private string? selectedSubscriptionName;
+    
+    private List<ServiceBusMessage> peekedMessages = new();
+    private bool isLoadingEntities = false;
+    private bool isLoadingSubscriptions = false;
+    private bool isPeeking = false;
+    private string? errorMessage;
+    
+    // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
+    private string NamespaceNameOnly => NamespaceParam?.Split('.').FirstOrDefault() ?? "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(NamespaceParam))
+        {
+            await LoadEntitiesAsync();
+        }
+    }
+
+    private async Task LoadEntitiesAsync()
+    {
+        isLoadingEntities = true;
+        errorMessage = null;
+
+        try
+        {
+            var credential = await AuthService.GetTokenCredentialAsync();
+            if (credential == null)
+            {
+                errorMessage = "Failed to get authentication token";
+                return;
+            }
+
+            var namespaceInfo = new ServiceBusNamespaceInfo
+            {
+                Name = NameParam ?? "",
+                FullyQualifiedNamespace = NamespaceParam ?? "",
+                ResourceGroup = ResourceGroupParam ?? "",
+                SubscriptionId = SubscriptionIdParam ?? "",
+                Location = ""
+            };
+
+            queueNames = await ResourceService.ListQueuesAsync(credential, namespaceInfo);
+            topicNames = await ResourceService.ListTopicsAsync(credential, namespaceInfo);
+
+            Console.WriteLine($"Loaded {queueNames.Count} queues and {topicNames.Count} topics");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load entities: {ex.Message}";
+            Console.WriteLine($"Error: {ex}");
+        }
+        finally
+        {
+            isLoadingEntities = false;
+        }
+    }
+
+    private void SelectQueue(string queueName)
+    {
+        selectedQueueName = queueName;
+        selectedTopicName = null;
+        selectedSubscriptionName = null;
+        peekedMessages.Clear();
+    }
+
+    private async Task SelectTopic(string topicName)
+    {
+        selectedQueueName = null;
+        selectedTopicName = topicName;
+        selectedSubscriptionName = null;
+        peekedMessages.Clear();
+        
+        await LoadSubscriptionsAsync(topicName);
+    }
+
+    private async Task LoadSubscriptionsAsync(string topicName)
+    {
+        isLoadingSubscriptions = true;
+        subscriptionNames.Clear();
+
+        try
+        {
+            var credential = await AuthService.GetTokenCredentialAsync();
+            if (credential == null) return;
+
+            var namespaceInfo = new ServiceBusNamespaceInfo
+            {
+                Name = NameParam ?? "",
+                FullyQualifiedNamespace = NamespaceParam ?? "",
+                ResourceGroup = ResourceGroupParam ?? "",
+                SubscriptionId = SubscriptionIdParam ?? "",
+                Location = ""
+            };
+
+            subscriptionNames = await ResourceService.ListSubscriptionsAsync(credential, namespaceInfo, topicName);
+            Console.WriteLine($"Loaded {subscriptionNames.Count} subscriptions");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading subscriptions: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingSubscriptions = false;
+        }
+    }
+
+    private void SelectSubscription(string subName)
+    {
+        selectedSubscriptionName = subName;
+        selectedQueueName = null;
+        peekedMessages.Clear();
+    }
+
+    private async Task PeekMessages()
+    {
+        isPeeking = true;
+        peekedMessages.Clear();
+
+        try
+        {
+            if (selectedQueueName != null)
+            {
+                peekedMessages = await OperationsService.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, 10);
+            }
+            else if (selectedSubscriptionName != null && selectedTopicName != null)
+            {
+                peekedMessages = await OperationsService.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, 10);
+            }
+
+            Console.WriteLine($"Peeked {peekedMessages.Count} messages");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to peek messages: {ex.Message}";
+            Console.WriteLine($"Peek error: {ex}");
+        }
+        finally
+        {
+            isPeeking = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/");
+    }
+}

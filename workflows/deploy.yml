@@ -1,0 +1,90 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Get full history for commit info
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ServiceBusExplorer.Blazor/ServiceBusExplorer.Blazor.csproj
+
+      - name: Build
+        run: dotnet build ServiceBusExplorer.Blazor/ServiceBusExplorer.Blazor.csproj -c Release --no-restore
+
+      - name: Publish
+        run: dotnet publish ServiceBusExplorer.Blazor/ServiceBusExplorer.Blazor.csproj -c Release -o publish --no-build
+
+      - name: Generate build info
+        run: |
+          COMMIT_HASH=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          
+          echo "Generating build info..."
+          echo "Commit: $COMMIT_HASH"
+          echo "Time: $BUILD_TIME"
+          
+          # Create buildinfo.json
+          cat > publish/wwwroot/buildinfo.json << EOF
+          {
+            "commitHash": "$COMMIT_HASH",
+            "commitShort": "$COMMIT_SHORT",
+            "buildTime": "$BUILD_TIME",
+            "branch": "$BRANCH",
+            "repository": "${{ github.repository }}",
+            "verifyUrl": "https://github.com/${{ github.repository }}/commit/$COMMIT_HASH"
+          }
+          EOF
+          
+          # Inject build info into index.html
+          sed -i "s|</body>|<script>console.log('🔨 Build Info: Commit $COMMIT_SHORT built at $BUILD_TIME'); console.log('🔍 Verify at: https://github.com/${{ github.repository }}/commit/$COMMIT_HASH');</script></body>|" publish/wwwroot/index.html
+          
+          cat publish/wwwroot/buildinfo.json
+
+      - name: Update base path for GitHub Pages
+        run: |
+          # Update base href for GitHub Pages subpath
+          sed -i 's|<base href="/" />|<base href="/slimsbe/" />|' publish/wwwroot/index.html
+
+      - name: Add .nojekyll
+        run: touch publish/wwwroot/.nojekyll
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish/wwwroot
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

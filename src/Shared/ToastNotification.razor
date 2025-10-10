@@ -1,0 +1,84 @@
+@inject INotificationService NotificationService
+@implements IDisposable
+
+<div class="toast-container">
+    @foreach (var notification in notifications)
+    {
+        <div class="toast show @GetToastClass(notification.Type)" role="alert">
+            <div class="toast-header">
+                <strong class="me-auto">@GetToastTitle(notification.Type)</strong>
+                <button type="button" class="btn-close" @onclick="() => RemoveNotification(notification)"></button>
+            </div>
+            <div class="toast-body">
+                @notification.Message
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<NotificationItem> notifications = new();
+
+    protected override void OnInitialized()
+    {
+        NotificationService.OnNotification += HandleNotification;
+    }
+
+    private void HandleNotification(string message, NotificationType type)
+    {
+        var notification = new NotificationItem
+        {
+            Id = Guid.NewGuid(),
+            Message = message,
+            Type = type
+        };
+
+        notifications.Add(notification);
+        StateHasChanged();
+
+        // Auto-remove after 5 seconds
+        Task.Delay(5000).ContinueWith(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                RemoveNotification(notification);
+            });
+        });
+    }
+
+    private void RemoveNotification(NotificationItem notification)
+    {
+        notifications.Remove(notification);
+        StateHasChanged();
+    }
+
+    private string GetToastClass(NotificationType type) => type switch
+    {
+        NotificationType.Success => "bg-success text-white",
+        NotificationType.Error => "bg-danger text-white",
+        NotificationType.Warning => "bg-warning",
+        NotificationType.Info => "bg-info text-white",
+        _ => ""
+    };
+
+    private string GetToastTitle(NotificationType type) => type switch
+    {
+        NotificationType.Success => "✓ Success",
+        NotificationType.Error => "✗ Error",
+        NotificationType.Warning => "⚠ Warning",
+        NotificationType.Info => "ℹ Info",
+        _ => "Notification"
+    };
+
+    public void Dispose()
+    {
+        NotificationService.OnNotification -= HandleNotification;
+    }
+
+    private class NotificationItem
+    {
+        public Guid Id { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public NotificationType Type { get; set; }
+    }
+}

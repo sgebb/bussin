@@ -1,0 +1,123 @@
+@page "/"
+@inject IAuthenticationService AuthService
+@inject IAzureResourceService ResourceService
+@inject NavigationManager Navigation
+
+<PageTitle>Home - Service Bus Explorer</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="container-fluid mt-4">
+            <h1>Service Bus Explorer</h1>
+            <p class="lead">Select a namespace to explore</p>
+
+            @if (isLoading)
+            {
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border text-primary me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span>Loading namespaces...</span>
+                </div>
+            }
+            else if (namespaces.Count == 0)
+            {
+                <div class="alert alert-info">
+                    <h5>No Service Bus namespaces found</h5>
+                    <p>You don't have access to any Service Bus namespaces, or none exist in your subscriptions.</p>
+                    <p>Make sure you have the appropriate permissions to view Service Bus resources.</p>
+                </div>
+            }
+            else
+            {
+                <div class="row">
+                    @foreach (var ns in namespaces)
+                    {
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title">@ns.Name</h5>
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            <strong>Location:</strong> @ns.Location<br />
+                                            <strong>Resource Group:</strong> @ns.ResourceGroup<br />
+                                            <strong>Subscription:</strong> @ns.SubscriptionId
+                                        </small>
+                                    </p>
+                                    <button class="btn btn-primary" @onclick="() => NavigateToExplorer(ns)">
+                                        Explore
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-3">
+                    <strong>Error:</strong> @errorMessage
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="container mt-4">
+            <div class="jumbotron">
+                <h1 class="display-4">Welcome to Service Bus Explorer</h1>
+                <p class="lead">A zero-backend tool for exploring and managing Azure Service Bus.</p>
+                <hr class="my-4">
+                <p>Sign in with your Azure account to get started.</p>
+                <a class="btn btn-primary btn-lg" href="authentication/login" role="button">Sign In</a>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<ServiceBusNamespaceInfo> namespaces = new();
+    private bool isLoading = false;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await AuthService.IsAuthenticatedAsync())
+        {
+            await LoadNamespacesAsync();
+        }
+    }
+
+    private async Task LoadNamespacesAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var credential = await AuthService.GetTokenCredentialAsync();
+            if (credential == null)
+            {
+                errorMessage = "Failed to get authentication token";
+                return;
+            }
+
+            namespaces = await ResourceService.ListServiceBusNamespacesAsync(credential);
+            Console.WriteLine($"Loaded {namespaces.Count} namespaces");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load namespaces: {ex.Message}";
+            Console.WriteLine($"Error: {ex}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void NavigateToExplorer(ServiceBusNamespaceInfo ns)
+    {
+        Navigation.NavigateTo($"/explorer?namespace={Uri.EscapeDataString(ns.FullyQualifiedNamespace)}&rg={Uri.EscapeDataString(ns.ResourceGroup)}&sub={Uri.EscapeDataString(ns.SubscriptionId)}&name={Uri.EscapeDataString(ns.Name)}");
+    }
+}

@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <AuthorizeView>
+                <Authorized>
+                    <span>Hello, @context.User.Identity?.Name</span>
+                    <a href="authentication/logout">Log out</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="authentication/login">Log in</a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<Shared.ToastNotification />
+<Shared.BuildInfo />
