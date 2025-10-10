@@ -31,11 +31,8 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore src/ServiceBusExplorer.Blazor.csproj
 
-      - name: Build
-        run: dotnet build src/ServiceBusExplorer.Blazor.csproj -c Release --no-restore
-
       - name: Publish
-        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -o publish --no-build
+        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -o publish
 
       - name: Generate build info
         run: |
