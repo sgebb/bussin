@@ -35,7 +35,23 @@ jobs:
         run: dotnet restore src/ServiceBusExplorer.Blazor.csproj
 
       - name: Publish
-        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -o publish -p:StaticWebAssetBasePath=/slimsbe/
+        run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -o publish
+
+      - name: Update base href for GitHub Pages
+        run: |
+          # Find the actual index.html location
+          if [ -f "publish/wwwroot/index.html" ]; then
+            INDEX_PATH="publish/wwwroot/index.html"
+          elif [ -f "publish/index.html" ]; then
+            INDEX_PATH="publish/index.html"
+          else
+            echo "Error: Cannot find index.html"
+            find publish -name "index.html"
+            exit 1
+          fi
+          
+          echo "Found index.html at: $INDEX_PATH"
+          sed -i 's|<base href="/" />|<base href="/slimsbe/" />|' "$INDEX_PATH"
 
       - name: Generate build info
         run: |
@@ -48,8 +64,15 @@ jobs:
           echo "Commit: $COMMIT_HASH"
           echo "Time: $BUILD_TIME"
           
+          # Find the wwwroot directory
+          if [ -d "publish/wwwroot" ]; then
+            WWWROOT="publish/wwwroot"
+          else
+            WWWROOT="publish"
+          fi
+          
           # Create buildinfo.json
-          cat > publish/wwwroot/buildinfo.json << EOF
+          cat > $WWWROOT/buildinfo.json << EOF
           {
             "commitHash": "$COMMIT_HASH",
             "commitShort": "$COMMIT_SHORT",
@@ -61,19 +84,30 @@ jobs:
           EOF
           
           # Inject build info into index.html
-          sed -i "s|</body>|<script>console.log('🔨 Build Info: Commit $COMMIT_SHORT built at $BUILD_TIME'); console.log('🔍 Verify at: https://github.com/${{ github.repository }}/commit/$COMMIT_HASH');</script></body>|" publish/wwwroot/index.html
+          sed -i "s|</body>|<script>console.log('🔨 Build Info: Commit $COMMIT_SHORT built at $BUILD_TIME'); console.log('🔍 Verify at: https://github.com/${{ github.repository }}/commit/$COMMIT_HASH');</script></body>|" $WWWROOT/index.html
           
-          cat publish/wwwroot/buildinfo.json
+          cat $WWWROOT/buildinfo.json
 
       - name: Add .nojekyll and 404.html for SPA routing
         run: |
-          touch publish/wwwroot/.nojekyll
-          cp publish/wwwroot/index.html publish/wwwroot/404.html
+          # Find the wwwroot directory
+          if [ -d "publish/wwwroot" ]; then
+            WWWROOT="publish/wwwroot"
+          else
+            WWWROOT="publish"
+          fi
+          
+          touch $WWWROOT/.nojekyll
+          cp $WWWROOT/index.html $WWWROOT/404.html
+          
+          # Set output for next step
+          echo "wwwroot_path=$WWWROOT" >> $GITHUB_OUTPUT
+        id: setup
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: publish/wwwroot
+          path: ${{ steps.setup.outputs.wwwroot_path }}
 
   deploy:
     environment:
