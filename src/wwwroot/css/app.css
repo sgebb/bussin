@@ -191,3 +191,63 @@ pre {
 .nav-link span {
     margin-right: 0.5rem;
 }
+
+/* Namespace cards */
+.namespace-card {
+    transition: all 0.2s ease;
+}
+
+.namespace-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    border-color: #0071e3;
+}
+
+/* Recent namespace tiles */
+.recent-namespace-tile {
+    color: #333;
+    text-decoration: none;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    background-color: #fff;
+    transition: all 0.2s ease;
+    display: block;
+}
+
+.recent-namespace-tile:hover {
+    background-color: #f8f9fa;
+    border-color: #0071e3;
+    transform: translateX(4px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.recent-namespace-tile .text-muted {
+    font-size: 0.75rem;
+}
+
+/* User link */
+.user-link {
+    color: #0071e3;
+    text-decoration: none;
+}
+
+.user-link:hover {
+    text-decoration: underline;
+}
+
+/* Message list */
+.message-list .message-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.message-list .message-item:hover {
+    background-color: #f8f9fa;
+    border-left-color: #0071e3;
+}
+
+.message-list .message-item.selected {
+    background-color: #e7f3ff;
+    border-left-color: #0071e3;
+}

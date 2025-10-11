@@ -7,14 +7,36 @@ namespace ServiceBusExplorer.Blazor.Services;
 
 public sealed class AzureResourceService : IAzureResourceService
 {
+    private readonly Dictionary<string, (List<string> queues, DateTime cachedAt)> _queueCache = new();
+    private readonly Dictionary<string, (List<string> topics, DateTime cachedAt)> _topicCache = new();
+    private readonly Dictionary<string, (List<string> subscriptions, DateTime cachedAt)> _subscriptionCache = new();
+    private (List<ServiceBusNamespaceInfo> namespaces, DateTime cachedAt)? _namespaceCache;
+    private readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(5);
+    
+    private string GetCacheKey(ServiceBusNamespaceInfo namespaceInfo)
+    {
+        return $"{namespaceInfo.SubscriptionId}/{namespaceInfo.ResourceGroup}/{namespaceInfo.Name}";
+    }
+    
+    private string GetSubscriptionCacheKey(ServiceBusNamespaceInfo namespaceInfo, string topicName)
+    {
+        return $"{GetCacheKey(namespaceInfo)}/{topicName}";
+    }
     public async Task<List<ServiceBusNamespaceInfo>> ListServiceBusNamespacesAsync(TokenCredential credential)
     {
+        // Check cache first
+        if (_namespaceCache.HasValue && DateTime.UtcNow - _namespaceCache.Value.cachedAt < _cacheExpiration)
+        {
+            Console.WriteLine($"✓ Using cached namespaces ({_namespaceCache.Value.namespaces.Count} items)");
+            return _namespaceCache.Value.namespaces;
+        }
+
         var armClient = new ArmClient(credential);
         var namespaces = new List<ServiceBusNamespaceInfo>();
 
         try
         {
-            Console.WriteLine("Starting to list subscriptions...");
+            Console.WriteLine("⟳ Fetching namespaces from Azure...");
             var subscriptionCount = 0;
             
             await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync())
@@ -35,6 +57,8 @@ public sealed class AzureResourceService : IAzureResourceService
                         FullyQualifiedNamespace = data.ServiceBusEndpoint?.Replace("https://", "").Replace(":443/", "") ?? $"{data.Name}.servicebus.windows.net",
                         ResourceGroup = ns.Id.ResourceGroupName ?? "Unknown",
                         SubscriptionId = subscription.Data.SubscriptionId ?? "Unknown",
+                        SubscriptionName = subscription.Data.DisplayName ?? "Unknown",
+                        TenantId = subscription.Data.TenantId?.ToString() ?? "Unknown",
                         Location = data.Location.Name
                     });
                 }
@@ -43,6 +67,10 @@ public sealed class AzureResourceService : IAzureResourceService
             
             Console.WriteLine($"Total subscriptions checked: {subscriptionCount}");
             Console.WriteLine($"Total namespaces found: {namespaces.Count}");
+            
+            // Cache the results
+            _namespaceCache = (namespaces, DateTime.UtcNow);
+            Console.WriteLine($"✓ Cached {namespaces.Count} namespaces");
         }
         catch (Exception ex)
         {
@@ -55,11 +83,29 @@ public sealed class AzureResourceService : IAzureResourceService
 
     public async Task<List<string>> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
+        var cacheKey = GetCacheKey(namespaceInfo);
+        
+        // Check cache
+        if (_queueCache.TryGetValue(cacheKey, out var cached))
+        {
+            if (DateTime.UtcNow - cached.cachedAt < _cacheExpiration)
+            {
+                Console.WriteLine($"✓ Using cached queues for {namespaceInfo.Name} ({cached.queues.Count} items)");
+                return cached.queues;
+            }
+            else
+            {
+                // Cache expired, remove it
+                _queueCache.Remove(cacheKey);
+            }
+        }
+
         var armClient = new ArmClient(credential);
         var queues = new List<string>();
 
         try
         {
+            Console.WriteLine($"⟳ Fetching queues for {namespaceInfo.Name}...");
             var subscriptionId = namespaceInfo.SubscriptionId;
             var resourceGroup = namespaceInfo.ResourceGroup;
             var namespaceName = namespaceInfo.Name;
@@ -72,6 +118,10 @@ public sealed class AzureResourceService : IAzureResourceService
             {
                 queues.Add(queue.Data.Name);
             }
+
+            // Cache the results
+            _queueCache[cacheKey] = (queues, DateTime.UtcNow);
+            Console.WriteLine($"✓ Cached {queues.Count} queues");
         }
         catch (Exception ex)
         {
@@ -83,11 +133,29 @@ public sealed class AzureResourceService : IAzureResourceService
 
     public async Task<List<string>> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
+        var cacheKey = GetCacheKey(namespaceInfo);
+        
+        // Check cache
+        if (_topicCache.TryGetValue(cacheKey, out var cached))
+        {
+            if (DateTime.UtcNow - cached.cachedAt < _cacheExpiration)
+            {
+                Console.WriteLine($"✓ Using cached topics for {namespaceInfo.Name} ({cached.topics.Count} items)");
+                return cached.topics;
+            }
+            else
+            {
+                // Cache expired, remove it
+                _topicCache.Remove(cacheKey);
+            }
+        }
+
         var armClient = new ArmClient(credential);
         var topics = new List<string>();
 
         try
         {
+            Console.WriteLine($"⟳ Fetching topics for {namespaceInfo.Name}...");
             var subscriptionId = namespaceInfo.SubscriptionId;
             var resourceGroup = namespaceInfo.ResourceGroup;
             var namespaceName = namespaceInfo.Name;
@@ -100,6 +168,10 @@ public sealed class AzureResourceService : IAzureResourceService
             {
                 topics.Add(topic.Data.Name);
             }
+
+            // Cache the results
+            _topicCache[cacheKey] = (topics, DateTime.UtcNow);
+            Console.WriteLine($"✓ Cached {topics.Count} topics");
         }
         catch (Exception ex)
         {
@@ -111,11 +183,29 @@ public sealed class AzureResourceService : IAzureResourceService
 
     public async Task<List<string>> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName)
     {
+        var cacheKey = GetSubscriptionCacheKey(namespaceInfo, topicName);
+        
+        // Check cache
+        if (_subscriptionCache.TryGetValue(cacheKey, out var cached))
+        {
+            if (DateTime.UtcNow - cached.cachedAt < _cacheExpiration)
+            {
+                Console.WriteLine($"✓ Using cached subscriptions for {namespaceInfo.Name}/{topicName} ({cached.subscriptions.Count} items)");
+                return cached.subscriptions;
+            }
+            else
+            {
+                // Cache expired, remove it
+                _subscriptionCache.Remove(cacheKey);
+            }
+        }
+
         var armClient = new ArmClient(credential);
         var subscriptions = new List<string>();
 
         try
         {
+            Console.WriteLine($"⟳ Fetching subscriptions for {namespaceInfo.Name}/{topicName}...");
             var subscriptionId = namespaceInfo.SubscriptionId;
             var resourceGroup = namespaceInfo.ResourceGroup;
             var namespaceName = namespaceInfo.Name;
@@ -129,6 +219,10 @@ public sealed class AzureResourceService : IAzureResourceService
             {
                 subscriptions.Add(sub.Data.Name);
             }
+
+            // Cache the results
+            _subscriptionCache[cacheKey] = (subscriptions, DateTime.UtcNow);
+            Console.WriteLine($"✓ Cached {subscriptions.Count} subscriptions");
         }
         catch (Exception ex)
         {

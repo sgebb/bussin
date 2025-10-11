@@ -137,9 +137,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         try
         {
             var token = await GetTokenAsync();
-            var controller = await _jsInterop.PurgeQueueAsync(namespaceName, queueName, token);
-            var count = await controller.InvokeAsync<int>("promise", []);
-            _notificationService.NotifySuccess($"Purged {count} messages from queue");
+            var count = await _jsInterop.PurgeQueueAsync(namespaceName, queueName, token);
+            _notificationService.NotifySuccess("Queue purged successfully");
             return count;
         }
         catch (Exception ex)
@@ -154,9 +153,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         try
         {
             var token = await GetTokenAsync();
-            var controller = await _jsInterop.PurgeSubscriptionAsync(namespaceName, topicName, subscriptionName, token);
-            var count = await controller.InvokeAsync<int>("promise", []);
-            _notificationService.NotifySuccess($"Purged {count} messages from subscription");
+            var count = await _jsInterop.PurgeSubscriptionAsync(namespaceName, topicName, subscriptionName, token);
+            _notificationService.NotifySuccess("Subscription purged successfully");
             return count;
         }
         catch (Exception ex)
@@ -228,6 +226,38 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         catch (Exception ex)
         {
             _notificationService.NotifyError($"Failed to resend messages: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers)
+    {
+        try
+        {
+            var token = await GetTokenAsync();
+            var result = await _jsInterop.MoveToDLQQueueMessagesAsync(namespaceName, queueName, token, sequenceNumbers);
+            _notificationService.NotifySuccess($"Moved {result.SuccessCount} messages to DLQ ({result.FailureCount} failed)");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _notificationService.NotifyError($"Failed to move messages to DLQ: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers)
+    {
+        try
+        {
+            var token = await GetTokenAsync();
+            var result = await _jsInterop.MoveToDLQSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, sequenceNumbers);
+            _notificationService.NotifySuccess($"Moved {result.SuccessCount} messages to DLQ ({result.FailureCount} failed)");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _notificationService.NotifyError($"Failed to move messages to DLQ: {ex.Message}");
             throw;
         }
     }

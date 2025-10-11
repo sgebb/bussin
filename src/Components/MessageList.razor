@@ -1,0 +1,175 @@
+@using ServiceBusExplorer.Blazor.Models
+
+<div class="message-list">
+    @if (Messages.Any())
+    {
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="selectAll" 
+                       @onchange="ToggleSelectAll" checked="@allSelected">
+                <label class="form-check-label fw-bold" for="selectAll">
+                    Select All (@SelectedMessages.Count selected)
+                </label>
+            </div>
+            
+            @if (SelectedMessages.Any())
+            {
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@IsProcessing">
+                        <span class="me-1">🗑️</span> Delete (@SelectedMessages.Count)
+                    </button>
+                    @if (IsDLQ)
+                    {
+                        <button class="btn btn-success" @onclick="OnResubmitSelected" disabled="@IsProcessing">
+                            <span class="me-1">↩️</span> Resubmit & Delete (@SelectedMessages.Count)
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@IsProcessing">
+                            <span class="me-1">⚠️</span> Move to DLQ (@SelectedMessages.Count)
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="list-group">
+            @foreach (var message in Messages)
+            {
+                <div class="list-group-item message-item @(message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value) ? "selected" : "")"
+                     @onclick="() => OnMessageClick(message)">
+                    <div class="d-flex align-items-start">
+                        <div class="form-check me-3" @onclick:stopPropagation="true">
+                            <input class="form-check-input" type="checkbox" 
+                                   checked="@(message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value))"
+                                   @onchange="() => ToggleMessage(message.SequenceNumber)">
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between">
+                                <h6 class="mb-1">
+                                    <span class="badge bg-secondary me-2">Seq: @message.SequenceNumber</span>
+                                    @if (!string.IsNullOrEmpty(message.MessageId))
+                                    {
+                                        <small class="text-muted">ID: @message.MessageId</small>
+                                    }
+                                </h6>
+                                <small class="text-muted">@message.EnqueuedTime?.ToString("g")</small>
+                            </div>
+                            <p class="mb-1 text-truncate">
+                                <small>@GetMessagePreview(message)</small>
+                            </p>
+                            @if (message.DeliveryCount > 0)
+                            {
+                                <small class="text-warning">Delivery Count: @message.DeliveryCount</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            No messages found.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<ServiceBusMessage> Messages { get; set; } = new();
+    [Parameter] public bool IsDLQ { get; set; }
+    [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public EventCallback<ServiceBusMessage> OnMessageSelected { get; set; }
+    [Parameter] public EventCallback<List<long>> OnDeleteMessages { get; set; }
+    [Parameter] public EventCallback<List<long>> OnResubmitMessages { get; set; }
+    [Parameter] public EventCallback<List<long>> OnMoveToDLQMessages { get; set; }
+
+    private HashSet<long> SelectedMessages { get; set; } = new();
+    private bool allSelected = false;
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        allSelected = (bool)(e.Value ?? false);
+        
+        if (allSelected)
+        {
+            SelectedMessages = Messages.Where(m => m.SequenceNumber.HasValue).Select(m => m.SequenceNumber!.Value).ToHashSet();
+        }
+        else
+        {
+            SelectedMessages.Clear();
+        }
+    }
+
+    private void ToggleMessage(long? sequenceNumber)
+    {
+        if (!sequenceNumber.HasValue) return;
+        
+        var seqNum = sequenceNumber.Value;
+        if (SelectedMessages.Contains(seqNum))
+        {
+            SelectedMessages.Remove(seqNum);
+        }
+        else
+        {
+            SelectedMessages.Add(seqNum);
+        }
+        
+        allSelected = SelectedMessages.Count == Messages.Count;
+    }
+
+    private async Task OnMessageClick(ServiceBusMessage message)
+    {
+        await OnMessageSelected.InvokeAsync(message);
+    }
+
+    private async Task OnDeleteSelected()
+    {
+        if (SelectedMessages.Any())
+        {
+            await OnDeleteMessages.InvokeAsync(SelectedMessages.ToList());
+            SelectedMessages.Clear();
+            allSelected = false;
+        }
+    }
+
+    private async Task OnResubmitSelected()
+    {
+        if (SelectedMessages.Any())
+        {
+            await OnResubmitMessages.InvokeAsync(SelectedMessages.ToList());
+            SelectedMessages.Clear();
+            allSelected = false;
+        }
+    }
+
+    private async Task OnMoveToDLQSelected()
+    {
+        if (SelectedMessages.Any())
+        {
+            await OnMoveToDLQMessages.InvokeAsync(SelectedMessages.ToList());
+            SelectedMessages.Clear();
+            allSelected = false;
+        }
+    }
+
+    private string GetMessagePreview(ServiceBusMessage message)
+    {
+        if (message.Body != null)
+        {
+            var bodyStr = message.Body.ToString() ?? "";
+            return bodyStr.Length > 100 ? bodyStr.Substring(0, 100) + "..." : bodyStr;
+        }
+        return "(empty)";
+    }
+
+    // Public method to clear selection (can be called from parent)
+    public void ClearSelection()
+    {
+        SelectedMessages.Clear();
+        allSelected = false;
+        StateHasChanged();
+    }
+}

@@ -28,6 +28,8 @@ public interface IServiceBusOperationsService
     Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers);
     Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers);
     Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers);
+    Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers);
+    Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers);
     
     // Dead Letter Queue resubmit operations
     Task<BatchOperationResult> ResubmitQueueDeadLetterMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers);

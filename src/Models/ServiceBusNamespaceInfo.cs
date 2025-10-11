@@ -6,5 +6,7 @@ public sealed class ServiceBusNamespaceInfo
     public required string FullyQualifiedNamespace { get; set; }
     public required string ResourceGroup { get; set; }
     public required string SubscriptionId { get; set; }
+    public required string SubscriptionName { get; set; }
+    public required string TenantId { get; set; }
     public required string Location { get; set; }
 }

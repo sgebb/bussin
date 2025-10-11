@@ -1,0 +1,193 @@
+@using ServiceBusExplorer.Blazor.Models
+@using System.Text.Json
+
+@if (IsVisible && Message != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Message Details</h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Message Info -->
+                    <div class="mb-3">
+                        <h6 class="border-bottom pb-2">Message Information</h6>
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td class="fw-bold" style="width: 200px;">Sequence Number</td>
+                                    <td>@Message.SequenceNumber</td>
+                                </tr>
+                                @if (!string.IsNullOrEmpty(Message.MessageId))
+                                {
+                                    <tr>
+                                        <td class="fw-bold">Message ID</td>
+                                        <td>@Message.MessageId</td>
+                                    </tr>
+                                }
+                                @if (Message.EnqueuedTime.HasValue)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">Enqueued Time</td>
+                                        <td>@Message.EnqueuedTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    </tr>
+                                }
+                                <tr>
+                                    <td class="fw-bold">Delivery Count</td>
+                                    <td>@Message.DeliveryCount</td>
+                                </tr>
+                                @if (Message.Ttl.HasValue)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">Time To Live (seconds)</td>
+                                        <td>@Message.Ttl.Value</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Properties -->
+                    @if (Message.Properties != null && Message.Properties.Any())
+                    {
+                        <div class="mb-3">
+                            <h6 class="border-bottom pb-2">Properties</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    @foreach (var prop in Message.Properties)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold" style="width: 200px;">@prop.Key</td>
+                                            <td>@prop.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <!-- Message Body -->
+                    <div class="mb-3">
+                        <h6 class="border-bottom pb-2">Message Body</h6>
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" 
+                                    @onclick="CopyBody">
+                                📋 Copy
+                            </button>
+                            <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="btn-group me-auto">
+                        <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@IsProcessing">
+                            @if (IsProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Delete
+                        </button>
+                        @if (IsDLQ)
+                        {
+                            <button class="btn btn-success" @onclick="ResubmitMessage" disabled="@IsProcessing">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Resubmit & Delete
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@IsProcessing">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Move to DLQ
+                            </button>
+                        }
+                    </div>
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public ServiceBusMessage? Message { get; set; }
+    [Parameter] public bool IsDLQ { get; set; }
+    [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<long> OnDelete { get; set; }
+    [Parameter] public EventCallback<long> OnResubmit { get; set; }
+    [Parameter] public EventCallback<long> OnMoveToDLQ { get; set; }
+
+    [Inject] private IJSRuntime JSRuntime { get; set; } = default!;
+
+    private string FormattedBody
+    {
+        get
+        {
+            if (Message?.Body == null) return "(empty)";
+            
+            var bodyStr = Message.Body.ToString() ?? "";
+            
+            // Try to format as JSON
+            try
+            {
+                var jsonDoc = JsonDocument.Parse(bodyStr);
+                return JsonSerializer.Serialize(jsonDoc, new JsonSerializerOptions 
+                { 
+                    WriteIndented = true 
+                });
+            }
+            catch
+            {
+                // Not JSON, return as-is
+                return bodyStr;
+            }
+        }
+    }
+
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task DeleteMessage()
+    {
+        if (Message?.SequenceNumber != null)
+        {
+            await OnDelete.InvokeAsync(Message.SequenceNumber.Value);
+        }
+    }
+
+    private async Task ResubmitMessage()
+    {
+        if (Message?.SequenceNumber != null)
+        {
+            await OnResubmit.InvokeAsync(Message.SequenceNumber.Value);
+        }
+    }
+
+    private async Task MoveToDLQMessage()
+    {
+        if (Message?.SequenceNumber != null)
+        {
+            await OnMoveToDLQ.InvokeAsync(Message.SequenceNumber.Value);
+        }
+    }
+
+    private async Task CopyBody()
+    {
+        if (Message?.Body != null)
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", FormattedBody);
+        }
+    }
+}

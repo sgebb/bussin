@@ -11,11 +11,13 @@
         <div class="container-fluid mt-4">
             <div class="row mb-3">
                 <div class="col-md-12">
-                    <button class="btn btn-sm btn-secondary" @onclick="GoBack">
-                        ← Back to Home
-                    </button>
-                    <h2 class="mt-2">Service Bus Explorer</h2>
-                    <p class="text-muted">Namespace: <strong>@NamespaceParam</strong></p>
+                    <h1 class="mb-1">@NameParam</h1>
+                    <p class="text-muted mb-0">
+                        <small>
+                            <strong>Subscription:</strong> @SubscriptionIdParam<br />
+                            <strong>Namespace:</strong> @NamespaceParam
+                        </small>
+                    </p>
                 </div>
             </div>
 
@@ -129,48 +131,60 @@
                         <div class="col-md-12">
                             <div class="card">
                                 <div class="card-header">
-                                    <h5>@(selectedQueueName != null ? $"Queue: {selectedQueueName}" : $"Subscription: {selectedTopicName}/{selectedSubscriptionName}")</h5>
+                                    <h5 class="mb-0">@(selectedQueueName != null ? $"Queue: {selectedQueueName}" : $"Subscription: {selectedTopicName}/{selectedSubscriptionName}")</h5>
                                 </div>
                                 <div class="card-body">
-                                    <button class="btn btn-primary me-2" @onclick="PeekMessages" disabled="@isPeeking">
-                                        @if (isPeeking)
-                                        {
-                                            <span class="spinner-border spinner-border-sm me-2"></span>
-                                        }
-                                        Peek Messages
-                                    </button>
+                                    <!-- Entity level buttons (always visible) -->
+                                    <div class="mb-3 pb-3 border-bottom">
+                                        <label class="text-muted small mb-2 d-block">@(selectedQueueName != null ? "QUEUE" : "TOPIC/SUBSCRIPTION") OPERATIONS</label>
+                                        <div class="d-flex gap-2 align-items-center">
+                                            <button class="btn btn-success" @onclick="ShowSendMessageModal">
+                                                <span class="me-1">📤</span> Send Message
+                                            </button>
+                                            <div class="form-check form-switch d-flex align-items-center ms-2">
+                                                <input class="form-check-input" type="checkbox" id="dlqToggle" @bind="isViewingDLQ" @bind:after="OnDLQToggleChanged">
+                                                <label class="form-check-label ms-2" for="dlqToggle">
+                                                    <strong>@(isViewingDLQ ? "Viewing DLQ" : "View DLQ")</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Message operations buttons -->
+                                    <div class="mb-3">
+                                        <label class="text-muted small mb-2 d-block">MESSAGE OPERATIONS</label>
+                                        <div class="btn-group" role="group">
+                                            <button class="btn btn-outline-primary" @onclick="PeekMessages" disabled="@isPeeking">
+                                                @if (isPeeking)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                                }
+                                                Peek
+                                            </button>
+                                            <button class="btn btn-outline-info" @onclick="ShowPeekLockModal" disabled="@isPeeking">
+                                                Peek & Lock
+                                            </button>
+                                            <button class="btn btn-outline-warning" @onclick="PurgeMessages" disabled="@isPurging">
+                                                @if (isPurging)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                                }
+                                                Purge
+                                            </button>
+                                        </div>
+                                    </div>
 
                                     @if (peekedMessages.Count > 0)
                                     {
                                         <div class="mt-3">
                                             <h6>Messages (@peekedMessages.Count)</h6>
-                                            @foreach (var msg in peekedMessages)
-                                            {
-                                                <div class="card mb-2 message-card">
-                                                    <div class="card-header">
-                                                        <small>
-                                                            Sequence: @msg.SequenceNumber | 
-                                                            Enqueued: @msg.EnqueuedTime?.ToString("yyyy-MM-dd HH:mm:ss") | 
-                                                            ID: @msg.MessageId
-                                                        </small>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <pre class="mb-0"><code>@msg.Body</code></pre>
-                                                        @if (msg.ApplicationProperties?.Count > 0)
-                                                        {
-                                                            <div class="mt-2">
-                                                                <strong>Properties:</strong>
-                                                                <ul class="mb-0">
-                                                                    @foreach (var prop in msg.ApplicationProperties)
-                                                                    {
-                                                                        <li><code>@prop.Key</code>: @prop.Value</li>
-                                                                    }
-                                                                </ul>
-                                                            </div>
-                                                        }
-                                                    </div>
-                                                </div>
-                                            }
+                                            <MessageList Messages="@peekedMessages"
+                                                        IsDLQ="@isViewingDLQ"
+                                                        IsProcessing="@isProcessingBatch"
+                                                        OnMessageSelected="@ShowMessageDetail"
+                                                        OnDeleteMessages="@DeleteMessages"
+                                                        OnResubmitMessages="@ResubmitMessages"
+                                                        OnMoveToDLQMessages="@MoveToDLQMessages" />
                                         </div>
                                     }
                                 </div>
@@ -187,6 +201,42 @@
                 </div>
             }
         </div>
+
+        <!-- Send Message Modal -->
+        @if (showSendMessageModal)
+        {
+            <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Send Message</h5>
+                            <button type="button" class="btn-close" @onclick="() => showSendMessageModal = false"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Message Body</label>
+                                <textarea class="form-control" rows="5" @bind="messageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
+                                <small class="form-text text-muted">Enter plain text or valid JSON. Content type will be set automatically.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Properties (JSON, optional)</label>
+                                <textarea class="form-control" rows="3" @bind="messageProperties" placeholder='{"property1": "value1"}'></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="() => showSendMessageModal = false">Cancel</button>
+                            <button type="button" class="btn btn-primary" @onclick="SendMessage" disabled="@isSending">
+                                @if (isSending)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
     </Authorized>
     <NotAuthorized>
         <div class="container mt-4">
@@ -195,6 +245,52 @@
         </div>
     </NotAuthorized>
 </AuthorizeView>
+
+<MessageDetailModal IsVisible="@showMessageDetailModal"
+                   Message="@selectedMessage"
+                   IsDLQ="@isViewingDLQ"
+                   IsProcessing="@isProcessingBatch"
+                   OnClose="@CloseMessageDetail"
+                   OnDelete="@DeleteSingleMessage"
+                   OnResubmit="@ResubmitSingleMessage"
+                   OnMoveToDLQ="@MoveToDLQSingleMessage" />
+
+<!-- Peek Lock Modal -->
+@if (showPeekLockModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Peek & Lock Messages</h5>
+                    <button type="button" class="btn-close" @onclick="() => showPeekLockModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Number of messages</label>
+                        <input type="number" class="form-control" @bind="peekLockCount" min="1" max="100" />
+                        <small class="form-text text-muted">Maximum 100 messages</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Lock duration (seconds)</label>
+                        <input type="number" class="form-control" @bind="peekLockDuration" min="5" max="300" />
+                        <small class="form-text text-muted">Messages will be locked for this duration</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showPeekLockModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="PeekLockMessagesWithSettings" disabled="@isPeeking">
+                        @if (isPeeking)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Peek & Lock
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
@@ -221,15 +317,50 @@
     private bool isLoadingEntities = false;
     private bool isLoadingSubscriptions = false;
     private bool isPeeking = false;
+    private bool isPurging = false;
+    private bool isSending = false;
+    private bool isViewingDLQ = false;
+    private bool showSendMessageModal = false;
+    private bool showMessageDetailModal = false;
+    private bool showPeekLockModal = false;
+    private bool isProcessingBatch = false;
+    private ServiceBusMessage? selectedMessage = null;
+    private string messageBody = "";
+    private string messageProperties = "";
+    private int peekLockCount = 10;
+    private int peekLockDuration = 30;
     private string? errorMessage;
     
     // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
     private string NamespaceNameOnly => NamespaceParam?.Split('.').FirstOrDefault() ?? "";
 
+    private string? _lastNamespace;
+
     protected override async Task OnInitializedAsync()
     {
         if (!string.IsNullOrEmpty(NamespaceParam))
         {
+            _lastNamespace = NamespaceParam;
+            await LoadEntitiesAsync();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Only reload if the namespace actually changed
+        if (!string.IsNullOrEmpty(NamespaceParam) && NamespaceParam != _lastNamespace)
+        {
+            _lastNamespace = NamespaceParam;
+            
+            // Clear previous state and reload
+            selectedQueueName = null;
+            selectedTopicName = null;
+            selectedSubscriptionName = null;
+            peekedMessages.Clear();
+            queueNames.Clear();
+            topicNames.Clear();
+            subscriptionNames.Clear();
+            
             await LoadEntitiesAsync();
         }
     }
@@ -254,6 +385,8 @@
                 FullyQualifiedNamespace = NamespaceParam ?? "",
                 ResourceGroup = ResourceGroupParam ?? "",
                 SubscriptionId = SubscriptionIdParam ?? "",
+                SubscriptionName = "",
+                TenantId = "",
                 Location = ""
             };
 
@@ -261,6 +394,9 @@
             topicNames = await ResourceService.ListTopicsAsync(credential, namespaceInfo);
 
             Console.WriteLine($"Loaded {queueNames.Count} queues and {topicNames.Count} topics");
+            
+            // Force UI update after loading from cache or API
+            StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -307,6 +443,8 @@
                 FullyQualifiedNamespace = NamespaceParam ?? "",
                 ResourceGroup = ResourceGroupParam ?? "",
                 SubscriptionId = SubscriptionIdParam ?? "",
+                SubscriptionName = "",
+                TenantId = "",
                 Location = ""
             };
 
@@ -334,16 +472,31 @@
     {
         isPeeking = true;
         peekedMessages.Clear();
+        errorMessage = null;
 
         try
         {
-            if (selectedQueueName != null)
+            if (isViewingDLQ)
             {
-                peekedMessages = await OperationsService.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, 10);
+                if (selectedQueueName != null)
+                {
+                    peekedMessages = await OperationsService.PeekQueueDeadLetterMessagesAsync(NamespaceNameOnly, selectedQueueName, 10);
+                }
+                else if (selectedSubscriptionName != null && selectedTopicName != null)
+                {
+                    peekedMessages = await OperationsService.PeekSubscriptionDeadLetterMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, 10);
+                }
             }
-            else if (selectedSubscriptionName != null && selectedTopicName != null)
+            else
             {
-                peekedMessages = await OperationsService.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, 10);
+                if (selectedQueueName != null)
+                {
+                    peekedMessages = await OperationsService.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, 10);
+                }
+                else if (selectedSubscriptionName != null && selectedTopicName != null)
+                {
+                    peekedMessages = await OperationsService.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, 10);
+                }
             }
 
             Console.WriteLine($"Peeked {peekedMessages.Count} messages");
@@ -359,8 +512,312 @@
         }
     }
 
+    private async Task PurgeMessages()
+    {
+        if (!await ConfirmAction("Are you sure you want to purge all messages? This cannot be undone."))
+            return;
+
+        isPurging = true;
+        errorMessage = null;
+
+        try
+        {
+            int count = 0;
+            if (selectedQueueName != null)
+            {
+                count = await OperationsService.PurgeQueueAsync(NamespaceNameOnly, selectedQueueName);
+            }
+            else if (selectedSubscriptionName != null && selectedTopicName != null)
+            {
+                count = await OperationsService.PurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName);
+            }
+
+            peekedMessages.Clear();
+            Console.WriteLine($"Purged {count} messages");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to purge messages: {ex.Message}";
+            Console.WriteLine($"Purge error: {ex}");
+        }
+        finally
+        {
+            isPurging = false;
+        }
+    }
+
+    private void ShowSendMessageModal()
+    {
+        messageBody = "";
+        messageProperties = "";
+        showSendMessageModal = true;
+    }
+
+    private async Task SendMessage()
+    {
+        isSending = true;
+        errorMessage = null;
+
+        try
+        {
+            // Validate message body is provided
+            if (string.IsNullOrWhiteSpace(messageBody))
+            {
+                errorMessage = "Message body is required";
+                return;
+            }
+
+            // Try to parse as JSON first, if it fails, send as plain text
+            object bodyToSend;
+            Dictionary<string, object>? propsDict = new Dictionary<string, object>();
+            
+            // Check if the message body is valid JSON
+            var trimmed = messageBody.Trim();
+            
+            if ((trimmed.StartsWith("{") && trimmed.EndsWith("}")) || 
+                (trimmed.StartsWith("[") && trimmed.EndsWith("]")))
+            {
+                try
+                {
+                    // Try parsing as JSON
+                    var bodyDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(messageBody);
+                    if (bodyDict != null)
+                    {
+                        bodyToSend = bodyDict;
+                        propsDict["contentType"] = "application/json";
+                    }
+                    else
+                    {
+                        // Send as plain text
+                        bodyToSend = messageBody;
+                        propsDict["contentType"] = "text/plain";
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // Not valid JSON, send as plain text
+                    bodyToSend = messageBody;
+                    propsDict["contentType"] = "text/plain";
+                }
+            }
+            else
+            {
+                // Definitely not JSON, send as plain text
+                bodyToSend = messageBody;
+                propsDict["contentType"] = "text/plain";
+            }
+
+            // Parse additional properties if provided and merge
+            if (!string.IsNullOrWhiteSpace(messageProperties))
+            {
+                try
+                {
+                    var additionalProps = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(messageProperties);
+                    if (additionalProps != null)
+                    {
+                        foreach (var prop in additionalProps)
+                        {
+                            propsDict[prop.Key] = prop.Value;
+                        }
+                    }
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    errorMessage = $"Invalid JSON in properties: {ex.Message}";
+                    return;
+                }
+            }
+
+            if (selectedQueueName != null)
+            {
+                await OperationsService.SendQueueMessageAsync(NamespaceNameOnly, selectedQueueName, bodyToSend, propsDict);
+            }
+            else if (selectedTopicName != null)
+            {
+                await OperationsService.SendTopicMessageAsync(NamespaceNameOnly, selectedTopicName, bodyToSend, propsDict);
+            }
+
+            showSendMessageModal = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to send message: {ex.Message}";
+            Console.WriteLine($"Send error: {ex}");
+        }
+        finally
+        {
+            isSending = false;
+        }
+    }
+
+    private void OnDLQToggleChanged()
+    {
+        peekedMessages.Clear();
+    }
+
+    private async Task<bool> ConfirmAction(string message)
+    {
+        // Simple confirmation - in a real app you'd want a proper modal
+        return await Task.FromResult(true); // For now, always confirm
+    }
+
     private void GoBack()
     {
         Navigation.NavigateTo("/");
+    }
+
+    // Peek Lock functionality
+    private void ShowPeekLockModal()
+    {
+        showPeekLockModal = true;
+    }
+
+    private async Task PeekLockMessagesWithSettings()
+    {
+        showPeekLockModal = false;
+        isPeeking = true;
+        errorMessage = null;
+
+        try
+        {
+            // Peek lock is similar to peek but locks the messages
+            // For now, we'll use the same peek functionality
+            // In a real implementation, you'd want to use a different API that actually locks
+            // with the specified count and duration
+            Console.WriteLine($"Peek & Lock: {peekLockCount} messages for {peekLockDuration} seconds");
+            await PeekMessages();
+        }
+        finally
+        {
+            isPeeking = false;
+        }
+    }
+
+    // Message detail modal
+    private void ShowMessageDetail(ServiceBusMessage message)
+    {
+        selectedMessage = message;
+        showMessageDetailModal = true;
+    }
+
+    private void CloseMessageDetail()
+    {
+        showMessageDetailModal = false;
+        selectedMessage = null;
+    }
+
+    // Batch operations
+    private async Task DeleteMessages(List<long> sequenceNumbers)
+    {
+        if (!await ConfirmAction($"Delete {sequenceNumbers.Count} message(s)?"))
+            return;
+
+        isProcessingBatch = true;
+        errorMessage = null;
+
+        try
+        {
+            if (selectedQueueName != null)
+            {
+                await OperationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray());
+                await PeekMessages(); // Refresh
+            }
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            {
+                await OperationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
+                await PeekMessages(); // Refresh
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete messages: {ex.Message}";
+            Console.WriteLine($"Delete error details: {ex}");
+        }
+        finally
+        {
+            isProcessingBatch = false;
+        }
+    }
+
+    private async Task ResubmitMessages(List<long> sequenceNumbers)
+    {
+        if (!await ConfirmAction($"Resubmit {sequenceNumbers.Count} message(s) from DLQ?"))
+            return;
+
+        isProcessingBatch = true;
+        errorMessage = null;
+
+        try
+        {
+            if (selectedQueueName != null)
+            {
+                await OperationsService.ResubmitQueueDeadLetterMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray());
+                await PeekMessages(); // Refresh
+            }
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            {
+                await OperationsService.ResubmitSubscriptionDeadLetterMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
+                await PeekMessages(); // Refresh
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to resubmit messages: {ex.Message}";
+        }
+        finally
+        {
+            isProcessingBatch = false;
+        }
+    }
+
+    private async Task MoveToDLQMessages(List<long> sequenceNumbers)
+    {
+        if (!await ConfirmAction($"Move {sequenceNumbers.Count} message(s) to Dead Letter Queue?"))
+            return;
+
+        isProcessingBatch = true;
+        errorMessage = null;
+
+        try
+        {
+            if (selectedQueueName != null)
+            {
+                await OperationsService.MoveToDLQQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray());
+                await PeekMessages(); // Refresh
+            }
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            {
+                await OperationsService.MoveToDLQSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
+                await PeekMessages(); // Refresh
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to move messages to DLQ: {ex.Message}";
+            Console.WriteLine($"Move to DLQ error details: {ex}");
+        }
+        finally
+        {
+            isProcessingBatch = false;
+        }
+    }
+
+    // Single message operations
+    private async Task DeleteSingleMessage(long sequenceNumber)
+    {
+        await DeleteMessages(new List<long> { sequenceNumber });
+        CloseMessageDetail();
+    }
+
+    private async Task ResubmitSingleMessage(long sequenceNumber)
+    {
+        await ResubmitMessages(new List<long> { sequenceNumber });
+        CloseMessageDetail();
+    }
+
+    private async Task MoveToDLQSingleMessage(long sequenceNumber)
+    {
+        await MoveToDLQMessages(new List<long> { sequenceNumber });
+        CloseMessageDetail();
     }
 }

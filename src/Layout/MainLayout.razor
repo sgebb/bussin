@@ -9,7 +9,7 @@
         <div class="top-row px-4">
             <AuthorizeView>
                 <Authorized>
-                    <span>Hello, @context.User.Identity?.Name</span>
+                    <span>Logged in as <a href="diagnostics" class="user-link">@context.User.Identity?.Name</a></span>
                     <a href="authentication/logout">Log out</a>
                 </Authorized>
                 <NotAuthorized>
