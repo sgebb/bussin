@@ -21,10 +21,11 @@ builder.Services.AddMsalAuthentication(options =>
 
 // Register application services
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
-builder.Services.AddSingleton<IAzureResourceService, AzureResourceService>(); // Singleton for caching
+builder.Services.AddSingleton<IAzureResourceService, AzureResourceService>();
 builder.Services.AddScoped<IServiceBusJsInteropService, ServiceBusJsInteropService>();
 builder.Services.AddScoped<IServiceBusOperationsService, ServiceBusOperationsService>();
 builder.Services.AddScoped<IPreferencesService, PreferencesService>();
+builder.Services.AddScoped<IMessageParsingService, MessageParsingService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NavigationStateService>();
 

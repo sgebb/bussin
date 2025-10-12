@@ -2,249 +2,141 @@
 @inject IAuthenticationService AuthService
 @inject IAzureResourceService ResourceService
 @inject IServiceBusOperationsService OperationsService
+@inject IMessageParsingService MessageParsingService
 @inject NavigationManager Navigation
 
 <PageTitle>Explorer - Service Bus Explorer</PageTitle>
 
-<AuthorizeView>
-    <Authorized>
-        <div class="container-fluid mt-4">
-            <div class="row mb-3">
-                <div class="col-md-12">
-                    <h1 class="mb-1">@NameParam</h1>
-                    <p class="text-muted mb-0">
-                        <small>
-                            <strong>Subscription:</strong> @SubscriptionIdParam<br />
-                            <strong>Namespace:</strong> @NamespaceParam
-                        </small>
-                    </p>
-                </div>
+<div class="container-fluid mt-4">
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <h1 class="mb-1">@NameParam</h1>
+            <p class="text-muted mb-0">
+                <small>
+                    <strong>Subscription:</strong> @SubscriptionIdParam<br />
+                    <strong>Namespace:</strong> @NamespaceParam
+                </small>
+            </p>
+        </div>
+    </div>
+
+    @if (isLoadingEntities)
+    {
+        <div class="row">
+            <div class="col-md-12">
+                <div class="spinner-border text-primary"></div>
+                <span class="ms-2">Loading queues and topics...</span>
             </div>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <EntityListPanel Title="Queues"
+                           Items="@queueNames"
+                           SelectedItem="@selectedQueueName"
+                           HeaderColorClass="bg-primary"
+                           OnItemSelected="@SelectQueue" />
 
-            @if (isLoadingEntities)
-            {
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="spinner-border text-primary"></div>
-                        <span class="ms-2">Loading queues and topics...</span>
-                    </div>
-                </div>
-            }
-            else
-            {
-                <div class="row">
-                    <!-- Queues -->
-                    <div class="col-md-4">
-                        <div class="card">
-                            <div class="card-header bg-primary text-white">
-                                <h5 class="mb-0">Queues (@queueNames.Count)</h5>
-                            </div>
-                            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
-                                @if (queueNames.Count == 0)
-                                {
-                                    <p class="text-muted">No queues found</p>
-                                }
-                                else
-                                {
-                                    <div class="list-group">
-                                        @foreach (var queueName in queueNames)
-                                        {
-                                            <a href="#" class="list-group-item list-group-item-action @(selectedQueueName == queueName ? "active" : "")" 
-                                               @onclick="() => SelectQueue(queueName)" @onclick:preventDefault>
-                                                @queueName
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
+            <EntityListPanel Title="Topics"
+                           Items="@topicNames"
+                           SelectedItem="@selectedTopicName"
+                           HeaderColorClass="bg-success"
+                           OnItemSelected="@SelectTopic" />
 
-                    <!-- Topics -->
-                    <div class="col-md-4">
-                        <div class="card">
-                            <div class="card-header bg-success text-white">
-                                <h5 class="mb-0">Topics (@topicNames.Count)</h5>
-                            </div>
-                            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
-                                @if (topicNames.Count == 0)
-                                {
-                                    <p class="text-muted">No topics found</p>
-                                }
-                                else
-                                {
-                                    <div class="list-group">
-                                        @foreach (var topicName in topicNames)
-                                        {
-                                            <a href="#" class="list-group-item list-group-item-action @(selectedTopicName == topicName ? "active" : "")" 
-                                               @onclick="() => SelectTopic(topicName)" @onclick:preventDefault>
-                                                @topicName
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Subscriptions -->
-                    <div class="col-md-4">
-                        <div class="card">
-                            <div class="card-header bg-info text-white">
-                                <h5 class="mb-0">Subscriptions @(selectedTopicName != null ? $"({subscriptionNames.Count})" : "")</h5>
-                            </div>
-                            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
-                                @if (selectedTopicName == null)
-                                {
-                                    <p class="text-muted">Select a topic to view subscriptions</p>
-                                }
-                                else if (isLoadingSubscriptions)
-                                {
-                                    <div class="spinner-border spinner-border-sm"></div>
-                                    <span class="ms-2">Loading...</span>
-                                }
-                                else if (subscriptionNames.Count == 0)
-                                {
-                                    <p class="text-muted">No subscriptions found</p>
-                                }
-                                else
-                                {
-                                    <div class="list-group">
-                                        @foreach (var subName in subscriptionNames)
-                                        {
-                                            <a href="#" class="list-group-item list-group-item-action @(selectedSubscriptionName == subName ? "active" : "")" 
-                                               @onclick="() => SelectSubscription(subName)" @onclick:preventDefault>
-                                                @subName
-                                            </a>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Message Operations -->
-                @if (selectedQueueName != null || selectedSubscriptionName != null)
-                {
-                    <div class="row mt-4">
-                        <div class="col-md-12">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h5 class="mb-0">@(selectedQueueName != null ? $"Queue: {selectedQueueName}" : $"Subscription: {selectedTopicName}/{selectedSubscriptionName}")</h5>
-                                </div>
-                                <div class="card-body">
-                                    <!-- Entity level buttons (always visible) -->
-                                    <div class="mb-3 pb-3 border-bottom">
-                                        <label class="text-muted small mb-2 d-block">@(selectedQueueName != null ? "QUEUE" : "TOPIC/SUBSCRIPTION") OPERATIONS</label>
-                                        <div class="d-flex gap-2 align-items-center">
-                                            <button class="btn btn-success" @onclick="ShowSendMessageModal">
-                                                <span class="me-1">📤</span> Send Message
-                                            </button>
-                                            <div class="form-check form-switch d-flex align-items-center ms-2">
-                                                <input class="form-check-input" type="checkbox" id="dlqToggle" @bind="isViewingDLQ" @bind:after="OnDLQToggleChanged">
-                                                <label class="form-check-label ms-2" for="dlqToggle">
-                                                    <strong>@(isViewingDLQ ? "Viewing DLQ" : "View DLQ")</strong>
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Message operations buttons -->
-                                    <div class="mb-3">
-                                        <label class="text-muted small mb-2 d-block">MESSAGE OPERATIONS</label>
-                                        <div class="btn-group" role="group">
-                                            <button class="btn btn-outline-primary" @onclick="PeekMessages" disabled="@isPeeking">
-                                                @if (isPeeking)
-                                                {
-                                                    <span class="spinner-border spinner-border-sm me-2"></span>
-                                                }
-                                                Peek
-                                            </button>
-                                            <button class="btn btn-outline-info" @onclick="ShowPeekLockModal" disabled="@isPeeking">
-                                                Peek & Lock
-                                            </button>
-                                            <button class="btn btn-outline-warning" @onclick="PurgeMessages" disabled="@isPurging">
-                                                @if (isPurging)
-                                                {
-                                                    <span class="spinner-border spinner-border-sm me-2"></span>
-                                                }
-                                                Purge
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    @if (peekedMessages.Count > 0)
-                                    {
-                                        <div class="mt-3">
-                                            <h6>Messages (@peekedMessages.Count)</h6>
-                                            <MessageList Messages="@peekedMessages"
-                                                        IsDLQ="@isViewingDLQ"
-                                                        IsProcessing="@isProcessingBatch"
-                                                        OnMessageSelected="@ShowMessageDetail"
-                                                        OnDeleteMessages="@DeleteMessages"
-                                                        OnResubmitMessages="@ResubmitMessages"
-                                                        OnMoveToDLQMessages="@MoveToDLQMessages" />
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                }
-            }
-
-            @if (!string.IsNullOrEmpty(errorMessage))
-            {
-                <div class="alert alert-danger mt-3">
-                    <strong>Error:</strong> @errorMessage
-                </div>
-            }
+            <EntityListPanel Title="Subscriptions"
+                           Items="@subscriptionNames"
+                           SelectedItem="@selectedSubscriptionName"
+                           IsLoading="@isLoadingSubscriptions"
+                           ShowEmptyMessage="@(selectedTopicName == null)"
+                           EmptyMessage="Select a topic to view subscriptions"
+                           HeaderColorClass="bg-info"
+                           OnItemSelected="@SelectSubscription" />
         </div>
 
-        <!-- Send Message Modal -->
-        @if (showSendMessageModal)
+        <!-- Message Operations -->
+        @if (selectedQueueName != null || selectedSubscriptionName != null)
         {
-            <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Send Message</h5>
-                            <button type="button" class="btn-close" @onclick="() => showSendMessageModal = false"></button>
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">@(selectedQueueName != null ? $"Queue: {selectedQueueName}" : $"Subscription: {selectedTopicName}/{selectedSubscriptionName}")</h5>
                         </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label class="form-label">Message Body</label>
-                                <textarea class="form-control" rows="5" @bind="messageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
-                                <small class="form-text text-muted">Enter plain text or valid JSON. Content type will be set automatically.</small>
+                        <div class="card-body">
+                            <!-- Entity level buttons (always visible) -->
+                            <div class="mb-3 pb-3 border-bottom">
+                                <label class="text-muted small mb-2 d-block">@(selectedQueueName != null ? "QUEUE" : "TOPIC/SUBSCRIPTION") OPERATIONS</label>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <button class="btn btn-success" @onclick="ShowSendMessageModal">
+                                        <span class="me-1">📤</span> Send Message
+                                    </button>
+                                    <div class="form-check form-switch d-flex align-items-center ms-2">
+                                        <input class="form-check-input" type="checkbox" id="dlqToggle" @bind="isViewingDLQ" @bind:after="OnDLQToggleChanged">
+                                        <label class="form-check-label ms-2" for="dlqToggle">
+                                            <strong>@(isViewingDLQ ? "Viewing DLQ" : "View DLQ")</strong>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
+
+                            <!-- Message operations buttons -->
                             <div class="mb-3">
-                                <label class="form-label">Properties (JSON, optional)</label>
-                                <textarea class="form-control" rows="3" @bind="messageProperties" placeholder='{"property1": "value1"}'></textarea>
+                                <label class="text-muted small mb-2 d-block">MESSAGE OPERATIONS</label>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-outline-primary" @onclick="PeekMessages" disabled="@isPeeking">
+                                        @if (isPeeking)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                        }
+                                        Peek
+                                    </button>
+                                    <button class="btn btn-outline-info" @onclick="ShowPeekLockModal" disabled="@isPeeking">
+                                        Peek & Lock
+                                    </button>
+                                    <button class="btn btn-outline-warning" @onclick="PurgeMessages" disabled="@isPurging">
+                                        @if (isPurging)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                        }
+                                        Purge
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" @onclick="() => showSendMessageModal = false">Cancel</button>
-                            <button type="button" class="btn btn-primary" @onclick="SendMessage" disabled="@isSending">
-                                @if (isSending)
-                                {
-                                    <span class="spinner-border spinner-border-sm me-2"></span>
-                                }
-                                Send
-                            </button>
+
+                            @if (peekedMessages.Count > 0)
+                            {
+                                <div class="mt-3">
+                                    <h6>Messages (@peekedMessages.Count)</h6>
+                                    <MessageList Messages="@peekedMessages"
+                                                IsDLQ="@isViewingDLQ"
+                                                IsProcessing="@isProcessingBatch"
+                                                OnMessageSelected="@ShowMessageDetail"
+                                                OnDeleteMessages="@DeleteMessages"
+                                                OnResubmitMessages="@ResubmitMessages"
+                                                OnMoveToDLQMessages="@MoveToDLQMessages" />
+                                </div>
+                            }
                         </div>
                     </div>
                 </div>
             </div>
         }
-    </Authorized>
-    <NotAuthorized>
-        <div class="container mt-4">
-            <div class="alert alert-warning">Please sign in to access the explorer.</div>
-            <a href="authentication/login" class="btn btn-primary">Sign In</a>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-3">
+            <strong>Error:</strong> @errorMessage
         </div>
-    </NotAuthorized>
-</AuthorizeView>
+    }
+</div>
+
+<!-- Modals -->
+<SendMessageModal IsVisible="@showSendMessageModal"
+                 IsSending="@isSending"
+                 OnClose="@(() => showSendMessageModal = false)"
+                 OnSend="@SendMessage" />
 
 <MessageDetailModal IsVisible="@showMessageDetailModal"
                    Message="@selectedMessage"
@@ -255,42 +147,12 @@
                    OnResubmit="@ResubmitSingleMessage"
                    OnMoveToDLQ="@MoveToDLQSingleMessage" />
 
-<!-- Peek Lock Modal -->
-@if (showPeekLockModal)
-{
-    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Peek & Lock Messages</h5>
-                    <button type="button" class="btn-close" @onclick="() => showPeekLockModal = false"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Number of messages</label>
-                        <input type="number" class="form-control" @bind="peekLockCount" min="1" max="100" />
-                        <small class="form-text text-muted">Maximum 100 messages</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Lock duration (seconds)</label>
-                        <input type="number" class="form-control" @bind="peekLockDuration" min="5" max="300" />
-                        <small class="form-text text-muted">Messages will be locked for this duration</small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="() => showPeekLockModal = false">Cancel</button>
-                    <button type="button" class="btn btn-primary" @onclick="PeekLockMessagesWithSettings" disabled="@isPeeking">
-                        @if (isPeeking)
-                        {
-                            <span class="spinner-border spinner-border-sm me-2"></span>
-                        }
-                        Peek & Lock
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
+<PeekLockModal IsVisible="@showPeekLockModal"
+              IsProcessing="@isPeeking"
+              InitialCount="@peekLockCount"
+              InitialDuration="@peekLockDuration"
+              OnClose="@(() => showPeekLockModal = false)"
+              OnPeekLock="@PeekLockMessagesWithSettings" />
 
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
@@ -325,8 +187,6 @@
     private bool showPeekLockModal = false;
     private bool isProcessingBatch = false;
     private ServiceBusMessage? selectedMessage = null;
-    private string messageBody = "";
-    private string messageProperties = "";
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
     private string? errorMessage;
@@ -548,84 +408,23 @@
 
     private void ShowSendMessageModal()
     {
-        messageBody = "";
-        messageProperties = "";
         showSendMessageModal = true;
     }
 
-    private async Task SendMessage()
+    private async Task SendMessage((string body, string? properties) messageData)
     {
         isSending = true;
         errorMessage = null;
 
         try
         {
-            // Validate message body is provided
-            if (string.IsNullOrWhiteSpace(messageBody))
+            // Use parsing service to handle all the JSON logic
+            var (bodyToSend, propsDict, error) = MessageParsingService.ParseMessageForSending(messageData.body, messageData.properties);
+            
+            if (error != null)
             {
-                errorMessage = "Message body is required";
+                errorMessage = error;
                 return;
-            }
-
-            // Try to parse as JSON first, if it fails, send as plain text
-            object bodyToSend;
-            Dictionary<string, object>? propsDict = new Dictionary<string, object>();
-            
-            // Check if the message body is valid JSON
-            var trimmed = messageBody.Trim();
-            
-            if ((trimmed.StartsWith("{") && trimmed.EndsWith("}")) || 
-                (trimmed.StartsWith("[") && trimmed.EndsWith("]")))
-            {
-                try
-                {
-                    // Try parsing as JSON
-                    var bodyDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(messageBody);
-                    if (bodyDict != null)
-                    {
-                        bodyToSend = bodyDict;
-                        propsDict["contentType"] = "application/json";
-                    }
-                    else
-                    {
-                        // Send as plain text
-                        bodyToSend = messageBody;
-                        propsDict["contentType"] = "text/plain";
-                    }
-                }
-                catch (System.Text.Json.JsonException)
-                {
-                    // Not valid JSON, send as plain text
-                    bodyToSend = messageBody;
-                    propsDict["contentType"] = "text/plain";
-                }
-            }
-            else
-            {
-                // Definitely not JSON, send as plain text
-                bodyToSend = messageBody;
-                propsDict["contentType"] = "text/plain";
-            }
-
-            // Parse additional properties if provided and merge
-            if (!string.IsNullOrWhiteSpace(messageProperties))
-            {
-                try
-                {
-                    var additionalProps = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(messageProperties);
-                    if (additionalProps != null)
-                    {
-                        foreach (var prop in additionalProps)
-                        {
-                            propsDict[prop.Key] = prop.Value;
-                        }
-                    }
-                }
-                catch (System.Text.Json.JsonException ex)
-                {
-                    errorMessage = $"Invalid JSON in properties: {ex.Message}";
-                    return;
-                }
             }
 
             if (selectedQueueName != null)
@@ -672,11 +471,15 @@
         showPeekLockModal = true;
     }
 
-    private async Task PeekLockMessagesWithSettings()
+    private async Task PeekLockMessagesWithSettings((int count, int duration) settings)
     {
         showPeekLockModal = false;
         isPeeking = true;
         errorMessage = null;
+
+        // Update the stored values
+        peekLockCount = settings.count;
+        peekLockDuration = settings.duration;
 
         try
         {

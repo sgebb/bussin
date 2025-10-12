@@ -1,0 +1,73 @@
+@if (IsVisible)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Send Message</h5>
+                    <button type="button" class="btn-close" @onclick="OnClose"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Message Body</label>
+                        <textarea class="form-control" rows="5" @bind="MessageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
+                        <small class="form-text text-muted">Enter plain text or valid JSON. Content type will be set automatically.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Additional Properties (Optional)</label>
+                        <textarea class="form-control" rows="3" @bind="MessageProperties" placeholder='{"customProp": "value"}'></textarea>
+                        <small class="form-text text-muted">JSON object with custom properties to add to the message.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="HandleSend" disabled="@IsSending">
+                        @if (IsSending)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Send
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public bool IsSending { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(string body, string? properties)> OnSend { get; set; }
+
+    private string messageBody = "";
+    private string messageProperties = "";
+
+    public string MessageBody
+    {
+        get => messageBody;
+        set => messageBody = value;
+    }
+
+    public string MessageProperties
+    {
+        get => messageProperties;
+        set => messageProperties = value;
+    }
+
+    private async Task HandleSend()
+    {
+        await OnSend.InvokeAsync((messageBody, string.IsNullOrWhiteSpace(messageProperties) ? null : messageProperties));
+        messageBody = "";
+        messageProperties = "";
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!IsVisible)
+        {
+            messageBody = "";
+            messageProperties = "";
+        }
+    }
+}

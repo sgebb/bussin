@@ -1,21 +1,32 @@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @inherits LayoutComponentBase
+@inject IPreferencesService PreferencesService
+@inject IJSRuntime JSRuntime
 
-<div class="page">
+<AuthorizeView>
+    <Authorized>
+        <div class="page" data-theme="@(isDarkMode ? "dark" : "light")">
     <div class="sidebar">
         <NavMenu />
     </div>
 
     <main>
         <div class="top-row px-4">
-            <AuthorizeView>
-                <Authorized>
-                    <span>Logged in as <a href="diagnostics" class="user-link">@context.User.Identity?.Name</a></span>
-                    <a href="authentication/logout">Log out</a>
-                </Authorized>
-                <NotAuthorized>
-                    <a href="authentication/login">Log in</a>
-                </NotAuthorized>
-            </AuthorizeView>
+            <div class="d-flex align-items-center gap-3">
+                @if (authState != null)
+                {
+                    <span>Logged in as <a href="diagnostics" class="user-link">@authState.User.Identity?.Name</a></span>
+                }
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="darkModeToggle" 
+                           checked="@isDarkMode" @onchange="ToggleDarkMode">
+                    <label class="form-check-label" for="darkModeToggle">
+                        @(isDarkMode ? "🌙" : "☀️")
+                    </label>
+                </div>
+                <a href="authentication/logout">Log out</a>
+            </div>
         </div>
 
         <article class="content px-4">
@@ -24,5 +35,42 @@
     </main>
 </div>
 
-<ToastNotification />
-<BuildInfo />
+        <ToastNotification />
+        <BuildInfo />
+    </Authorized>
+    <NotAuthorized>
+        @Body
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private AuthenticationState? authState;
+    private bool isDarkMode = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask != null)
+        {
+            authState = await AuthenticationStateTask;
+        }
+
+        // Load dark mode preference
+        var prefs = await PreferencesService.LoadPreferencesAsync();
+        isDarkMode = prefs.DarkMode;
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        isDarkMode = !isDarkMode;
+        
+        // Save preference
+        var prefs = await PreferencesService.LoadPreferencesAsync();
+        prefs.DarkMode = isDarkMode;
+        await PreferencesService.SavePreferencesAsync(prefs);
+        
+        StateHasChanged();
+    }
+}

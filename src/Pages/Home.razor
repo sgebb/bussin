@@ -4,7 +4,7 @@
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
 
-<PageTitle>Home - Service Bus Explorer</PageTitle>
+<PageTitle>Service Bus Explorer</PageTitle>
 
 <AuthorizeView>
     <Authorized>
@@ -12,46 +12,46 @@
             <h1>Service Bus Explorer</h1>
             <p class="lead">Select a namespace to explore</p>
 
-            @if (isLoading)
-            {
-                <div class="d-flex align-items-center">
-                    <div class="spinner-border text-primary me-2" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <span>Loading namespaces...</span>
-                </div>
-            }
-            else if (namespaces.Count == 0)
-            {
+    @if (isLoading)
+    {
+        <div class="d-flex align-items-center">
+            <div class="spinner-border text-primary me-2" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span>Loading namespaces...</span>
+        </div>
+    }
+    else if (namespaces.Count == 0)
+    {
                 <div class="alert alert-info">
                     <h5>No Service Bus namespaces found</h5>
                     <p>You don't have access to any Service Bus namespaces, or none exist in your subscriptions.</p>
                     <p>Make sure you have the appropriate permissions to view Service Bus resources.</p>
-                </div>
-            }
-            else
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var ns in namespaces)
             {
-                <div class="row">
-                    @foreach (var ns in namespaces)
-                    {
-                        <div class="col-md-4 mb-3">
-                            <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
-                                <div class="card-body">
-                                    <h5 class="card-title">@ns.Name</h5>
-                                    <p class="card-text">
-                                        <small class="text-muted">
-                                            <strong>Subscription:</strong> @ns.SubscriptionName<br />
-                                            <strong>Resource Group:</strong> @ns.ResourceGroup<br />
-                                            <strong>Location:</strong> @ns.Location<br />
-                                            <strong>Tenant:</strong> @ns.TenantId
-                                        </small>
-                                    </p>
-                                </div>
-                            </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
+                        <div class="card-body">
+                            <h5 class="card-title">@ns.Name</h5>
+                            <p class="card-text">
+                                <small class="text-muted">
+                                    <strong>Subscription:</strong> @ns.SubscriptionName<br />
+                                    <strong>Resource Group:</strong> @ns.ResourceGroup<br />
+                                    <strong>Location:</strong> @ns.Location<br />
+                                    <strong>Tenant:</strong> @ns.TenantId
+                                </small>
+                            </p>
                         </div>
-                    }
+                    </div>
                 </div>
             }
+        </div>
+    }
 
             @if (!string.IsNullOrEmpty(errorMessage))
             {
@@ -62,45 +62,49 @@
         </div>
     </Authorized>
     <NotAuthorized>
-        <div class="container mt-4">
-            <div class="jumbotron">
-                <h1 class="display-4">Welcome to Service Bus Explorer</h1>
-                <p class="lead">A zero-backend tool for exploring and managing Azure Service Bus.</p>
-                <hr class="my-4">
-                <p>Sign in with your Azure account to get started.</p>
-                <a class="btn btn-primary btn-lg" href="authentication/login" role="button">Sign In</a>
-                
-                <div class="mt-4">
-                    <div class="card">
-                        <div class="card-header" style="cursor: pointer;" @onclick="ToggleSecurityInfo">
-                            <span class="me-2">🔒</span> 
-                            <strong>About Permissions & Security</strong>
-                            <span class="float-end">@(showSecurityInfo ? "▼" : "▶")</span>
-                        </div>
-                        @if (showSecurityInfo)
-                        {
-                            <div class="card-body">
-                                <h5>What permissions are requested?</h5>
-                                <p>When you sign in, this application requests consent for two Azure permissions:</p>
-                                <ul>
-                                    <li><strong>Azure Management API</strong> - To list your Service Bus namespaces, queues, topics, and subscriptions</li>
-                                    <li><strong>Azure Service Bus</strong> - To peek, send, and manage messages in your Service Bus entities</li>
-                                </ul>
-                                
-                                <h5 class="mt-3">Is this safe?</h5>
-                                <p>Yes! This application is completely safe:</p>
-                                <ul>
-                                    <li><strong>Zero backend</strong> - All operations run directly in your browser</li>
-                                    <li><strong>Your credentials never leave your device</strong> - Authentication is handled by Microsoft's secure login</li>
-                                    <li><strong>No data storage</strong> - Nothing is saved to any server</li>
-                                    <li><strong>Open source</strong> - You can review the code yourself</li>
-                                    <li><strong>Uses your existing permissions</strong> - You can only access resources you already have access to</li>
-                                </ul>
-                                
-                                <h5 class="mt-3">Can I revoke access?</h5>
-                                <p>Yes, you can revoke these permissions at any time through your <a href="https://myapplications.microsoft.com/" target="_blank">Microsoft account settings</a>.</p>
+        <div class="container mt-5">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="jumbotron">
+                        <h1 class="display-4">Welcome to Service Bus Explorer</h1>
+                        <p class="lead">A zero-backend tool for exploring and managing Azure Service Bus.</p>
+                        <hr class="my-4">
+                        <p>Sign in with your Azure account to get started.</p>
+                        <a class="btn btn-primary btn-lg" href="authentication/login" role="button">Sign In</a>
+                        
+                        <div class="mt-4">
+                            <div class="card">
+                                <div class="card-header" style="cursor: pointer;" @onclick="ToggleSecurityInfo">
+                                    <span class="me-2">🔒</span> 
+                                    <strong>About Permissions & Security</strong>
+                                    <span class="float-end">@(showSecurityInfo ? "▼" : "▶")</span>
+                                </div>
+                                @if (showSecurityInfo)
+                                {
+                                    <div class="card-body">
+                                        <h5>What permissions are requested?</h5>
+                                        <p>When you sign in, this application requests consent for two Azure permissions:</p>
+                                        <ul>
+                                            <li><strong>Azure Management API</strong> - To list your Service Bus namespaces, queues, topics, and subscriptions</li>
+                                            <li><strong>Azure Service Bus</strong> - To peek, send, and manage messages in your Service Bus entities</li>
+                                        </ul>
+                                        
+                                        <h5 class="mt-3">Is this safe?</h5>
+                                        <p>Yes! This application is completely safe:</p>
+                                        <ul>
+                                            <li><strong>Zero backend</strong> - All operations run directly in your browser</li>
+                                            <li><strong>Your credentials never leave your device</strong> - Authentication is handled by Microsoft's secure login</li>
+                                            <li><strong>No data storage</strong> - Nothing is saved to any server</li>
+                                            <li><strong>Open source</strong> - You can review the code yourself</li>
+                                            <li><strong>Uses your existing permissions</strong> - You can only access resources you already have access to</li>
+                                        </ul>
+                                        
+                                        <h5 class="mt-3">Can I revoke access?</h5>
+                                        <p>Yes, you can revoke these permissions at any time through your <a href="https://myapplications.microsoft.com/" target="_blank">Microsoft account settings</a>.</p>
+                                    </div>
+                                }
                             </div>
-                        }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -111,8 +115,8 @@
 @code {
     private List<ServiceBusNamespaceInfo> namespaces = new();
     private bool isLoading = false;
-    private bool showSecurityInfo = false;
     private string? errorMessage;
+    private bool showSecurityInfo = false;
 
     private void ToggleSecurityInfo()
     {
@@ -121,10 +125,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (await AuthService.IsAuthenticatedAsync())
-        {
-            await LoadNamespacesAsync();
-        }
+        await LoadNamespacesAsync();
     }
 
     private async Task LoadNamespacesAsync()

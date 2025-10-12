@@ -1,0 +1,79 @@
+@if (IsVisible)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Peek & Lock Messages</h5>
+                    <button type="button" class="btn-close" @onclick="OnClose"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Number of Messages</label>
+                        <input type="number" class="form-control" @bind="MessageCount" min="1" max="100" />
+                        <small class="form-text text-muted">Maximum 100 messages</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Lock Duration (seconds)</label>
+                        <input type="number" class="form-control" @bind="LockDuration" min="5" max="300" />
+                        <small class="form-text text-muted">Between 5 and 300 seconds</small>
+                    </div>
+                    <div class="alert alert-info">
+                        <small>
+                            <strong>Note:</strong> Peek & Lock will reserve messages for processing. 
+                            They will be automatically released after the lock duration expires if not completed.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="HandlePeekLock" disabled="@IsProcessing">
+                        @if (IsProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Peek & Lock
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public int InitialCount { get; set; } = 10;
+    [Parameter] public int InitialDuration { get; set; } = 30;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(int count, int duration)> OnPeekLock { get; set; }
+
+    private int messageCount;
+    private int lockDuration;
+
+    public int MessageCount
+    {
+        get => messageCount;
+        set => messageCount = Math.Clamp(value, 1, 100);
+    }
+
+    public int LockDuration
+    {
+        get => lockDuration;
+        set => lockDuration = Math.Clamp(value, 5, 300);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible && messageCount == 0)
+        {
+            messageCount = InitialCount;
+            lockDuration = InitialDuration;
+        }
+    }
+
+    private async Task HandlePeekLock()
+    {
+        await OnPeekLock.InvokeAsync((messageCount, lockDuration));
+    }
+}

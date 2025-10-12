@@ -1,0 +1,48 @@
+@* Reusable panel for displaying queues, topics, or subscriptions *@
+<div class="col-md-4">
+    <div class="card">
+        <div class="card-header @HeaderColorClass text-white">
+            <h5 class="mb-0">@Title (@Items.Count)</h5>
+        </div>
+        <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+            @if (IsLoading)
+            {
+                <div class="spinner-border spinner-border-sm"></div>
+                <span class="ms-2">Loading...</span>
+            }
+            else if (ShowEmptyMessage)
+            {
+                <p class="text-muted">@EmptyMessage</p>
+            }
+            else if (Items.Count == 0)
+            {
+                <p class="text-muted">No @Title.ToLower() found</p>
+            }
+            else
+            {
+                <div class="list-group">
+                    @foreach (var item in Items)
+                    {
+                        <a href="#" 
+                           class="list-group-item list-group-item-action @(SelectedItem == item ? "active" : "")" 
+                           @onclick="() => OnItemSelected.InvokeAsync(item)" 
+                           @onclick:preventDefault>
+                            @item
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public List<string> Items { get; set; } = new();
+    [Parameter] public string? SelectedItem { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public bool ShowEmptyMessage { get; set; }
+    [Parameter] public string EmptyMessage { get; set; } = "";
+    [Parameter] public string HeaderColorClass { get; set; } = "bg-primary";
+    [Parameter] public EventCallback<string> OnItemSelected { get; set; }
+}
