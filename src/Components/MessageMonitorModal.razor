@@ -1,0 +1,213 @@
+@using Microsoft.JSInterop
+@using ServiceBusExplorer.Blazor.Models
+@using ServiceBusExplorer.Blazor.Services
+@inject IServiceBusJsInteropService JsInterop
+@inject IAuthenticationService AuthService
+@implements IDisposable
+
+@if (IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        📡 Live Monitor: @EntityName
+                        @if (isMonitoring)
+                        {
+                            <span class="badge bg-success ms-2">ACTIVE</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary ms-2">STOPPED</span>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <strong>Messages Received:</strong> @messages.Count
+                        </div>
+                        <div class="btn-group">
+                            @if (!isMonitoring)
+                            {
+                                <button class="btn btn-success" @onclick="StartMonitoring">
+                                    ▶️ Start Monitoring
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-danger" @onclick="StopMonitoring">
+                                    ⏹️ Stop Monitoring
+                                </button>
+                            }
+                            <button class="btn btn-outline-secondary" @onclick="ClearMessages">
+                                🗑️ Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+
+                    <div class="border rounded p-2" style="max-height: 500px; overflow-y: auto; background-color: #f8f9fa;">
+                        @if (messages.Count == 0)
+                        {
+                            <div class="text-muted text-center py-5">
+                                @if (isMonitoring)
+                                {
+                                    <div class="spinner-border text-primary mb-2"></div>
+                                    <p>Waiting for messages...</p>
+                                }
+                                else
+                                {
+                                    <p>Click "Start Monitoring" to begin receiving messages</p>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var msg in messages.AsEnumerable().Reverse())
+                            {
+                                <div class="card mb-2">
+                                    <div class="card-body p-2">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <small class="text-muted">@msg.EnqueuedTime?.ToString("HH:mm:ss.fff")</small>
+                                                <strong class="ms-2">@(msg.MessageId ?? "No ID")</strong>
+                                            </div>
+                                            <span class="badge bg-info">Seq: @msg.SequenceNumber</span>
+                                        </div>
+                                        <div class="mt-1">
+                                            <code style="font-size: 0.85em; white-space: pre-wrap; word-break: break-all;">@msg.Body</code>
+                                        </div>
+                                        @if (msg.ApplicationProperties?.Any() == true)
+                                        {
+                                            <div class="mt-1">
+                                                <small class="text-muted">Properties:</small>
+                                                @foreach (var prop in msg.ApplicationProperties)
+                                                {
+                                                    <span class="badge bg-secondary ms-1">@prop.Key: @prop.Value</span>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string? NamespaceName { get; set; }
+    [Parameter] public string? QueueName { get; set; }
+    [Parameter] public string? TopicName { get; set; }
+    [Parameter] public string? SubscriptionName { get; set; }
+
+    private List<ServiceBusMessage> messages = new();
+    private bool isMonitoring = false;
+    private string? errorMessage;
+    private IJSObjectReference? monitorController;
+    private DotNetObjectReference<MessageMonitorCallback>? callbackRef;
+    private MessageMonitorCallback? callback;
+
+    private string EntityName => QueueName ?? $"{TopicName}/{SubscriptionName}";
+
+    private async Task StartMonitoring()
+    {
+        if (string.IsNullOrEmpty(NamespaceName))
+            return;
+
+        try
+        {
+            errorMessage = null;
+            var token = await AuthService.GetServiceBusTokenAsync();
+            
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Service Bus token not available";
+                return;
+            }
+
+            // Create callback
+            callback = new MessageMonitorCallback(
+                onMessage: (msg) =>
+                {
+                    messages.Add(msg);
+                    InvokeAsync(StateHasChanged);
+                },
+                onError: (err) =>
+                {
+                    errorMessage = err;
+                    InvokeAsync(StateHasChanged);
+                }
+            );
+
+            callbackRef = DotNetObjectReference.Create(callback);
+
+            // Start monitoring
+            if (!string.IsNullOrEmpty(QueueName))
+            {
+                monitorController = await JsInterop.StartMonitoringQueueAsync(NamespaceName, QueueName, token, callbackRef);
+            }
+            else if (!string.IsNullOrEmpty(TopicName) && !string.IsNullOrEmpty(SubscriptionName))
+            {
+                monitorController = await JsInterop.StartMonitoringSubscriptionAsync(NamespaceName, TopicName, SubscriptionName, token, callbackRef);
+            }
+
+            isMonitoring = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to start monitoring: {ex.Message}";
+            Console.WriteLine($"Monitor error: {ex}");
+        }
+    }
+
+    private async Task StopMonitoring()
+    {
+        if (monitorController != null)
+        {
+            try
+            {
+                await JsInterop.StopMonitoringAsync(monitorController);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error stopping monitor: {ex.Message}");
+            }
+        }
+
+        isMonitoring = false;
+        callbackRef?.Dispose();
+        callbackRef = null;
+    }
+
+    private void ClearMessages()
+    {
+        messages.Clear();
+    }
+
+    private async Task Close()
+    {
+        await StopMonitoring();
+        await OnClose.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        _ = StopMonitoring();
+    }
+}

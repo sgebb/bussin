@@ -1,0 +1,300 @@
+@using ServiceBusExplorer.Blazor.Models
+
+@if (IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">🔒 Receive & Lock Messages</h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Number of Messages</label>
+                            <input type="number" class="form-control" @bind="messageCount" min="1" max="100" />
+                            <small class="text-muted">Lock up to 100 messages at once</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Timeout (seconds)</label>
+                            <input type="number" class="form-control" @bind="timeoutSeconds" min="1" max="60" />
+                            <small class="text-muted">How long to wait for messages</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <button class="btn btn-primary" @onclick="LockMessages" disabled="@isLocking">
+                            @if (isLocking)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            🔒 Lock Messages
+                        </button>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+
+                    @if (lockedMessages.Any())
+                    {
+                        <div class="alert alert-success">
+                            <strong>✓ Locked @lockedMessages.Count message(s)</strong>
+                            <p class="mb-0 mt-2">
+                                <small>These messages are now locked to you. Choose an action below or they will automatically unlock after the lock duration expires.</small>
+                            </p>
+                        </div>
+
+                        <!-- Batch Actions -->
+                        <div class="mb-3">
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-success" @onclick="CompleteAll" disabled="@isProcessing">
+                                    ✓ Complete All (Delete)
+                                </button>
+                                <button class="btn btn-warning" @onclick="AbandonAll" disabled="@isProcessing">
+                                    ↩️ Abandon All (Release Lock)
+                                </button>
+                                <button class="btn btn-danger" @onclick="DeadLetterAll" disabled="@isProcessing">
+                                    ⚠️ Dead Letter All
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Locked Messages List -->
+                        <div class="list-group">
+                            @foreach (var msg in lockedMessages)
+                            {
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1">
+                                                <span class="badge bg-secondary me-2">Seq: @msg.SequenceNumber</span>
+                                                @if (!string.IsNullOrEmpty(msg.MessageId))
+                                                {
+                                                    <small class="text-muted">ID: @msg.MessageId</small>
+                                                }
+                                            </h6>
+                                            <p class="mb-1"><small>@GetMessagePreview(msg)</small></p>
+                                            <small class="text-muted">
+                                                🔒 Lock Token: <code>@msg.LockToken</code>
+                                                @if (msg.LockedUntil.HasValue)
+                                                {
+                                                    <span class="ms-2">Locked until: @msg.LockedUntil.Value.ToLocalTime().ToString("HH:mm:ss")</span>
+                                                }
+                                            </small>
+                                        </div>
+                                        <div class="btn-group-vertical btn-group-sm">
+                                            <button class="btn btn-outline-success" @onclick="() => CompleteSingle(msg.LockToken!)" disabled="@isProcessing">
+                                                ✓ Complete
+                                            </button>
+                                            <button class="btn btn-outline-warning" @onclick="() => AbandonSingle(msg.LockToken!)" disabled="@isProcessing">
+                                                ↩️ Abandon
+                                            </button>
+                                            <button class="btn btn-outline-danger" @onclick="() => DeadLetterSingle(msg.LockToken!)" disabled="@isProcessing">
+                                                ⚠️ DLQ
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public Func<int, int, bool, Task<List<ServiceBusMessage>>>? OnLockMessages { get; set; }
+    [Parameter] public Func<string[], Task>? OnComplete { get; set; }
+    [Parameter] public Func<string[], Task>? OnAbandon { get; set; }
+    [Parameter] public Func<string[], Task>? OnDeadLetter { get; set; }
+
+    private List<ServiceBusMessage> lockedMessages = new();
+    private int messageCount = 10;
+    private int timeoutSeconds = 5;
+    private bool isLocking = false;
+    private bool isProcessing = false;
+    private string? errorMessage;
+
+    private async Task LockMessages()
+    {
+        if (OnLockMessages == null) return;
+
+        isLocking = true;
+        errorMessage = null;
+        lockedMessages.Clear();
+
+        try
+        {
+            var messages = await OnLockMessages(messageCount, timeoutSeconds, false);
+            lockedMessages = messages;
+            
+            if (!lockedMessages.Any())
+            {
+                errorMessage = "No messages available to lock";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to lock messages: {ex.Message}";
+        }
+        finally
+        {
+            isLocking = false;
+        }
+    }
+
+    private async Task CompleteAll()
+    {
+        if (OnComplete == null || !lockedMessages.Any()) return;
+
+        isProcessing = true;
+        try
+        {
+            var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
+            await OnComplete(lockTokens);
+            lockedMessages.Clear();
+            // Don't auto-refresh - user may have other locked messages
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to complete messages: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task AbandonAll()
+    {
+        if (OnAbandon == null || !lockedMessages.Any()) return;
+
+        isProcessing = true;
+        try
+        {
+            var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
+            await OnAbandon(lockTokens);
+            lockedMessages.Clear();
+            // Don't auto-refresh - user may have other locked messages
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to abandon messages: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task DeadLetterAll()
+    {
+        if (OnDeadLetter == null || !lockedMessages.Any()) return;
+
+        isProcessing = true;
+        try
+        {
+            var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
+            await OnDeadLetter(lockTokens);
+            lockedMessages.Clear();
+            // Don't auto-refresh - user may have other locked messages
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to dead letter messages: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task CompleteSingle(string lockToken)
+    {
+        if (OnComplete == null) return;
+
+        isProcessing = true;
+        try
+        {
+            await OnComplete(new[] { lockToken });
+            // Just remove from UI - don't refresh the whole list
+            lockedMessages.RemoveAll(m => m.LockToken == lockToken);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to complete message: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task AbandonSingle(string lockToken)
+    {
+        if (OnAbandon == null) return;
+
+        isProcessing = true;
+        try
+        {
+            await OnAbandon(new[] { lockToken });
+            // Just remove from UI - don't refresh the whole list
+            lockedMessages.RemoveAll(m => m.LockToken == lockToken);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to abandon message: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task DeadLetterSingle(string lockToken)
+    {
+        if (OnDeadLetter == null) return;
+
+        isProcessing = true;
+        try
+        {
+            await OnDeadLetter(new[] { lockToken });
+            // Just remove from UI - don't refresh the whole list
+            lockedMessages.RemoveAll(m => m.LockToken == lockToken);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to dead letter message: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private string GetMessagePreview(ServiceBusMessage message)
+    {
+        if (message.Body != null)
+        {
+            var bodyStr = message.Body.ToString() ?? "";
+            return bodyStr.Length > 100 ? bodyStr.Substring(0, 100) + "..." : bodyStr;
+        }
+        return "(empty)";
+    }
+
+    private async Task Close()
+    {
+        lockedMessages.Clear();
+        await OnClose.InvokeAsync();
+    }
+}

@@ -1,24 +1,25 @@
 using System.Text.Json;
+using ServiceBusExplorer.Blazor.Models;
 
 namespace ServiceBusExplorer.Blazor.Services;
 
 public interface IMessageParsingService
 {
-    (object body, Dictionary<string, object> properties, string? error) ParseMessageForSending(string messageBody, string? additionalProperties);
+    (object body, MessageProperties? properties, string? error) ParseMessageForSending(string messageBody, string? additionalProperties);
 }
 
 public sealed class MessageParsingService : IMessageParsingService
 {
-    public (object body, Dictionary<string, object> properties, string? error) ParseMessageForSending(
+    public (object body, MessageProperties? properties, string? error) ParseMessageForSending(
         string messageBody, 
         string? additionalProperties)
     {
         if (string.IsNullOrWhiteSpace(messageBody))
         {
-            return (null!, null!, "Message body is required");
+            return (null!, null, "Message body is required");
         }
 
-        var properties = new Dictionary<string, object>();
+        var properties = new MessageProperties();
         object bodyToSend;
 
         // Try to parse body as JSON
@@ -28,20 +29,20 @@ public sealed class MessageParsingService : IMessageParsingService
             {
                 var jsonDoc = JsonDocument.Parse(messageBody);
                 bodyToSend = JsonSerializer.Deserialize<object>(messageBody)!;
-                properties["contentType"] = "application/json";
+                properties.ContentType = "application/json";
             }
             catch (JsonException)
             {
                 // Not valid JSON, treat as plain text
                 bodyToSend = messageBody;
-                properties["contentType"] = "text/plain";
+                properties.ContentType = "text/plain";
             }
         }
         else
         {
             // Definitely not JSON, send as plain text
             bodyToSend = messageBody;
-            properties["contentType"] = "text/plain";
+            properties.ContentType = "text/plain";
         }
 
         // Parse additional properties if provided
@@ -52,15 +53,13 @@ public sealed class MessageParsingService : IMessageParsingService
                 var additionalProps = JsonSerializer.Deserialize<Dictionary<string, object>>(additionalProperties);
                 if (additionalProps != null)
                 {
-                    foreach (var kvp in additionalProps)
-                    {
-                        properties[kvp.Key] = kvp.Value;
-                    }
+                    // Store as application properties
+                    properties.ApplicationProperties = additionalProps;
                 }
             }
             catch (JsonException ex)
             {
-                return (null!, null!, $"Invalid JSON in properties: {ex.Message}");
+                return (null!, null, $"Invalid JSON in properties: {ex.Message}");
             }
         }
 

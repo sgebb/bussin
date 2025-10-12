@@ -2,6 +2,7 @@
 @inject IAuthenticationService AuthService
 @inject IAzureResourceService ResourceService
 @inject IServiceBusOperationsService OperationsService
+@inject IServiceBusJsInteropService JsInterop
 @inject IMessageParsingService MessageParsingService
 @inject NavigationManager Navigation
 
@@ -83,31 +84,76 @@
                             <!-- Message operations buttons -->
                             <div class="mb-3">
                                 <label class="text-muted small mb-2 d-block">MESSAGE OPERATIONS</label>
-                                <div class="btn-group" role="group">
-                                    <button class="btn btn-outline-primary" @onclick="PeekMessages" disabled="@isPeeking">
-                                        @if (isPeeking)
+                                
+                                <!-- Peek Controls -->
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-3">
+                                        <label class="form-label small mb-1">Count</label>
+                                        <input type="number" class="form-control form-control-sm" @bind="peekCount" min="1" max="100" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small mb-1">From Sequence</label>
+                                        <input type="number" class="form-control form-control-sm" @bind="peekFromSequence" min="0" />
+                                    </div>
+                                    <div class="col-md-5 d-flex align-items-end">
+                                        <div class="btn-group w-100" role="group">
+                                            <button class="btn btn-outline-primary btn-sm" @onclick="PeekMessages" disabled="@isPeeking">
+                                                @if (isPeeking)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                                }
+                                                👁️ Peek
+                                            </button>
+                                            <button class="btn btn-outline-primary btn-sm" @onclick="PeekNext" disabled="@isPeeking">
+                                                ➡️ Peek Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex flex-wrap gap-2">
+                                    <!-- Other Operations -->
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-outline-info btn-sm" @onclick="ShowMonitorModal">
+                                            📡 Monitor Live
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="PurgeMessages" disabled="@isPurging">
+                                            @if (isPurging)
+                                            {
+                                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                            }
+                                            🗑️ Purge All
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Operation hints -->
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        @if (isViewingDLQ)
                                         {
-                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                            <span>💡 <strong>DLQ Mode:</strong> Select messages below to Resubmit (move back to main queue) or Delete permanently</span>
                                         }
-                                        Peek
-                                    </button>
-                                    <button class="btn btn-outline-info" @onclick="ShowPeekLockModal" disabled="@isPeeking">
-                                        Peek & Lock
-                                    </button>
-                                    <button class="btn btn-outline-warning" @onclick="PurgeMessages" disabled="@isPurging">
-                                        @if (isPurging)
+                                        else
                                         {
-                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                            <span>💡 <strong>Main Queue:</strong> Select messages below to Delete or Move to DLQ</span>
                                         }
-                                        Purge
-                                    </button>
+                                    </small>
                                 </div>
                             </div>
 
                             @if (peekedMessages.Count > 0)
                             {
                                 <div class="mt-3">
-                                    <h6>Messages (@peekedMessages.Count)</h6>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">Messages (@peekedMessages.Count @(peekedMessages.Count >= 1000 ? "- Max Reached" : ""))</h6>
+                                        @if (peekedMessages.Count < 1000)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="PeekNext" disabled="@isPeeking">
+                                                ⬇️ Load More
+                                            </button>
+                                        }
+                                    </div>
                                     <MessageList Messages="@peekedMessages"
                                                 IsDLQ="@isViewingDLQ"
                                                 IsProcessing="@isProcessingBatch"
@@ -154,6 +200,20 @@
               OnClose="@(() => showPeekLockModal = false)"
               OnPeekLock="@PeekLockMessagesWithSettings" />
 
+<MessageMonitorModal IsVisible="@showMonitorModal"
+                    NamespaceName="@NamespaceNameOnly"
+                    QueueName="@selectedQueueName"
+                    TopicName="@selectedTopicName"
+                    SubscriptionName="@selectedSubscriptionName"
+                    OnClose="@(() => showMonitorModal = false)" />
+
+<ReceiveAndLockModal IsVisible="@showReceiveAndLockModal"
+                    OnClose="@(() => showReceiveAndLockModal = false)"
+                    OnLockMessages="@LockMessagesForModal"
+                    OnComplete="@CompleteLockedMessages"
+                    OnAbandon="@AbandonLockedMessages"
+                    OnDeadLetter="@DeadLetterLockedMessages" />
+
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
     public string? NamespaceParam { get; set; }
@@ -185,10 +245,14 @@
     private bool showSendMessageModal = false;
     private bool showMessageDetailModal = false;
     private bool showPeekLockModal = false;
+    private bool showMonitorModal = false;
+    private bool showReceiveAndLockModal = false;
     private bool isProcessingBatch = false;
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
+    private int peekCount = 10;
+    private int peekFromSequence = 0;
     private string? errorMessage;
     
     // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
@@ -336,35 +400,92 @@
 
         try
         {
-            if (isViewingDLQ)
+            var token = await AuthService.GetServiceBusTokenAsync();
+            if (string.IsNullOrEmpty(token))
             {
-                if (selectedQueueName != null)
-                {
-                    peekedMessages = await OperationsService.PeekQueueDeadLetterMessagesAsync(NamespaceNameOnly, selectedQueueName, 10);
-                }
-                else if (selectedSubscriptionName != null && selectedTopicName != null)
-                {
-                    peekedMessages = await OperationsService.PeekSubscriptionDeadLetterMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, 10);
-                }
-            }
-            else
-            {
-                if (selectedQueueName != null)
-                {
-                    peekedMessages = await OperationsService.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, 10);
-                }
-                else if (selectedSubscriptionName != null && selectedTopicName != null)
-                {
-                    peekedMessages = await OperationsService.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, 10);
-                }
+                errorMessage = "Service Bus token not available";
+                return;
             }
 
-            Console.WriteLine($"Peeked {peekedMessages.Count} messages");
+            if (selectedQueueName != null)
+            {
+                peekedMessages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, peekCount, peekFromSequence, isViewingDLQ);
+            }
+            else if (selectedSubscriptionName != null && selectedTopicName != null)
+            {
+                peekedMessages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, peekCount, peekFromSequence, isViewingDLQ);
+            }
+
+            Console.WriteLine($"Peeked {peekedMessages.Count} messages from sequence {peekFromSequence}");
         }
         catch (Exception ex)
         {
             errorMessage = $"Failed to peek messages: {ex.Message}";
             Console.WriteLine($"Peek error: {ex}");
+        }
+        finally
+        {
+            isPeeking = false;
+        }
+    }
+
+    private async Task PeekNext()
+    {
+        // Check if we've hit the limit
+        if (peekedMessages.Count >= 1000)
+        {
+            errorMessage = "Maximum of 1000 messages loaded. Use filters or start from a different sequence number.";
+            return;
+        }
+
+        isPeeking = true;
+        errorMessage = null;
+
+        try
+        {
+            var token = await AuthService.GetServiceBusTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Service Bus token not available";
+                return;
+            }
+
+            // Set fromSequence to the last message's sequence number + 1
+            if (peekedMessages.Any())
+            {
+                var lastSeq = peekedMessages.Max(m => m.SequenceNumber ?? 0);
+                peekFromSequence = (int)(lastSeq + 1);
+            }
+
+            List<ServiceBusMessage> newMessages;
+            if (selectedQueueName != null)
+            {
+                newMessages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, peekCount, peekFromSequence, isViewingDLQ);
+            }
+            else if (selectedSubscriptionName != null && selectedTopicName != null)
+            {
+                newMessages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, peekCount, peekFromSequence, isViewingDLQ);
+            }
+            else
+            {
+                return;
+            }
+
+            // Append new messages to existing list
+            if (newMessages.Any())
+            {
+                peekedMessages.AddRange(newMessages);
+                Console.WriteLine($"Loaded {newMessages.Count} more messages. Total: {peekedMessages.Count}");
+            }
+            else
+            {
+                errorMessage = "No more messages available.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to peek next messages: {ex.Message}";
+            Console.WriteLine($"Peek next error: {ex}");
         }
         finally
         {
@@ -385,11 +506,11 @@
             int count = 0;
             if (selectedQueueName != null)
             {
-                count = await OperationsService.PurgeQueueAsync(NamespaceNameOnly, selectedQueueName);
+                count = await OperationsService.PurgeQueueAsync(NamespaceNameOnly, selectedQueueName, isViewingDLQ);
             }
             else if (selectedSubscriptionName != null && selectedTopicName != null)
             {
-                count = await OperationsService.PurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName);
+                count = await OperationsService.PurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, isViewingDLQ);
             }
 
             peekedMessages.Clear();
@@ -409,6 +530,55 @@
     private void ShowSendMessageModal()
     {
         showSendMessageModal = true;
+    }
+
+    private void ShowMonitorModal()
+    {
+        showMonitorModal = true;
+    }
+
+    private void ShowReceiveAndLockModal()
+    {
+        showReceiveAndLockModal = true;
+    }
+
+    // Lock-based operations for the modal
+    private async Task<List<ServiceBusMessage>> LockMessagesForModal(int count, int timeoutSeconds, bool fromDeadLetter)
+    {
+        var token = await AuthService.GetServiceBusTokenAsync();
+        if (string.IsNullOrEmpty(token))
+        {
+            throw new InvalidOperationException("Service Bus token not available");
+        }
+
+        if (selectedQueueName != null)
+        {
+            return await JsInterop.ReceiveAndLockQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, timeoutSeconds, isViewingDLQ, count);
+        }
+        else if (selectedTopicName != null && selectedSubscriptionName != null)
+        {
+            return await JsInterop.ReceiveAndLockSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, timeoutSeconds, isViewingDLQ, count);
+        }
+        return new List<ServiceBusMessage>();
+    }
+
+    private async Task CompleteLockedMessages(string[] lockTokens)
+    {
+        await OperationsService.CompleteMessagesAsync(lockTokens);
+    }
+
+    private async Task AbandonLockedMessages(string[] lockTokens)
+    {
+        await OperationsService.AbandonMessagesAsync(lockTokens);
+    }
+
+    private async Task DeadLetterLockedMessages(string[] lockTokens)
+    {
+        await OperationsService.DeadLetterMessagesAsync(lockTokens, new DeadLetterOptions 
+        { 
+            DeadLetterReason = "Manual dead letter from UI", 
+            DeadLetterErrorDescription = "User initiated dead letter operation" 
+        });
     }
 
     private async Task SendMessage((string body, string? properties) messageData)
@@ -522,12 +692,12 @@
         {
             if (selectedQueueName != null)
             {
-                await OperationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray());
+                await OperationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), isViewingDLQ);
                 await PeekMessages(); // Refresh
             }
             else if (selectedTopicName != null && selectedSubscriptionName != null)
             {
-                await OperationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
+                await OperationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), isViewingDLQ);
                 await PeekMessages(); // Refresh
             }
         }
@@ -554,12 +724,12 @@
         {
             if (selectedQueueName != null)
             {
-                await OperationsService.ResubmitQueueDeadLetterMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray());
+                await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), true);
                 await PeekMessages(); // Refresh
             }
             else if (selectedTopicName != null && selectedSubscriptionName != null)
             {
-                await OperationsService.ResubmitSubscriptionDeadLetterMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
+                await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), true);
                 await PeekMessages(); // Refresh
             }
         }

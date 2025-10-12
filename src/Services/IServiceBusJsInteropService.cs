@@ -6,26 +6,32 @@ namespace ServiceBusExplorer.Blazor.Services;
 public interface IServiceBusJsInteropService
 {
     // Queue Operations
-    Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0);
-    Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, object? properties = null);
-    Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token);
-    Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers);
-    Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers);
-    Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers);
-    
-    // Queue Dead Letter Operations
-    Task<List<ServiceBusMessage>> PeekQueueDeadLetterMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0);
-    Task<BatchOperationResult> ResubmitQueueDeadLetterMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers);
+    Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false);
+    Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, MessageProperties? properties = null);
+    Task SendScheduledQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null);
+    Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token, bool fromDeadLetter = false);
     
     // Topic/Subscription Operations
-    Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0);
-    Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, object? properties = null);
-    Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token);
-    Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers);
-    Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers);
-    Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers);
+    Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false);
+    Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, MessageProperties? properties = null);
+    Task SendScheduledTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null);
+    Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, bool fromDeadLetter = false);
     
-    // Subscription Dead Letter Operations
-    Task<List<ServiceBusMessage>> PeekSubscriptionDeadLetterMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0);
-    Task<BatchOperationResult> ResubmitSubscriptionDeadLetterMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers);
+    // Lock-based operations (new API)
+    Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1);
+    Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1);
+    Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens);
+    Task<BatchOperationResult> AbandonMessagesAsync(string[] lockTokens);
+    Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null);
+    
+    // Monitor operations (continuous non-destructive)
+    Task<IJSObjectReference> StartMonitoringQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef);
+    Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef);
+    Task StopMonitoringAsync(IJSObjectReference monitorController);
+    
+    // Purge with progress
+    Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false);
+    Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false);
+    Task<int> GetPurgeCountAsync(IJSObjectReference purgeController);
+    Task StopPurgeAsync(IJSObjectReference purgeController);
 }

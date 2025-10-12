@@ -8,15 +8,15 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
 {
     // Queue Operations
     
-    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0)
+    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
     {
         try
         {
-            Console.WriteLine($"Calling JS: peekQueueMessages({namespaceName}, {queueName}, token[{token.Length} chars], {count}, {fromSequence})");
+            Console.WriteLine($"Calling JS: peekQueueMessages({namespaceName}, {queueName}, token[{token.Length} chars], {count}, {fromSequence}, {fromDeadLetter})");
             
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
                 "ServiceBusAPI.peekQueueMessages",
-                namespaceName, queueName, token, count, fromSequence);
+                namespaceName, queueName, token, count, fromSequence, fromDeadLetter);
             
             Console.WriteLine($"✓ JS returned {result.Length} messages");
             
@@ -32,7 +32,7 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, object? properties = null)
+    public async Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, MessageProperties? properties = null)
     {
         try
         {
@@ -47,27 +47,23 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token)
+    public async Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token, bool fromDeadLetter = false)
     {
         try
         {
-            // The JS API returns an object with a promise property
-            // We need to access the promise property as an object, then await it
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
+            // Call the JS API which returns a PurgeController with a promise property
+            var controllerRef = await jsRuntime.InvokeAsync<IJSObjectReference>(
                 "ServiceBusAPI.purgeQueue",
-                namespaceName, queueName, token);
+                namespaceName, queueName, token, null, fromDeadLetter);
             
-            // The result is {"promise": {}} - we need to get the promise and await it
-            if (result.TryGetProperty("promise", out var promiseElement))
-            {
-                // The promise is an object reference we need to await
-                // Since we can't directly await a JsonElement, we'll just return 0 for now
-                // The purge itself works, we just can't get the count
-                Console.WriteLine($"Purge completed (count unavailable due to async iterator)");
-                return 0;
-            }
+            // Access the promise property and await it using a helper
+            var count = await jsRuntime.InvokeAsync<int>(
+                "eval",
+                "(async (controller) => await controller.promise)(arguments[0])",
+                controllerRef);
             
-            return 0;
+            Console.WriteLine($"Purge completed: {count} messages deleted");
+            return count;
         }
         catch (Exception ex)
         {
@@ -76,66 +72,15 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers)
-    {
-        try
-        {
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.deleteQueueMessages",
-                namespaceName, queueName, token, sequenceNumbers);
-            
-            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error deleting queue messages: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers)
-    {
-        try
-        {
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.resendQueueMessages",
-                namespaceName, queueName, token, sequenceNumbers);
-            
-            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error resending queue messages: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers)
-    {
-        try
-        {
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.moveToDLQQueueMessages",
-                namespaceName, queueName, token, sequenceNumbers);
-            
-            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error moving queue messages to DLQ: {ex.Message}");
-            throw;
-        }
-    }
-
-    // Queue Dead Letter Operations
+    // Lock-based operations (new API)
     
-    public async Task<List<ServiceBusMessage>> PeekQueueDeadLetterMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0)
+    public async Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1)
     {
         try
         {
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
-                "ServiceBusAPI.peekQueueDeadLetterMessages",
-                namespaceName, queueName, token, count, fromSequence);
+                "ServiceBusAPI.receiveAndLockQueueMessage",
+                namespaceName, queueName, token, timeoutSeconds, fromDeadLetter, count);
             
             return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
                 .Where(m => m != null)
@@ -143,37 +88,90 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error peeking queue DLQ messages: {ex.Message}");
+            Console.WriteLine($"Error locking queue messages: {ex.Message}");
             throw;
         }
     }
 
-    public async Task<BatchOperationResult> ResubmitQueueDeadLetterMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers)
+    public async Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1)
+    {
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<JsonElement[]>(
+                "ServiceBusAPI.receiveAndLockSubscriptionMessage",
+                namespaceName, topicName, subscriptionName, token, timeoutSeconds, fromDeadLetter, count);
+            
+            return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
+                .Where(m => m != null)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error locking subscription messages: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens)
     {
         try
         {
             var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.resubmitQueueDeadLetterMessages",
-                namespaceName, queueName, token, sequenceNumbers);
+                "ServiceBusAPI.complete",
+                new object[] { lockTokens });
             
             return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error resubmitting queue DLQ messages: {ex.Message}");
+            Console.WriteLine($"Error completing messages: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<BatchOperationResult> AbandonMessagesAsync(string[] lockTokens)
+    {
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<JsonElement>(
+                "ServiceBusAPI.abandon",
+                new object[] { lockTokens });
+            
+            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error abandoning messages: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null)
+    {
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<JsonElement>(
+                "ServiceBusAPI.deadLetter",
+                lockTokens, options ?? new DeadLetterOptions());
+            
+            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error dead lettering messages: {ex.Message}");
             throw;
         }
     }
 
     // Topic/Subscription Operations
     
-    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0)
+    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
     {
         try
         {
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
                 "ServiceBusAPI.peekSubscriptionMessages",
-                namespaceName, topicName, subscriptionName, token, count, fromSequence);
+                namespaceName, topicName, subscriptionName, token, count, fromSequence, fromDeadLetter);
             
             return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
                 .Where(m => m != null)
@@ -186,7 +184,7 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, object? properties = null)
+    public async Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, MessageProperties? properties = null)
     {
         try
         {
@@ -201,26 +199,53 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token)
+    public async Task SendScheduledQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null)
     {
         try
         {
-            // The JS API returns an object with a promise property
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.sendScheduledQueueMessage",
+                namespaceName, queueName, token, messageBody, scheduledEnqueueTime, properties);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending scheduled queue message: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task SendScheduledTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.sendScheduledTopicMessage",
+                namespaceName, topicName, token, messageBody, scheduledEnqueueTime, properties);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending scheduled topic message: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, bool fromDeadLetter = false)
+    {
+        try
+        {
+            // Call the JS API which returns a PurgeController with a promise property
+            var controllerRef = await jsRuntime.InvokeAsync<IJSObjectReference>(
                 "ServiceBusAPI.purgeSubscription",
-                namespaceName, topicName, subscriptionName, token);
+                namespaceName, topicName, subscriptionName, token, null, fromDeadLetter);
             
-            // The result is {"promise": {}} - we need to get the promise and await it
-            if (result.TryGetProperty("promise", out var promiseElement))
-            {
-                // The promise is an object reference we need to await
-                // Since we can't directly await a JsonElement, we'll just return 0 for now
-                // The purge itself works, we just can't get the count
-                Console.WriteLine($"Purge completed (count unavailable due to async iterator)");
-                return 0;
-            }
+            // Access the promise property and await it using a helper
+            var count = await jsRuntime.InvokeAsync<int>(
+                "eval",
+                "(async (controller) => await controller.promise)(arguments[0])",
+                controllerRef);
             
-            return 0;
+            Console.WriteLine($"Purge completed: {count} messages deleted");
+            return count;
         }
         catch (Exception ex)
         {
@@ -229,92 +254,154 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers)
-    {
-        try
-        {
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.deleteSubscriptionMessages",
-                namespaceName, topicName, subscriptionName, token, sequenceNumbers);
-            
-            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error deleting subscription messages: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers)
-    {
-        try
-        {
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.resendSubscriptionMessages",
-                namespaceName, topicName, subscriptionName, token, sequenceNumbers);
-            
-            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error resending subscription messages: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers)
-    {
-        try
-        {
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.moveToDLQSubscriptionMessages",
-                namespaceName, topicName, subscriptionName, token, sequenceNumbers);
-            
-            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error moving subscription messages to DLQ: {ex.Message}");
-            throw;
-        }
-    }
-
-    // Subscription Dead Letter Operations
+    // Monitor operations (continuous non-destructive)
     
-    public async Task<List<ServiceBusMessage>> PeekSubscriptionDeadLetterMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0)
+    public async Task<IJSObjectReference> StartMonitoringQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
     {
         try
         {
-            var result = await jsRuntime.InvokeAsync<JsonElement[]>(
-                "ServiceBusAPI.peekSubscriptionDeadLetterMessages",
-                namespaceName, topicName, subscriptionName, token, count, fromSequence);
+            // Create a helper function and invoke it
+            var helperFunc = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "eval",
+                @"(async function(ns, queue, token, dotnetRef) {
+                    return await ServiceBusAPI.monitorQueue(
+                        ns, 
+                        queue, 
+                        token,
+                        (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
+                        (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
+                    );
+                })");
             
-            return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
-                .Where(m => m != null)
-                .ToList();
+            var controller = await helperFunc.InvokeAsync<IJSObjectReference>("call", null, namespaceName, queueName, token, callbackRef);
+            
+            return controller;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error peeking subscription DLQ messages: {ex.Message}");
+            Console.WriteLine($"Error starting queue monitor: {ex.Message}");
             throw;
         }
     }
 
-    public async Task<BatchOperationResult> ResubmitSubscriptionDeadLetterMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers)
+    public async Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
     {
         try
         {
-            var result = await jsRuntime.InvokeAsync<JsonElement>(
-                "ServiceBusAPI.resubmitSubscriptionDeadLetterMessages",
-                namespaceName, topicName, subscriptionName, token, sequenceNumbers);
+            // Create a helper function and invoke it
+            var helperFunc = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "eval",
+                @"(async function(ns, topic, sub, token, dotnetRef) {
+                    return await ServiceBusAPI.monitorSubscription(
+                        ns, 
+                        topic,
+                        sub,
+                        token,
+                        (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
+                        (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
+                    );
+                })");
             
-            return JsonSerializer.Deserialize<BatchOperationResult>(result.GetRawText())!;
+            var controller = await helperFunc.InvokeAsync<IJSObjectReference>("call", null, namespaceName, topicName, subscriptionName, token, callbackRef);
+            
+            return controller;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error resubmitting subscription DLQ messages: {ex.Message}");
+            Console.WriteLine($"Error starting subscription monitor: {ex.Message}");
             throw;
         }
     }
+
+    public async Task StopMonitoringAsync(IJSObjectReference monitorController)
+    {
+        try
+        {
+            await monitorController.InvokeVoidAsync("stop");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error stopping monitor: {ex.Message}");
+            throw;
+        }
+    }
+
+    // Purge with progress
+    
+    public async Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
+    {
+        try
+        {
+            // Create JS callback wrapper
+            var jsCallback = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "eval",
+                "(function(dotnetRef) { return (count) => dotnetRef.invokeMethodAsync('OnProgress', count); })"
+            );
+            
+            var wrappedCallback = await jsCallback.InvokeAsync<IJSObjectReference>("call", null, callbackRef);
+            
+            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "ServiceBusAPI.purgeQueue",
+                namespaceName, queueName, token, wrappedCallback, fromDeadLetter);
+            
+            return controller;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting purge: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
+    {
+        try
+        {
+            // Create JS callback wrapper
+            var jsCallback = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "eval",
+                "(function(dotnetRef) { return (count) => dotnetRef.invokeMethodAsync('OnProgress', count); })"
+            );
+            
+            var wrappedCallback = await jsCallback.InvokeAsync<IJSObjectReference>("call", null, callbackRef);
+            
+            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "ServiceBusAPI.purgeSubscription",
+                namespaceName, topicName, subscriptionName, token, wrappedCallback, fromDeadLetter);
+            
+            return controller;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting purge: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<int> GetPurgeCountAsync(IJSObjectReference purgeController)
+    {
+        try
+        {
+            return await purgeController.InvokeAsync<int>("getCount");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting purge count: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task StopPurgeAsync(IJSObjectReference purgeController)
+    {
+        try
+        {
+            await purgeController.InvokeVoidAsync("stop");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error stopping purge: {ex.Message}");
+            throw;
+        }
+    }
+
 }
