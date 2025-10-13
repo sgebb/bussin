@@ -370,30 +370,4 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<int> GetPurgeCountAsync(IJSObjectReference purgeController)
-    {
-        try
-        {
-            return await purgeController.InvokeAsync<int>("getCount");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error getting purge count: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task StopPurgeAsync(IJSObjectReference purgeController)
-    {
-        try
-        {
-            await purgeController.InvokeVoidAsync("stop");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error stopping purge: {ex.Message}");
-            throw;
-        }
-    }
-
 }

@@ -29,9 +29,7 @@ public interface IServiceBusJsInteropService
     Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef);
     Task StopMonitoringAsync(IJSObjectReference monitorController);
     
-    // Purge with progress
+    // Purge with progress (for future use if needed)
     Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false);
     Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false);
-    Task<int> GetPurgeCountAsync(IJSObjectReference purgeController);
-    Task StopPurgeAsync(IJSObjectReference purgeController);
 }

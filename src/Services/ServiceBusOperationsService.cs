@@ -107,7 +107,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             var token = await GetTokenAsync();
             var count = await _jsInterop.PurgeQueueAsync(namespaceName, queueName, token, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "queue";
-            _notificationService.NotifySuccess($"{source} purged successfully");
+            _notificationService.NotifySuccess($"{source} purged successfully - deleted {count} message(s)");
             return count;
         }
         catch (Exception ex)
@@ -124,7 +124,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             var token = await GetTokenAsync();
             var count = await _jsInterop.PurgeSubscriptionAsync(namespaceName, topicName, subscriptionName, token, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "subscription";
-            _notificationService.NotifySuccess($"{source} purged successfully");
+            _notificationService.NotifySuccess($"{source} purged successfully - deleted {count} message(s)");
             return count;
         }
         catch (Exception ex)

@@ -790,13 +790,14 @@
             if (selectedQueueName != null)
             {
                 await OperationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), isViewingDLQ);
-                await PeekMessages(); // Refresh
             }
             else if (selectedTopicName != null && selectedSubscriptionName != null)
             {
                 await OperationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), isViewingDLQ);
-                await PeekMessages(); // Refresh
             }
+            
+            // Remove deleted messages from the view
+            peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
         }
         catch (Exception ex)
         {
@@ -822,13 +823,14 @@
             if (selectedQueueName != null)
             {
                 await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), true);
-                await PeekMessages(); // Refresh
             }
             else if (selectedTopicName != null && selectedSubscriptionName != null)
             {
                 await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), true);
-                await PeekMessages(); // Refresh
             }
+            
+            // Remove resubmitted messages from the view
+            peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
         }
         catch (Exception ex)
         {
@@ -853,13 +855,14 @@
             if (selectedQueueName != null)
             {
                 await OperationsService.MoveToDLQQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray());
-                await PeekMessages(); // Refresh
             }
             else if (selectedTopicName != null && selectedSubscriptionName != null)
             {
                 await OperationsService.MoveToDLQSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
-                await PeekMessages(); // Refresh
             }
+            
+            // Remove moved messages from the view
+            peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
         }
         catch (Exception ex)
         {
