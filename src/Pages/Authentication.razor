@@ -4,7 +4,8 @@
 <RemoteAuthenticatorView Action="@Action">
     <LogOutSucceeded>
         @{
-            Navigation.NavigateTo("/", forceLoad: true);
+            // Use BaseUri to respect the base href (works for both /slimsbe/ and /)
+            Navigation.NavigateTo(Navigation.BaseUri, forceLoad: true);
         }
     </LogOutSucceeded>
 </RemoteAuthenticatorView>
