@@ -58,8 +58,7 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
             
             // Access the promise property and await it using a helper
             var count = await jsRuntime.InvokeAsync<int>(
-                "eval",
-                "(async (controller) => await controller.promise)(arguments[0])",
+                "awaitControllerPromise",
                 controllerRef);
             
             Console.WriteLine($"Purge completed: {count} messages deleted");
@@ -240,8 +239,7 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
             
             // Access the promise property and await it using a helper
             var count = await jsRuntime.InvokeAsync<int>(
-                "eval",
-                "(async (controller) => await controller.promise)(arguments[0])",
+                "awaitControllerPromise",
                 controllerRef);
             
             Console.WriteLine($"Purge completed: {count} messages deleted");
@@ -332,17 +330,14 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     {
         try
         {
-            // Create JS callback wrapper
-            var jsCallback = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "eval",
-                "(function(dotnetRef) { return (count) => dotnetRef.invokeMethodAsync('OnProgress', count); })"
-            );
-            
-            var wrappedCallback = await jsCallback.InvokeAsync<IJSObjectReference>("call", null, callbackRef);
+            // Create JS callback wrapper using helper function
+            var callback = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "createProgressCallback",
+                callbackRef);
             
             var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
                 "ServiceBusAPI.purgeQueue",
-                namespaceName, queueName, token, wrappedCallback, fromDeadLetter);
+                namespaceName, queueName, token, callback, fromDeadLetter);
             
             return controller;
         }
@@ -357,17 +352,14 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     {
         try
         {
-            // Create JS callback wrapper
-            var jsCallback = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "eval",
-                "(function(dotnetRef) { return (count) => dotnetRef.invokeMethodAsync('OnProgress', count); })"
-            );
-            
-            var wrappedCallback = await jsCallback.InvokeAsync<IJSObjectReference>("call", null, callbackRef);
+            // Create JS callback wrapper using helper function
+            var callback = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "createProgressCallback",
+                callbackRef);
             
             var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
                 "ServiceBusAPI.purgeSubscription",
-                namespaceName, topicName, subscriptionName, token, wrappedCallback, fromDeadLetter);
+                namespaceName, topicName, subscriptionName, token, callback, fromDeadLetter);
             
             return controller;
         }

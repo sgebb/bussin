@@ -14,3 +14,13 @@ window.storageHelper = {
         localStorage.clear();
     }
 };
+
+// Helper to create callback wrappers for .NET interop
+window.createProgressCallback = function(dotnetRef) {
+    return (count) => dotnetRef.invokeMethodAsync('OnProgress', count);
+};
+
+// Helper to await a promise from a controller object
+window.awaitControllerPromise = async function(controller) {
+    return await controller.promise;
+};
