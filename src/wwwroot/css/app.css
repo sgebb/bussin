@@ -4,7 +4,7 @@
     --text-color: #212529;
     --card-bg: #ffffff;
     --border-color: #dee2e6;
-    --sidebar-bg: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
+    --sidebar-bg: #FFFFFF;
     --hover-bg: #e9ecef;
     --link-color: #0071e3;
     --input-bg: #ffffff;
@@ -15,18 +15,18 @@
 }
 
 [data-theme="dark"] {
-    --bg-color: #0d1117;
-    --text-color: #e6edf3;
-    --card-bg: #161b22;
-    --border-color: #30363d;
-    --sidebar-bg: linear-gradient(180deg, #0d1117 0%, #161b22 70%);
-    --hover-bg: #21262d;
-    --link-color: #58a6ff;
-    --input-bg: #0d1117;
-    --input-border: #30363d;
-    --muted-text: #8b949e;
-    --top-row-bg: #161b22;
-    --content-bg: #0d1117;
+    --bg-color: #1A1A1A;
+    --text-color: #E8E8E8;
+    --card-bg: #2A2A2A;
+    --border-color: #404040;
+    --sidebar-bg: #2A2A2A;
+    --hover-bg: #3A3A3A;
+    --link-color: #BECF91;
+    --input-bg: #2A2A2A;
+    --input-border: #404040;
+    --muted-text: #A0A0A0;
+    --top-row-bg: #2A2A2A;
+    --content-bg: #1A1A1A;
 }
 
 html, body {
@@ -270,7 +270,8 @@ pre {
 }
 
 [data-theme="dark"] .message-list .message-item.selected {
-    background-color: #1a4d7a;
+    background-color: #BECF91;
+    color: #0D022C;
 }
 
 /* Apply theme variables to components */
@@ -331,8 +332,10 @@ pre, code {
 
 .namespace-card:hover {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-color: #BECF91;
 }
 
 [data-theme="dark"] .namespace-card:hover {
     box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1);
+    border-color: #BECF91;
 }

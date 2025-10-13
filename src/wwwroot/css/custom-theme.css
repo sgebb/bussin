@@ -1,0 +1,477 @@
+/* Custom Color Theme
+   Primary: #BECF91 (Sage Green)
+   Secondary: #874B36 (Brown)
+   Accent: #0D022C (Dark Purple)
+*/
+
+:root {
+    /* Primary Colors */
+    --primary-color: #BECF91;
+    --primary-dark: #9CAF71;
+    --primary-light: #D4E3B3;
+    
+    /* Secondary Colors */
+    --secondary-color: #874B36;
+    --secondary-dark: #6A3B2A;
+    --secondary-light: #A35D42;
+    
+    /* Accent Colors */
+    --accent-color: #0D022C;
+    --accent-light: #1F0D4E;
+    
+    /* Light Mode Colors */
+    --light-bg: #F5F5F5;
+    --light-surface: #FFFFFF;
+    --light-text: #0D022C;
+    --light-text-muted: #6B6B6B;
+    --light-border: #D0D0D0;
+    
+    /* Apply Light Mode */
+    --bg-color: var(--light-bg);
+    --surface-color: var(--light-surface);
+    --text-color: var(--light-text);
+    --text-muted: var(--light-text-muted);
+    --border-color: var(--light-border);
+}
+
+/* Apply background globally */
+body {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+}
+
+#app {
+    background-color: var(--bg-color);
+}
+
+/* Dark Mode */
+[data-theme="dark"] {
+    /* Dark Mode Colors */
+    --dark-bg: #1A1A1A;
+    --dark-surface: #2A2A2A;
+    --dark-text: #E8E8E8;
+    --dark-text-muted: #A0A0A0;
+    --dark-border: #404040;
+    
+    /* Apply Dark Mode */
+    --bg-color: var(--dark-bg);
+    --surface-color: var(--dark-surface);
+    --text-color: var(--dark-text);
+    --text-muted: var(--dark-text-muted);
+    --border-color: var(--dark-border);
+}
+
+/* ============================================
+   BOOTSTRAP COMPONENT COLOR OVERRIDES
+   ============================================ */
+
+/* Buttons - Primary (Sage Green) */
+.btn-primary {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+    font-weight: 500;
+}
+
+.btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+    background-color: var(--primary-dark) !important;
+    border-color: var(--primary-dark) !important;
+    color: var(--accent-color) !important;
+}
+
+.btn-outline-primary {
+    color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    background-color: transparent !important;
+}
+
+.btn-outline-primary:hover, .btn-outline-primary:focus, .btn-outline-primary:active {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+}
+
+/* Buttons - Secondary/Info (Brown) */
+.btn-info, .btn-secondary {
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    color: #FFFFFF !important;
+    font-weight: 500;
+}
+
+.btn-info:hover, .btn-info:focus, .btn-info:active,
+.btn-secondary:hover, .btn-secondary:focus, .btn-secondary:active {
+    background-color: var(--secondary-dark) !important;
+    border-color: var(--secondary-dark) !important;
+    color: #FFFFFF !important;
+}
+
+.btn-outline-info, .btn-outline-secondary {
+    color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    background-color: transparent !important;
+}
+
+.btn-outline-info:hover, .btn-outline-info:focus, .btn-outline-info:active,
+.btn-outline-secondary:hover, .btn-outline-secondary:focus, .btn-outline-secondary:active {
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    color: #FFFFFF !important;
+}
+
+/* Buttons - Success (Use primary color) */
+.btn-success {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+    font-weight: 500;
+}
+
+.btn-success:hover, .btn-success:focus, .btn-success:active {
+    background-color: var(--primary-dark) !important;
+    border-color: var(--primary-dark) !important;
+}
+
+/* Buttons - Danger (Keep red for destructive actions) */
+.btn-danger {
+    background-color: #DC3545 !important;
+    border-color: #DC3545 !important;
+    font-weight: 500;
+}
+
+.btn-danger:hover, .btn-danger:focus, .btn-danger:active {
+    background-color: #BB2D3B !important;
+    border-color: #BB2D3B !important;
+}
+
+/* Links */
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+}
+
+/* Spinners */
+.spinner-border-primary, .spinner-border.text-primary {
+    color: var(--primary-color) !important;
+}
+
+/* Form Controls */
+.form-check-input:checked {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.form-switch .form-check-input:checked {
+    background-color: var(--primary-color) !important;
+}
+
+/* Badges with custom colors */
+.badge.bg-primary {
+    background-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+}
+
+.badge.bg-secondary {
+    background-color: var(--secondary-color) !important;
+}
+
+.badge.bg-info {
+    background-color: var(--primary-light) !important;
+    color: var(--accent-color) !important;
+}
+
+/* Explorer Layout */
+.explorer-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding-top: 56px; /* Below navbar */
+}
+
+.explorer-header {
+    flex-shrink: 0;
+    background-color: var(--surface-color) !important;
+    border-bottom: 2px solid var(--border-color);
+    padding: 0.5rem;
+    color: var(--text-color);
+}
+
+.explorer-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    background-color: var(--bg-color);
+}
+
+/* Entity List Scrolling */
+.entity-list-scroll {
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: var(--surface-color) !important;
+}
+
+.entity-list-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.entity-list-scroll::-webkit-scrollbar-track {
+    background: var(--surface-color);
+}
+
+.entity-list-scroll::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 3px;
+}
+
+.entity-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-dark);
+}
+
+/* Card styling */
+.card {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Namespace card specifically */
+.namespace-card {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+.namespace-card:hover {
+    background-color: var(--surface-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.card-header {
+    background-color: var(--primary-light);
+    border-color: var(--border-color);
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+.card-header.bg-primary {
+    background-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+}
+
+.card-body {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* List items */
+.list-group-item {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+.list-group-item:hover {
+    background-color: var(--primary-light) !important;
+    color: var(--accent-color) !important;
+    cursor: pointer;
+}
+
+.list-group-item.active {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+}
+
+.list-group-item.selected {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+    font-weight: 600;
+}
+
+/* Message items specifically */
+.message-item {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+.message-item:hover {
+    background-color: var(--primary-light) !important;
+    color: var(--accent-color) !important;
+}
+
+.message-item.selected {
+    background-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+}
+
+/* Forms */
+.form-control, .form-select {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(190, 207, 145, 0.25);
+}
+
+/* Navbar */
+.navbar {
+    background-color: var(--accent-color) !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+}
+
+.navbar-brand, .nav-link {
+    color: var(--primary-color) !important;
+}
+
+.nav-link:hover {
+    color: var(--primary-light) !important;
+}
+
+/* Simple Accordion (card-based toggle) */
+.card-header[style*="cursor: pointer"]:hover {
+    background-color: var(--primary-light);
+    transition: background-color 0.2s ease;
+}
+
+/* Text colors */
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+/* Alerts */
+.alert {
+    border-color: var(--border-color);
+    background-color: var(--surface-color);
+}
+
+.alert-info {
+    background-color: var(--primary-light) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+}
+
+.alert-success {
+    background-color: var(--primary-light) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
+}
+
+.alert-warning {
+    background-color: #FFF3CD !important;
+    border-color: #FFE69C !important;
+    color: #664D03 !important;
+}
+
+.alert-danger {
+    background-color: #F8D7DA !important;
+    border-color: #F5C2C7 !important;
+    color: #842029 !important;
+}
+
+/* Modal */
+.modal-content {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+.modal-header, .modal-footer {
+    border-color: var(--border-color) !important;
+    background-color: var(--surface-color) !important;
+}
+
+.modal-body {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--surface-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-dark);
+}
+
+/* Table */
+.table {
+    color: var(--text-color);
+    background-color: var(--surface-color);
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(190, 207, 145, 0.1);
+}
+
+.table thead th {
+    background-color: var(--primary-light);
+    color: var(--accent-color);
+    border-color: var(--border-color);
+}
+
+.table td, .table th {
+    border-color: var(--border-color);
+}
+
+/* Jumbotron and Display Elements */
+.jumbotron {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 2rem;
+}
+
+.display-4 {
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.lead {
+    color: var(--text-muted);
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-color);
+}
+
+/* Container backgrounds */
+.container, .container-fluid {
+    background-color: transparent;
+}
+
+/* Pre and code blocks */
+pre, code {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--border-color);
+}
+
+pre {
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+}
