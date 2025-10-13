@@ -1,4 +1,6 @@
 @page "/explorer"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject IAuthenticationService AuthService
 @inject IAzureResourceService ResourceService
 @inject IServiceBusOperationsService OperationsService

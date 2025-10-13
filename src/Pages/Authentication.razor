@@ -4,7 +4,7 @@
 <RemoteAuthenticatorView Action="@Action">
     <LogOutSucceeded>
         @{
-            Navigation.NavigateTo("/");
+            Navigation.NavigateTo("/", forceLoad: true);
         }
     </LogOutSucceeded>
 </RemoteAuthenticatorView>

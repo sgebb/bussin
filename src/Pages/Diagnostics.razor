@@ -1,4 +1,6 @@
 @page "/diagnostics"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject IAuthenticationService AuthService
 @inject IJSRuntime JSRuntime
 
