@@ -125,7 +125,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadNamespacesAsync();
+        // Check if user is authenticated before loading namespaces
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        Console.WriteLine($"[Home] OnInitializedAsync - Authenticated: {isAuthenticated}");
+        
+        if (isAuthenticated)
+        {
+            await LoadNamespacesAsync();
+        }
     }
 
     private async Task LoadNamespacesAsync()
@@ -135,20 +142,23 @@
 
         try
         {
+            Console.WriteLine("[Home] Requesting token credential...");
             var credential = await AuthService.GetTokenCredentialAsync();
             if (credential == null)
             {
-                errorMessage = "Failed to get authentication token";
+                errorMessage = "Failed to get authentication token. Please try signing out and back in.";
+                Console.WriteLine("[Home] ERROR: Token credential is null");
                 return;
             }
 
+            Console.WriteLine("[Home] Token acquired, loading namespaces...");
             namespaces = await ResourceService.ListServiceBusNamespacesAsync(credential);
-            Console.WriteLine($"Loaded {namespaces.Count} namespaces");
+            Console.WriteLine($"[Home] Loaded {namespaces.Count} namespaces");
         }
         catch (Exception ex)
         {
             errorMessage = $"Failed to load namespaces: {ex.Message}";
-            Console.WriteLine($"Error: {ex}");
+            Console.WriteLine($"[Home] ERROR: {ex}");
         }
         finally
         {

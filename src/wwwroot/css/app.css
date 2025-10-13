@@ -77,9 +77,20 @@ main {
     align-items: center;
 }
 
-.top-row a {
+.top-row a,
+.top-row .btn-link {
     margin-left: 1.5rem;
     color: var(--link-color);
+    text-decoration: none;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+.top-row a:hover,
+.top-row .btn-link:hover {
+    text-decoration: underline;
 }
 
 @media (min-width: 768px) {

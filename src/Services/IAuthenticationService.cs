@@ -9,5 +9,6 @@ public interface IAuthenticationService
     Task<string?> GetServiceBusTokenAsync();
     Task SignInAsync();
     Task SignOutAsync();
-    string? GetUserName();
+    Task<string?> GetUserNameAsync();
+    string? GetUserName(); // Deprecated - use GetUserNameAsync
 }

@@ -1,6 +1,6 @@
 # Service Bus Explorer
 
-A zero-backend, browser-based tool for exploring and managing Azure Service Bus namespaces, queues, topics, and subscriptions.
+A zero-backend, installable tool for interacting with Azure Service Bus. Runs entirely in your browser with no server required.
 
 [![Deploy to GitHub Pages](https://github.com/sgebb/slimsbe/actions/workflows/deploy.yml/badge.svg)](https://github.com/sgebb/slimsbe/actions/workflows/deploy.yml)
 
@@ -8,18 +8,29 @@ A zero-backend, browser-based tool for exploring and managing Azure Service Bus 
 
 **[https://sgebb.github.io/slimsbe/](https://sgebb.github.io/slimsbe/)**
 
-## ✨ Features
+Can be installed as a Progressive Web App (PWA) for offline access.
 
-- 🔐 **Azure AD Authentication** - Secure login with your Microsoft account
-- 📋 **Browse Service Bus Resources** - View namespaces, queues, topics, and subscriptions
-- 👀 **Peek Messages** - Non-destructive message viewing
-- 📤 **Send Messages** - Send messages to queues and topics
-- 🗑️ **Delete Messages** - Remove specific messages by sequence number
-- 🔄 **Resend Messages** - Duplicate and resend messages
-- 💀 **Dead Letter Queue Support** - View and resubmit DLQ messages
-- 🧹 **Purge Operations** - Clear all messages from queues/subscriptions
-- 💾 **Client-Side Only** - No backend, all operations run in your browser
-- 🔒 **Secure** - Your credentials never leave your browser
+## Features
+
+### Message Operations
+- **Peek Messages** - Non-destructive message viewing with batch loading
+- **Send Messages** - Send messages to queues and topics with custom properties
+- **Send Scheduled Messages** - Schedule messages for future delivery
+- **Delete Messages** - Lock and delete specific messages by sequence number
+- **Batch Operations** - Select and process multiple messages at once
+- **Dead Letter Queue Support** - View, resubmit, and manage DLQ messages
+- **Purge Operations** - Clear all messages from queues or subscriptions
+
+### Resource Management
+- **Browse Resources** - View all Service Bus namespaces in your Azure subscriptions
+- **Entity Explorer** - Navigate queues, topics, and subscriptions
+- **Recent Namespaces** - Quick access to frequently used namespaces
+
+### User Experience
+- **Dark Mode** - Toggle between light and dark themes
+- **Installable PWA** - Install as a desktop or mobile app
+- **Client-Side Only** - No backend server, all operations run in your browser
+- **Secure** - Your credentials never leave your browser
 
 ## 🏗️ Architecture
 
@@ -32,11 +43,11 @@ This is a **100% client-side application** built with:
 
 ### Why Client-Side Only?
 
-- ✅ **No server costs** - Hosted as static files
-- ✅ **No backend to secure** - Your tokens stay in your browser
-- ✅ **Transparent & auditable** - All code is open source
-- ✅ **Works offline** - Can be installed as PWA
-- ✅ **Fast** - No server round-trips
+- **No server costs** - Hosted as static files on GitHub Pages
+- **No backend to secure** - Your tokens stay in your browser
+- **Transparent & auditable** - All code is open source
+- **Works offline** - Can be installed as PWA
+- **Fast** - Direct connection to Service Bus, no server round-trips
 
 ## 🔒 Security & Privacy
 
@@ -45,7 +56,7 @@ This is a **100% client-side application** built with:
 - **Open source** - Audit the code yourself
 - **Build verification** - Each deployment includes a commit hash proving it matches the source code
 
-## 🛠️ Build Verification
+## Build Verification
 
 Every deployment to GitHub Pages includes build metadata:
 
@@ -56,11 +67,11 @@ Every deployment to GitHub Pages includes build metadata:
 
 You can also check `buildinfo.json` at the root of the deployed site.
 
-## 🚀 Getting Started
+## 🛠️ Getting Started
 
 ### Prerequisites
 
-- .NET 9.0 SDK or later
+- .NET 10.0 SDK or later
 - Azure subscription with Service Bus access
 - Modern browser with WebAssembly support
 
@@ -69,31 +80,32 @@ You can also check `buildinfo.json` at the root of the deployed site.
 ```bash
 # Clone the repository
 git clone https://github.com/sgebb/slimsbe.git
-cd slimsbe/ServiceBusExplorer.Blazor
+cd slimsbe/src
 
 # Run the app
 dotnet run
 
-# Open browser to https://localhost:5001
+# Open browser to https://localhost:63079 (or the port shown in console)
 ```
 
 ### Azure AD App Registration
 
 The app uses a pre-configured Azure AD app registration. If you want to use your own:
 
-1. Create an Azure AD app registration
-2. Add redirect URIs:
-   - `https://localhost:5001/authentication/login-callback`
+1. Create an Azure AD app registration in the Azure Portal
+2. Set it as a Single Page Application (SPA)
+3. Add redirect URIs:
+   - `https://localhost:63079/authentication/login-callback`
    - `https://sgebb.github.io/slimsbe/authentication/login-callback`
-3. Request API permissions:
+4. Request API permissions:
    - `https://management.azure.com/user_impersonation`
    - `https://servicebus.azure.net/user_impersonation`
-4. Update `wwwroot/appsettings.json` with your Client ID
+5. Update `wwwroot/appsettings.json` with your Client ID and Tenant ID
 
-## 📦 Project Structure
+## Project Structure
 
 ```
-ServiceBusExplorer.Blazor/
+src/
 ├── Models/                    # Data models
 ├── Services/                  # Business logic
 │   ├── AuthenticationService.cs
@@ -101,13 +113,21 @@ ServiceBusExplorer.Blazor/
 │   ├── ServiceBusJsInteropService.cs
 │   └── ServiceBusOperationsService.cs
 ├── Pages/                     # Razor pages
-│   ├── Home.razor
-│   ├── Explorer.razor
-│   └── Diagnostics.razor
-├── wwwroot/                   # Static assets
-│   ├── js/servicebus-api.js  # AMQP client
+│   ├── Home.razor            # Namespace browser
+│   ├── Explorer.razor        # Message operations
+│   └── Diagnostics.razor     # Debug info
+├── Components/               # Reusable components
+│   └── MessageList.razor     # Message display
+├── wwwroot/                  # Static assets
+│   ├── js/
+│   │   ├── servicebus-api.js # Compiled AMQP client
+│   │   └── storage.js        # LocalStorage helpers
+│   ├── references/           # TypeScript source
+│   │   └── serviceBusApi.ts  # AMQP client source
+│   ├── service-worker.js     # PWA service worker
+│   ├── manifest.json         # PWA manifest
 │   └── index.html
-└── Program.cs                 # App configuration
+└── Program.cs                # App configuration
 ```
 
 ## 🤝 Contributing
@@ -119,20 +139,17 @@ Contributions are welcome! Please:
 3. Make your changes
 4. Submit a pull request
 
-## 📝 License
+## License
 
 MIT License - See [LICENSE](LICENSE) file for details
 
-## 🙏 Acknowledgments
+## Tech Stack
 
-- Built with [Blazor WebAssembly](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor)
-- AMQP client based on [rhea](https://github.com/amqp/rhea)
-- Authentication via [MSAL.js](https://github.com/AzureAD/microsoft-authentication-library-for-js)
+- [Blazor WebAssembly](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor) - .NET 10 running in the browser
+- [rhea](https://github.com/amqp/rhea) - AMQP 1.0 client for JavaScript
+- [MSAL.js](https://github.com/AzureAD/microsoft-authentication-library-for-js) - Microsoft Authentication Library
+- [Bootstrap 5](https://getbootstrap.com/) - UI framework
 
 ## ⚠️ Disclaimer
 
 This is a community tool and is not officially supported by Microsoft. Use at your own risk.
-
----
-
-**Made with ❤️ for the Azure Service Bus community**

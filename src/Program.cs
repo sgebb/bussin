@@ -13,10 +13,16 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.
 builder.Services.AddMsalAuthentication(options =>
 {
     builder.Configuration.Bind("AzureAd", options.ProviderOptions.Authentication);
+    
     // Request both Management API and Service Bus scopes
     options.ProviderOptions.DefaultAccessTokenScopes.Add("https://management.azure.com/user_impersonation");
     options.ProviderOptions.AdditionalScopesToConsent.Add("https://servicebus.azure.net/user_impersonation");
+    
+    // Use redirect mode for better PWA compatibility
     options.ProviderOptions.LoginMode = "redirect";
+    
+    // Cache location - use localStorage for PWA persistence
+    options.ProviderOptions.Cache.CacheLocation = "localStorage";
 });
 
 // Register application services

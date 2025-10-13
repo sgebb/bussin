@@ -61,8 +61,10 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Skip authentication requests
-    if (event.request.url.includes('login.microsoftonline.com')) {
+    // Skip authentication requests - never cache these
+    if (event.request.url.includes('login.microsoftonline.com') || 
+        event.request.url.includes('authentication/') ||
+        event.request.url.includes('/_framework/blazor.webassembly.js')) {
         return;
     }
 

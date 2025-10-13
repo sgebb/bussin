@@ -1,8 +1,12 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inherits LayoutComponentBase
 @inject IPreferencesService PreferencesService
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@implements IDisposable
 
 <AuthorizeView>
     <Authorized>
@@ -25,7 +29,7 @@
                         @(isDarkMode ? "🌙" : "☀️")
                     </label>
                 </div>
-                <a href="authentication/logout">Log out</a>
+                <button class="btn btn-link" @onclick="BeginLogout">Log out</button>
             </div>
         </div>
 
@@ -52,14 +56,44 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (AuthenticationStateTask != null)
+        try
         {
-            authState = await AuthenticationStateTask;
-        }
+            // Subscribe to authentication state changes
+            AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+            
+            if (AuthenticationStateTask != null)
+            {
+                authState = await AuthenticationStateTask;
+                var isAuthenticated = authState?.User?.Identity?.IsAuthenticated ?? false;
+                var userName = authState?.User?.Identity?.Name;
+                Console.WriteLine($"[MainLayout] Auth state loaded - Authenticated: {isAuthenticated}, User: {userName ?? "unknown"}");
+            }
+            else
+            {
+                Console.WriteLine("[MainLayout] WARNING: AuthenticationStateTask is null");
+            }
 
-        // Load dark mode preference
-        var prefs = await PreferencesService.LoadPreferencesAsync();
-        isDarkMode = prefs.DarkMode;
+            // Load dark mode preference
+            var prefs = await PreferencesService.LoadPreferencesAsync();
+            isDarkMode = prefs.DarkMode;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MainLayout] ERROR during initialization: {ex.Message}");
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        authState = await task;
+        var userName = authState?.User?.Identity?.Name;
+        Console.WriteLine($"[MainLayout] Auth state changed - User: {userName ?? "none"}");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void BeginLogout()
+    {
+        Navigation.NavigateToLogout("authentication/logout");
     }
 
     private async Task ToggleDarkMode()
@@ -72,5 +106,10 @@
         await PreferencesService.SavePreferencesAsync(prefs);
         
         StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     }
 }

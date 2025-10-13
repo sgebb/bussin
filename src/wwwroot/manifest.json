@@ -6,6 +6,7 @@
   "background_color": "#ffffff",
   "theme_color": "#512bd4",
   "prefer_related_applications": false,
+  "scope": "./",
   "icons": [
     {
       "src": "favicon.png",

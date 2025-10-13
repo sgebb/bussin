@@ -1,34 +1,47 @@
 using Azure.Core;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 
 namespace ServiceBusExplorer.Blazor.Services;
 
-public sealed class AuthenticationService(IAccessTokenProvider tokenProvider) : IAuthenticationService
+public sealed class AuthenticationService(IAccessTokenProvider tokenProvider, AuthenticationStateProvider authStateProvider) : IAuthenticationService
 {
     public async Task<bool> IsAuthenticatedAsync()
     {
-        var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
-        {
-            Scopes = ["https://management.azure.com/user_impersonation"]
-        });
-        
-        return result.TryGetToken(out _);
+        var authState = await authStateProvider.GetAuthenticationStateAsync();
+        return authState.User.Identity?.IsAuthenticated ?? false;
     }
 
     public async Task<TokenCredential?> GetTokenCredentialAsync()
     {
-        // Get Management API token for ARM operations
-        var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
+        try
         {
-            Scopes = ["https://management.azure.com/user_impersonation"]
-        });
+            // Get Management API token for ARM operations
+            var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
+            {
+                Scopes = ["https://management.azure.com/user_impersonation"]
+            });
 
-        if (result.TryGetToken(out var token))
-        {
-            return new AccessTokenCredential(token.Value, token.Expires);
+            if (result.TryGetToken(out var token))
+            {
+                Console.WriteLine($"✓ Got Management API token (expires: {token.Expires})");
+                return new AccessTokenCredential(token.Value, token.Expires);
+            }
+
+            Console.WriteLine($"✗ Failed to get Management API token. Status: {result.Status}");
+            if (result.Status == AccessTokenResultStatus.RequiresRedirect)
+            {
+                Console.WriteLine("⚠ Requires redirect - user needs to sign in");
+                // The redirect will be handled automatically by MSAL
+            }
+
+            return null;
         }
-
-        return null;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"✗ Exception getting Management API token: {ex.Message}");
+            return null;
+        }
     }
 
     public async Task<string?> GetServiceBusTokenAsync()
@@ -65,8 +78,15 @@ public sealed class AuthenticationService(IAccessTokenProvider tokenProvider) : 
         return Task.CompletedTask;
     }
 
+    public async Task<string?> GetUserNameAsync()
+    {
+        var authState = await authStateProvider.GetAuthenticationStateAsync();
+        return authState.User.Identity?.Name;
+    }
+    
     public string? GetUserName()
     {
+        // Synchronous version - deprecated, use GetUserNameAsync
         return null;
     }
 }
