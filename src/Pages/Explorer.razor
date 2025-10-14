@@ -32,42 +32,76 @@
                     <!-- Left: Entity Selection -->
                     <div class="col-md-6">
                         <div class="row g-2">
-                            <div class="col-4">
+                            <div class="col-12">
                                 <div class="card">
                                     <div class="card-header py-1 px-2">
-                                        <small class="fw-bold">Queues</small>
+                                        <small class="fw-bold">Queues (@queues.Count)</small>
                                     </div>
                                     <div class="entity-list-scroll">
-                                        @foreach (var queue in queueNames)
-                                        {
-                                            <button class="list-group-item list-group-item-action py-1 px-2 border-0 @(selectedQueueName == queue ? "selected" : "")" 
-                                                    @onclick="() => SelectQueue(queue)">
-                                                <small>@queue</small>
-                                            </button>
-                                        }
+                                        <table class="table table-sm table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Active</th>
+                                                    <th>DLQ</th>
+                                                    <th>Scheduled</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var queue in queues)
+                                                {
+                                                    <tr class="@(selectedQueueName == queue.Name ? "table-active" : "")" 
+                                                        @onclick="() => SelectQueue(queue.Name)" 
+                                                        style="cursor: pointer;">
+                                                        <td><small>@queue.Name</small></td>
+                                                        <td><small>@queue.ActiveMessageCount</small></td>
+                                                        <td><small class="@(queue.DeadLetterMessageCount > 0 ? "text-danger fw-bold" : "")">@queue.DeadLetterMessageCount</small></td>
+                                                        <td><small>@queue.ScheduledMessageCount</small></td>
+                                                        <td><small>@queue.Status</small></td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-4">
+                            <div class="col-12">
                                 <div class="card">
                                     <div class="card-header py-1 px-2">
-                                        <small class="fw-bold">Topics</small>
+                                        <small class="fw-bold">Topics (@topics.Count)</small>
                                     </div>
                                     <div class="entity-list-scroll">
-                                        @foreach (var topic in topicNames)
-                                        {
-                                            <button class="list-group-item list-group-item-action py-1 px-2 border-0 @(selectedTopicName == topic ? "selected" : "")" 
-                                                    @onclick="() => SelectTopic(topic)">
-                                                <small>@topic</small>
-                                            </button>
-                                        }
+                                        <table class="table table-sm table-hover mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Subs</th>
+                                                    <th>Scheduled</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var topic in topics)
+                                                {
+                                                    <tr class="@(selectedTopicName == topic.Name ? "table-active" : "")" 
+                                                        @onclick="() => SelectTopic(topic.Name)" 
+                                                        style="cursor: pointer;">
+                                                        <td><small>@topic.Name</small></td>
+                                                        <td><small>@topic.SubscriptionCount</small></td>
+                                                        <td><small>@topic.ScheduledMessageCount</small></td>
+                                                        <td><small>@topic.Status</small></td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-4">
+                            <div class="col-12">
                                 <div class="card">
                                     <div class="card-header py-1 px-2">
-                                        <small class="fw-bold">Subscriptions</small>
+                                        <small class="fw-bold">Subscriptions (@subscriptions.Count)</small>
                                     </div>
                                     <div class="entity-list-scroll">
                                         @if (selectedTopicName == null)
@@ -80,13 +114,29 @@
                                         }
                                         else
                                         {
-                                            @foreach (var sub in subscriptionNames)
-                                            {
-                                                <button class="list-group-item list-group-item-action py-1 px-2 border-0 @(selectedSubscriptionName == sub ? "selected" : "")" 
-                                                        @onclick="() => SelectSubscription(sub)">
-                                                    <small>@sub</small>
-                                                </button>
-                                            }
+                                            <table class="table table-sm table-hover mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Name</th>
+                                                        <th>Active</th>
+                                                        <th>DLQ</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var sub in subscriptions)
+                                                    {
+                                                        <tr class="@(selectedSubscriptionName == sub.Name ? "table-active" : "")" 
+                                                            @onclick="() => SelectSubscription(sub.Name)" 
+                                                            style="cursor: pointer;">
+                                                            <td><small>@sub.Name</small></td>
+                                                            <td><small>@sub.ActiveMessageCount</small></td>
+                                                            <td><small class="@(sub.DeadLetterMessageCount > 0 ? "text-danger fw-bold" : "")">@sub.DeadLetterMessageCount</small></td>
+                                                            <td><small>@sub.Status</small></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
                                         }
                                     </div>
                                 </div>
@@ -267,9 +317,9 @@
     [SupplyParameterFromQuery(Name = "name")]
     public string? NameParam { get; set; }
 
-    private List<string> queueNames = new();
-    private List<string> topicNames = new();
-    private List<string> subscriptionNames = new();
+    private List<ServiceBusQueueInfo> queues = new();
+    private List<ServiceBusTopicInfo> topics = new();
+    private List<ServiceBusSubscriptionInfo> subscriptions = new();
     
     private string? selectedQueueName;
     private string? selectedTopicName;
@@ -327,9 +377,9 @@
             selectedTopicName = null;
             selectedSubscriptionName = null;
             peekedMessages.Clear();
-            queueNames.Clear();
-            topicNames.Clear();
-            subscriptionNames.Clear();
+            queues.Clear();
+            topics.Clear();
+            subscriptions.Clear();
             
             await LoadEntitiesAsync();
         }
@@ -360,10 +410,10 @@
                 Location = ""
             };
 
-            queueNames = await ResourceService.ListQueuesAsync(credential, namespaceInfo);
-            topicNames = await ResourceService.ListTopicsAsync(credential, namespaceInfo);
+            queues = await ResourceService.ListQueuesAsync(credential, namespaceInfo);
+            topics = await ResourceService.ListTopicsAsync(credential, namespaceInfo);
 
-            Console.WriteLine($"Loaded {queueNames.Count} queues and {topicNames.Count} topics");
+            Console.WriteLine($"Loaded {queues.Count} queues and {topics.Count} topics");
             
             // Force UI update after loading from cache or API
             StateHasChanged();
@@ -400,7 +450,7 @@
     private async Task LoadSubscriptionsAsync(string topicName)
     {
         isLoadingSubscriptions = true;
-        subscriptionNames.Clear();
+        subscriptions.Clear();
 
         try
         {
@@ -418,8 +468,8 @@
                 Location = ""
             };
 
-            subscriptionNames = await ResourceService.ListSubscriptionsAsync(credential, namespaceInfo, topicName);
-            Console.WriteLine($"Loaded {subscriptionNames.Count} subscriptions");
+            subscriptions = await ResourceService.ListSubscriptionsAsync(credential, namespaceInfo, topicName);
+            Console.WriteLine($"Loaded {subscriptions.Count} subscriptions");
         }
         catch (Exception ex)
         {

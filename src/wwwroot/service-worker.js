@@ -1,13 +1,13 @@
 // Service Worker for Service Bus Explorer PWA
 // This enables offline capability and installability
 
-const CACHE_NAME = 'slimsbe-v1';
+// Increment this version number when you want to force update all PWA installations
+const CACHE_VERSION = 'v1';
+const CACHE_NAME = `slimsbe-${CACHE_VERSION}`;
+
+// Only cache truly static assets - don't cache Blazor framework files
 const STATIC_CACHE_URLS = [
-    './',
-    './index.html',
     './manifest.json',
-    './icon-192.png',
-    './icon-512.png',
     './favicon.png',
     './css/app.css',
     './css/custom-theme.css',
@@ -49,7 +49,7 @@ self.addEventListener('activate', event => {
     self.clients.claim();
 });
 
-// Fetch event - network first, fallback to cache
+// Fetch event - network first, fallback to cache for specific resources only
 self.addEventListener('fetch', event => {
     // Skip non-GET requests
     if (event.request.method !== 'GET') {
@@ -63,11 +63,31 @@ self.addEventListener('fetch', event => {
 
     // Skip authentication requests - never cache these
     if (event.request.url.includes('login.microsoftonline.com') || 
-        event.request.url.includes('authentication/') ||
-        event.request.url.includes('/_framework/blazor.webassembly.js')) {
+        event.request.url.includes('authentication/')) {
         return;
     }
 
+    // NEVER cache Blazor framework files - they change with every build
+    if (event.request.url.includes('/_framework/') || 
+        event.request.url.includes('/index.html') ||
+        event.request.url.includes('blazor.webassembly.js')) {
+        // Always fetch fresh from network
+        return;
+    }
+
+    // Only cache specific static assets (CSS, JS helpers, images)
+    const shouldCache = event.request.url.includes('/css/') ||
+                       event.request.url.includes('/js/storage.js') ||
+                       event.request.url.includes('/js/servicebus-api.js') ||
+                       event.request.url.includes('favicon.png') ||
+                       event.request.url.includes('manifest.json');
+
+    if (!shouldCache) {
+        // Don't cache, just fetch
+        return;
+    }
+
+    // Cache strategy: Network first, fallback to cache
     event.respondWith(
         fetch(event.request)
             .then(response => {
@@ -85,22 +105,7 @@ self.addEventListener('fetch', event => {
             })
             .catch(() => {
                 // Network failed, try cache
-                return caches.match(event.request)
-                    .then(cachedResponse => {
-                        if (cachedResponse) {
-                            return cachedResponse;
-                        }
-                        
-                        // If not in cache and offline, return offline page
-                        if (event.request.mode === 'navigate') {
-                            return caches.match('./index.html');
-                        }
-                        
-                        return new Response('Network error', {
-                            status: 408,
-                            headers: { 'Content-Type': 'text/plain' }
-                        });
-                    });
+                return caches.match(event.request);
             })
     );
 });

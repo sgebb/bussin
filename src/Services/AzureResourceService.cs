@@ -66,10 +66,10 @@ public sealed class AzureResourceService : IAzureResourceService
         return namespaces;
     }
 
-    public async Task<List<string>> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    public async Task<List<ServiceBusQueueInfo>> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
         var armClient = new ArmClient(credential);
-        var queues = new List<string>();
+        var queues = new List<ServiceBusQueueInfo>();
 
         try
         {
@@ -84,7 +84,19 @@ public sealed class AzureResourceService : IAzureResourceService
 
             await foreach (var queue in serviceBusNamespace.Value.GetServiceBusQueues().GetAllAsync())
             {
-                queues.Add(queue.Data.Name);
+                var queueInfo = new ServiceBusQueueInfo
+                {
+                    Name = queue.Data.Name,
+                    Status = queue.Data.Status?.ToString() ?? "Unknown",
+                    ActiveMessageCount = queue.Data.CountDetails?.ActiveMessageCount ?? 0,
+                    DeadLetterMessageCount = queue.Data.CountDetails?.DeadLetterMessageCount ?? 0,
+                    ScheduledMessageCount = queue.Data.CountDetails?.ScheduledMessageCount ?? 0,
+                    TransferMessageCount = queue.Data.CountDetails?.TransferMessageCount ?? 0,
+                    TransferDeadLetterMessageCount = queue.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0,
+                    MaxSizeInMegabytes = queue.Data.MaxSizeInMegabytes ?? 0,
+                    SizeInBytes = queue.Data.SizeInBytes ?? 0
+                };
+                queues.Add(queueInfo);
             }
 
             Console.WriteLine($"Found {queues.Count} queues");
@@ -97,10 +109,10 @@ public sealed class AzureResourceService : IAzureResourceService
         return queues;
     }
 
-    public async Task<List<string>> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    public async Task<List<ServiceBusTopicInfo>> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
         var armClient = new ArmClient(credential);
-        var topics = new List<string>();
+        var topics = new List<ServiceBusTopicInfo>();
 
         try
         {
@@ -115,7 +127,16 @@ public sealed class AzureResourceService : IAzureResourceService
 
             await foreach (var topic in serviceBusNamespace.Value.GetServiceBusTopics().GetAllAsync())
             {
-                topics.Add(topic.Data.Name);
+                var topicInfo = new ServiceBusTopicInfo
+                {
+                    Name = topic.Data.Name,
+                    Status = topic.Data.Status?.ToString() ?? "Unknown",
+                    ScheduledMessageCount = topic.Data.CountDetails?.ScheduledMessageCount ?? 0,
+                    MaxSizeInMegabytes = topic.Data.MaxSizeInMegabytes ?? 0,
+                    SizeInBytes = topic.Data.SizeInBytes ?? 0,
+                    SubscriptionCount = topic.Data.SubscriptionCount ?? 0
+                };
+                topics.Add(topicInfo);
             }
 
             Console.WriteLine($"Found {topics.Count} topics");
@@ -128,10 +149,10 @@ public sealed class AzureResourceService : IAzureResourceService
         return topics;
     }
 
-    public async Task<List<string>> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName)
+    public async Task<List<ServiceBusSubscriptionInfo>> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName)
     {
         var armClient = new ArmClient(credential);
-        var subscriptions = new List<string>();
+        var subscriptions = new List<ServiceBusSubscriptionInfo>();
 
         try
         {
@@ -147,7 +168,16 @@ public sealed class AzureResourceService : IAzureResourceService
 
             await foreach (var sub in topic.Value.GetServiceBusSubscriptions().GetAllAsync())
             {
-                subscriptions.Add(sub.Data.Name);
+                var subInfo = new ServiceBusSubscriptionInfo
+                {
+                    Name = sub.Data.Name,
+                    Status = sub.Data.Status?.ToString() ?? "Unknown",
+                    ActiveMessageCount = sub.Data.CountDetails?.ActiveMessageCount ?? 0,
+                    DeadLetterMessageCount = sub.Data.CountDetails?.DeadLetterMessageCount ?? 0,
+                    TransferMessageCount = sub.Data.CountDetails?.TransferMessageCount ?? 0,
+                    TransferDeadLetterMessageCount = sub.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0
+                };
+                subscriptions.Add(subInfo);
             }
 
             Console.WriteLine($"Found {subscriptions.Count} subscriptions");

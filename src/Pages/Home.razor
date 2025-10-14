@@ -12,6 +12,14 @@
             <h1>Service Bus Explorer</h1>
             <p class="lead">Select a namespace to explore</p>
 
+            @if (!isLoading && namespaces.Count > 0)
+            {
+                <div class="mb-3">
+                    <input type="text" class="form-control" placeholder="Search namespaces..." 
+                           @bind="searchTerm" @bind:event="oninput" />
+                </div>
+            }
+
     @if (isLoading)
     {
         <div class="d-flex align-items-center">
@@ -32,7 +40,7 @@
     else
     {
         <div class="row">
-            @foreach (var ns in namespaces)
+            @foreach (var ns in FilteredNamespaces)
             {
                 <div class="col-md-4 mb-3">
                     <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
@@ -119,6 +127,15 @@
     private bool isLoading = false;
     private string? errorMessage;
     private bool showSecurityInfo = false;
+    private string searchTerm = "";
+
+    private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
+        string.IsNullOrWhiteSpace(searchTerm) 
+            ? namespaces 
+            : namespaces.Where(ns => 
+                ns.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                ns.SubscriptionName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                ns.ResourceGroup.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
     private void ToggleSecurityInfo()
     {

@@ -9,10 +9,10 @@
   "scope": "./",
   "icons": [
     {
-      "src": "favicon.png",
-      "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any maskable"
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
     }
   ]
 }
