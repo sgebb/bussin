@@ -2,11 +2,11 @@
 
 A zero-backend, installable tool for interacting with Azure Service Bus. Runs entirely in your browser with no server required.
 
-[![Deploy to GitHub Pages](https://github.com/sgebb/slimsbe/actions/workflows/deploy.yml/badge.svg)](https://github.com/sgebb/slimsbe/actions/workflows/deploy.yml)
+[![Deploy to GitHub Pages](https://github.com/sgebb/bussin/actions/workflows/deploy.yml/badge.svg)](https://github.com/sgebb/bussin/actions/workflows/deploy.yml)
 
 ## 🚀 Live Demo
 
-**[https://sgebb.github.io/slimsbe/](https://sgebb.github.io/slimsbe/)**
+**[https://sgebb.github.io/bussin/](https://sgebb.github.io/bussin/)**
 
 Can be installed as a Progressive Web App (PWA) for offline access.
 
@@ -79,8 +79,8 @@ You can also check `buildinfo.json` at the root of the deployed site.
 
 ```bash
 # Clone the repository
-git clone https://github.com/sgebb/slimsbe.git
-cd slimsbe/src
+git clone https://github.com/sgebb/bussin.git
+cd bussin/src
 
 # Run the app
 dotnet run
@@ -96,7 +96,7 @@ The app uses a pre-configured Azure AD app registration. If you want to use your
 2. Set it as a Single Page Application (SPA)
 3. Add redirect URIs:
    - `https://localhost:63079/authentication/login-callback`
-   - `https://sgebb.github.io/slimsbe/authentication/login-callback`
+   - `https://sgebb.github.io/bussin/authentication/login-callback`
 4. Request API permissions:
    - `https://management.azure.com/user_impersonation`
    - `https://servicebus.azure.net/user_impersonation`

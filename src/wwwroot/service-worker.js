@@ -3,7 +3,7 @@
 
 // Increment this version number when you want to force update all PWA installations
 const CACHE_VERSION = 'v1';
-const CACHE_NAME = `slimsbe-${CACHE_VERSION}`;
+const CACHE_NAME = `bussin-${CACHE_VERSION}`;
 
 // Only cache truly static assets - don't cache Blazor framework files
 const STATIC_CACHE_URLS = [

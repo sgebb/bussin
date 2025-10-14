@@ -37,9 +37,6 @@ jobs:
       - name: Publish app
         run: dotnet publish src/ServiceBusExplorer.Blazor.csproj -c Release -p:GHPages=true
 
-      - name: Change base-tag in index.html
-        run: sed -i 's/<base href="\/" \/>/<base href="\/slimsbe\/" \/>/g' ${{ env.PUBLISH_DIR }}/index.html
-
       - name: Generate build info
         run: |
           COMMIT_HASH=$(git rev-parse HEAD)
