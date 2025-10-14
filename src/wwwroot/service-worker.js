@@ -1,4 +1,4 @@
-// Service Worker for Service Bus Explorer PWA
+// Service Worker for bussin PWA
 // This enables offline capability and installability
 
 // Increment this version number when you want to force update all PWA installations

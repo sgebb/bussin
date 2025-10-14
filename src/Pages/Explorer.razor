@@ -1,5 +1,6 @@
 @page "/explorer"
 @using Microsoft.AspNetCore.Authorization
+@using Azure.Core
 @attribute [Authorize]
 @inject IAuthenticationService AuthService
 @inject IAzureResourceService ResourceService
@@ -8,7 +9,7 @@
 @inject IMessageParsingService MessageParsingService
 @inject NavigationManager Navigation
 
-<PageTitle>Explorer - Service Bus Explorer</PageTitle>
+<PageTitle>Explorer - bussin</PageTitle>
 
 <div class="explorer-container">
     <!-- Fixed Header Section -->
@@ -34,8 +35,12 @@
                         <div class="row g-2">
                             <div class="col-12">
                                 <div class="card">
-                                    <div class="card-header py-1 px-2">
+                                    <div class="card-header py-1 px-2 d-flex justify-content-between align-items-center">
                                         <small class="fw-bold">Queues (@queues.Count)</small>
+                                        @if (isRefreshingQueues)
+                                        {
+                                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                        }
                                     </div>
                                     <div class="entity-list-scroll">
                                         <table class="table table-sm table-hover mb-0">
@@ -68,8 +73,12 @@
                             </div>
                             <div class="col-12">
                                 <div class="card">
-                                    <div class="card-header py-1 px-2">
+                                    <div class="card-header py-1 px-2 d-flex justify-content-between align-items-center">
                                         <small class="fw-bold">Topics (@topics.Count)</small>
+                                        @if (isRefreshingTopics)
+                                        {
+                                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                        }
                                     </div>
                                     <div class="entity-list-scroll">
                                         <table class="table table-sm table-hover mb-0">
@@ -317,9 +326,15 @@
     [SupplyParameterFromQuery(Name = "name")]
     public string? NameParam { get; set; }
 
-    private List<ServiceBusQueueInfo> queues = new();
-    private List<ServiceBusTopicInfo> topics = new();
-    private List<ServiceBusSubscriptionInfo> subscriptions = new();
+    private ServiceBusNamespaceInfo? _currentNamespace;
+
+    private Dictionary<string, ServiceBusQueueInfo> queueDict = new();
+    private Dictionary<string, ServiceBusTopicInfo> topicDict = new();
+    private Dictionary<string, ServiceBusSubscriptionInfo> subscriptionDict = new();
+    
+    private List<ServiceBusQueueInfo> queues => queueDict.Values.ToList();
+    private List<ServiceBusTopicInfo> topics => topicDict.Values.ToList();
+    private List<ServiceBusSubscriptionInfo> subscriptions => subscriptionDict.Values.ToList();
     
     private string? selectedQueueName;
     private string? selectedTopicName;
@@ -328,8 +343,11 @@
     private List<ServiceBusMessage> peekedMessages = new();
     private bool isLoadingEntities = false;
     private bool isLoadingSubscriptions = false;
+    private bool isRefreshingQueues = false;
+    private bool isRefreshingTopics = false;
     private bool isPeeking = false;
     private bool isPurging = false;
+    private CancellationTokenSource? _loadCts;
     private bool isSending = false;
     private bool isViewingDLQ = false;
     private bool showSendMessageModal = false;
@@ -372,14 +390,21 @@
         {
             _lastNamespace = NamespaceParam;
             
-            // Clear previous state and reload
+            _currentNamespace = new ServiceBusNamespaceInfo
+            {
+                Name = NameParam ?? "",
+                FullyQualifiedNamespace = NamespaceParam ?? "",
+                ResourceGroup = ResourceGroupParam ?? "",
+                SubscriptionId = SubscriptionIdParam ?? ""
+            };
+            
             selectedQueueName = null;
             selectedTopicName = null;
             selectedSubscriptionName = null;
             peekedMessages.Clear();
-            queues.Clear();
-            topics.Clear();
-            subscriptions.Clear();
+            queueDict.Clear();
+            topicDict.Clear();
+            subscriptionDict.Clear();
             
             await LoadEntitiesAsync();
         }
@@ -387,8 +412,15 @@
 
     private async Task LoadEntitiesAsync()
     {
+        if (_currentNamespace == null) return;
+        
+        _loadCts?.Cancel();
+        _loadCts = new CancellationTokenSource();
+
         isLoadingEntities = true;
         errorMessage = null;
+        queueDict = new();
+        topicDict = new();
 
         try
         {
@@ -399,33 +431,71 @@
                 return;
             }
 
-            var namespaceInfo = new ServiceBusNamespaceInfo
-            {
-                Name = NameParam ?? "",
-                FullyQualifiedNamespace = NamespaceParam ?? "",
-                ResourceGroup = ResourceGroupParam ?? "",
-                SubscriptionId = SubscriptionIdParam ?? "",
-                SubscriptionName = "",
-                TenantId = "",
-                Location = ""
-            };
-
-            queues = await ResourceService.ListQueuesAsync(credential, namespaceInfo);
-            topics = await ResourceService.ListTopicsAsync(credential, namespaceInfo);
-
-            Console.WriteLine($"Loaded {queues.Count} queues and {topics.Count} topics");
-            
-            // Force UI update after loading from cache or API
-            StateHasChanged();
+            _ = LoadQueuesAsync(credential, _currentNamespace);
+            _ = LoadTopicsAsync(credential, _currentNamespace);
         }
         catch (Exception ex)
         {
             errorMessage = $"Failed to load entities: {ex.Message}";
-            Console.WriteLine($"Error: {ex}");
         }
         finally
         {
             isLoadingEntities = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    {
+        var ct = _loadCts?.Token ?? CancellationToken.None;
+        isRefreshingQueues = true;
+        var firstItem = true;
+        try
+        {
+            await foreach (var queue in ResourceService.ListQueuesAsync(credential, namespaceInfo, ct))
+            {
+                if (ct.IsCancellationRequested) break;
+                queueDict[queue.Name] = queue;
+                if (firstItem)
+                {
+                    isLoadingEntities = false;
+                    firstItem = false;
+                }
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            isRefreshingQueues = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    {
+        var ct = _loadCts?.Token ?? CancellationToken.None;
+        isRefreshingTopics = true;
+        var firstItem = true;
+        try
+        {
+            await foreach (var topic in ResourceService.ListTopicsAsync(credential, namespaceInfo, ct))
+            {
+                if (ct.IsCancellationRequested) break;
+                topicDict[topic.Name] = topic;
+                if (firstItem)
+                {
+                    isLoadingEntities = false;
+                    firstItem = false;
+                }
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            isRefreshingTopics = false;
+            StateHasChanged();
         }
     }
 
@@ -449,35 +519,32 @@
 
     private async Task LoadSubscriptionsAsync(string topicName)
     {
+        if (_currentNamespace == null) return;
+        
         isLoadingSubscriptions = true;
-        subscriptions.Clear();
+        subscriptionDict = new();
 
         try
         {
             var credential = await AuthService.GetTokenCredentialAsync();
             if (credential == null) return;
 
-            var namespaceInfo = new ServiceBusNamespaceInfo
+            var ct = _loadCts?.Token ?? CancellationToken.None;
+            await foreach (var sub in ResourceService.ListSubscriptionsAsync(credential, _currentNamespace, topicName, ct))
             {
-                Name = NameParam ?? "",
-                FullyQualifiedNamespace = NamespaceParam ?? "",
-                ResourceGroup = ResourceGroupParam ?? "",
-                SubscriptionId = SubscriptionIdParam ?? "",
-                SubscriptionName = "",
-                TenantId = "",
-                Location = ""
-            };
-
-            subscriptions = await ResourceService.ListSubscriptionsAsync(credential, namespaceInfo, topicName);
-            Console.WriteLine($"Loaded {subscriptions.Count} subscriptions");
+                if (ct.IsCancellationRequested) break;
+                subscriptionDict[sub.Name] = sub;
+                StateHasChanged();
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading subscriptions: {ex.Message}");
+            errorMessage = $"Error loading subscriptions: {ex.Message}";
         }
         finally
         {
             isLoadingSubscriptions = false;
+            StateHasChanged();
         }
     }
 

@@ -155,9 +155,10 @@ a:hover {
     text-decoration: underline;
 }
 
-/* Spinners */
-.spinner-border-primary, .spinner-border.text-primary {
-    color: var(--primary-color) !important;
+/* Spinners - Use secondary (brown) for better contrast */
+.spinner-border-primary, .spinner-border.text-primary, .spinner-border {
+    color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
 }
 
 /* Form Controls */

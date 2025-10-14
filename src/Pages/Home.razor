@@ -4,62 +4,63 @@
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
 
-<PageTitle>Service Bus Explorer</PageTitle>
+<PageTitle>bussin</PageTitle>
 
 <AuthorizeView>
     <Authorized>
         <div class="container-fluid mt-4">
-            <h1>Service Bus Explorer</h1>
-            <p class="lead">Select a namespace to explore</p>
+            <h1>bussin</h1>
+            <p class="lead mb-3">A zero-backend PWA for managing Azure Service Bus—peek messages, purge queues, monitor metrics, and more. All processing happens in your browser, with no data sent to external servers.</p>
 
-            @if (!isLoading && namespaces.Count > 0)
+            @if (isRefreshing)
+            {
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Refreshing...</span>
+                    </div>
+                    <small class="text-muted">Refreshing...</small>
+                </div>
+            }
+
+            @if (namespaces.Count == 0)
+            {
+                @if (!isRefreshing)
+                {
+                    <div class="alert alert-info">
+                        <h5>No Service Bus namespaces found</h5>
+                        <p>You don't have access to any Service Bus namespaces, or none exist in your subscriptions.</p>
+                        <p>Make sure you have the appropriate permissions to view Service Bus resources.</p>
+                    </div>
+                }
+            }
+            else
             {
                 <div class="mb-3">
                     <input type="text" class="form-control" placeholder="Search namespaces..." 
                            @bind="searchTerm" @bind:event="oninput" />
                 </div>
-            }
 
-    @if (isLoading)
-    {
-        <div class="d-flex align-items-center">
-            <div class="spinner-border text-primary me-2" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <span>Loading namespaces...</span>
-        </div>
-    }
-    else if (namespaces.Count == 0)
-    {
-                <div class="alert alert-info">
-                    <h5>No Service Bus namespaces found</h5>
-                    <p>You don't have access to any Service Bus namespaces, or none exist in your subscriptions.</p>
-                    <p>Make sure you have the appropriate permissions to view Service Bus resources.</p>
-        </div>
-    }
-    else
-    {
-        <div class="row">
-            @foreach (var ns in FilteredNamespaces)
-            {
-                <div class="col-md-4 mb-3">
-                    <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
-                        <div class="card-body">
-                            <h5 class="card-title">@ns.Name</h5>
-                            <p class="card-text">
-                                <small class="text-muted">
-                                    <strong>Subscription:</strong> @ns.SubscriptionName<br />
-                                    <strong>Resource Group:</strong> @ns.ResourceGroup<br />
-                                    <strong>Location:</strong> @ns.Location<br />
-                                    <strong>Tenant:</strong> @ns.TenantId
-                                </small>
-                            </p>
+                <div class="row">
+                    @foreach (var ns in FilteredNamespaces)
+                    {
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
+                                <div class="card-body">
+                                    <h5 class="card-title">@ns.Name</h5>
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            <strong>Subscription:</strong> @ns.SubscriptionName<br />
+                                            <strong>Resource Group:</strong> @ns.ResourceGroup<br />
+                                            <strong>Location:</strong> @ns.Location<br />
+                                            <strong>Tenant:</strong> @ns.TenantId
+                                        </small>
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    }
                 </div>
             }
-        </div>
-    }
 
             @if (!string.IsNullOrEmpty(errorMessage))
             {
@@ -74,7 +75,7 @@
             <div class="row justify-content-center">
                 <div class="col-md-8">
                     <div class="jumbotron">
-                        <h1 class="display-4">Welcome to Service Bus Explorer</h1>
+                        <h1 class="display-4">Welcome to bussin</h1>
                         <p class="lead">A zero-backend tool for exploring and managing Azure Service Bus.</p>
                         <hr class="my-4">
                         <p>Sign in with your Azure account to get started.</p>
@@ -123,18 +124,20 @@
 <BuildInfo />
 
 @code {
-    private List<ServiceBusNamespaceInfo> namespaces = new();
-    private bool isLoading = false;
+    private Dictionary<string, ServiceBusNamespaceInfo> namespaceDict = new();
+    private List<ServiceBusNamespaceInfo> namespaces => namespaceDict.Values.ToList();
+    private bool isRefreshing = false;
     private string? errorMessage;
     private bool showSecurityInfo = false;
     private string searchTerm = "";
+    private CancellationTokenSource? _loadCts;
 
     private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? namespaces 
             : namespaces.Where(ns => 
                 ns.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                ns.SubscriptionName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (ns.SubscriptionName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 ns.ResourceGroup.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
     private void ToggleSecurityInfo()
@@ -144,44 +147,48 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if user is authenticated before loading namespaces
         var isAuthenticated = await AuthService.IsAuthenticatedAsync();
-        Console.WriteLine($"[Home] OnInitializedAsync - Authenticated: {isAuthenticated}");
-        
         if (isAuthenticated)
         {
-            await LoadNamespacesAsync();
+            _ = LoadNamespacesAsync();
         }
     }
 
     private async Task LoadNamespacesAsync()
     {
-        isLoading = true;
+        _loadCts?.Cancel();
+        _loadCts = new CancellationTokenSource();
+        var ct = _loadCts.Token;
+
+        isRefreshing = true;
         errorMessage = null;
+        namespaceDict = new();
 
         try
         {
-            Console.WriteLine("[Home] Requesting token credential...");
             var credential = await AuthService.GetTokenCredentialAsync();
             if (credential == null)
             {
-                errorMessage = "Failed to get authentication token. Please try signing out and back in.";
-                Console.WriteLine("[Home] ERROR: Token credential is null");
+                errorMessage = "Failed to get authentication token";
                 return;
             }
 
-            Console.WriteLine("[Home] Token acquired, loading namespaces...");
-            namespaces = await ResourceService.ListServiceBusNamespacesAsync(credential);
-            Console.WriteLine($"[Home] Loaded {namespaces.Count} namespaces");
+            await foreach (var ns in ResourceService.ListServiceBusNamespacesAsync(credential, ct))
+            {
+                if (ct.IsCancellationRequested) break;
+                namespaceDict[ns.Name] = ns;
+                StateHasChanged();
+            }
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             errorMessage = $"Failed to load namespaces: {ex.Message}";
-            Console.WriteLine($"[Home] ERROR: {ex}");
         }
         finally
         {
-            isLoading = false;
+            isRefreshing = false;
+            StateHasChanged();
         }
     }
 

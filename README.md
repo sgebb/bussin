@@ -1,4 +1,4 @@
-# Service Bus Explorer
+# bussin
 
 A zero-backend, installable tool for interacting with Azure Service Bus. Runs entirely in your browser with no server required.
 

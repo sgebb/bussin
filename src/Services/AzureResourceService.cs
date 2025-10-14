@@ -7,7 +7,12 @@ namespace ServiceBusExplorer.Blazor.Services;
 
 public sealed class AzureResourceService : IAzureResourceService
 {
-    // Caching disabled for now to ensure stability
+    private readonly ServiceBusEntityCache _cache;
+
+    public AzureResourceService(ServiceBusEntityCache cache)
+    {
+        _cache = cache;
+    }
     
     private string GetCacheKey(ServiceBusNamespaceInfo namespaceInfo)
     {
@@ -18,175 +23,220 @@ public sealed class AzureResourceService : IAzureResourceService
     {
         return $"{GetCacheKey(namespaceInfo)}/{topicName}";
     }
-    public async Task<List<ServiceBusNamespaceInfo>> ListServiceBusNamespacesAsync(TokenCredential credential)
-    {
-        var armClient = new ArmClient(credential);
-        var namespaces = new List<ServiceBusNamespaceInfo>();
 
+    private async IAsyncEnumerable<T> CachedStreamAsync<T>(
+        List<T>? cached,
+        Func<CancellationToken, IAsyncEnumerable<T>> fetchFresh,
+        Action<List<T>> updateCache,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default,
+        Action? onCompleted = null)
+    {
+        if (cached != null)
+        {
+            foreach (var item in cached)
+            {
+                if (cancellationToken.IsCancellationRequested) yield break;
+                yield return item;
+            }
+        }
+
+        var freshItems = new List<T>();
         try
         {
-            Console.WriteLine("Fetching namespaces from Azure...");
-            var subscriptionCount = 0;
-            
-            await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync())
+            await foreach (var item in fetchFresh(cancellationToken))
             {
-                subscriptionCount++;
-                Console.WriteLine($"Found subscription: {subscription.Data.DisplayName} ({subscription.Data.SubscriptionId})");
+                if (cancellationToken.IsCancellationRequested) yield break;
+                freshItems.Add(item);
+                yield return item;
+            }
+
+            updateCache(freshItems);
+        }
+        finally
+        {
+            onCompleted?.Invoke();
+        }
+    }
+
+    public async IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(
+        TokenCredential credential, 
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var ns in CachedStreamAsync(
+            _cache.GetNamespaces(),
+            ct => FetchNamespacesAsync(credential, ct),
+            fresh => 
+            {
+                _cache.ClearNamespaces();
+                foreach (var item in fresh)
+                    _cache.AddNamespace(item);
+            },
+            cancellationToken))
+        {
+            yield return ns;
+        }
+    }
+
+    private async IAsyncEnumerable<ServiceBusNamespaceInfo> FetchNamespacesAsync(
+        TokenCredential credential,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var armClient = new ArmClient(credential);
+
+        await foreach (var subscription in armClient.GetSubscriptions().GetAllAsync(cancellationToken))
+        {
+            if (cancellationToken.IsCancellationRequested) yield break;
+            
+            await foreach (var serviceBusNamespace in subscription.GetServiceBusNamespacesAsync(cancellationToken))
+            {
+                if (cancellationToken.IsCancellationRequested) yield break;
                 
-                var nsCount = 0;
-                await foreach (var ns in subscription.GetServiceBusNamespacesAsync())
+                yield return new ServiceBusNamespaceInfo
                 {
-                    nsCount++;
-                    var data = ns.Data;
-                    Console.WriteLine($"  Found namespace: {data.Name} in {ns.Id.ResourceGroupName}");
-                    
-                    namespaces.Add(new ServiceBusNamespaceInfo
-                    {
-                        Name = data.Name,
-                        FullyQualifiedNamespace = data.ServiceBusEndpoint?.Replace("https://", "").Replace(":443/", "") ?? $"{data.Name}.servicebus.windows.net",
-                        ResourceGroup = ns.Id.ResourceGroupName ?? "Unknown",
-                        SubscriptionId = subscription.Data.SubscriptionId ?? "Unknown",
-                        SubscriptionName = subscription.Data.DisplayName ?? "Unknown",
-                        TenantId = subscription.Data.TenantId?.ToString() ?? "Unknown",
-                        Location = data.Location.Name
-                    });
-                }
-                Console.WriteLine($"  Total namespaces in this subscription: {nsCount}");
+                    Name = serviceBusNamespace.Data.Name,
+                    FullyQualifiedNamespace = $"{serviceBusNamespace.Data.Name}.servicebus.windows.net",
+                    ResourceGroup = serviceBusNamespace.Id.ResourceGroupName ?? "",
+                    SubscriptionId = subscription.Data.SubscriptionId ?? "",
+                    SubscriptionName = subscription.Data.DisplayName ?? "",
+                    Location = serviceBusNamespace.Data.Location.Name,
+                    TenantId = subscription.Data.TenantId?.ToString() ?? ""
+                };
             }
+        }
+    }
+
+    public async IAsyncEnumerable<ServiceBusQueueInfo> ListQueuesAsync(
+        TokenCredential credential, 
+        ServiceBusNamespaceInfo namespaceInfo,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var cacheKey = GetCacheKey(namespaceInfo);
+        
+        await foreach (var queue in CachedStreamAsync(
+            _cache.GetQueues(cacheKey),
+            ct => FetchQueuesAsync(credential, namespaceInfo, ct),
+            fresh => _cache.SetQueues(cacheKey, fresh),
+            cancellationToken))
+        {
+            yield return queue;
+        }
+    }
+
+    private async IAsyncEnumerable<ServiceBusQueueInfo> FetchQueuesAsync(
+        TokenCredential credential,
+        ServiceBusNamespaceInfo namespaceInfo,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var armClient = new ArmClient(credential);
+        var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{namespaceInfo.SubscriptionId}")).GetAsync();
+        var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(namespaceInfo.ResourceGroup);
+        var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceInfo.Name);
+
+        await foreach (var queue in serviceBusNamespace.Value.GetServiceBusQueues().GetAllAsync())
+        {
+            if (cancellationToken.IsCancellationRequested) yield break;
             
-            Console.WriteLine($"Total subscriptions checked: {subscriptionCount}");
-            Console.WriteLine($"Total namespaces found: {namespaces.Count}");
+            yield return new ServiceBusQueueInfo
+            {
+                Name = queue.Data.Name,
+                Status = queue.Data.Status?.ToString() ?? "Unknown",
+                ActiveMessageCount = queue.Data.CountDetails?.ActiveMessageCount ?? 0,
+                DeadLetterMessageCount = queue.Data.CountDetails?.DeadLetterMessageCount ?? 0,
+                ScheduledMessageCount = queue.Data.CountDetails?.ScheduledMessageCount ?? 0,
+                TransferMessageCount = queue.Data.CountDetails?.TransferMessageCount ?? 0,
+                TransferDeadLetterMessageCount = queue.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0,
+                MaxSizeInMegabytes = queue.Data.MaxSizeInMegabytes ?? 0,
+                SizeInBytes = queue.Data.SizeInBytes ?? 0
+            };
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error listing namespaces: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
-        }
-
-        return namespaces;
     }
 
-    public async Task<List<ServiceBusQueueInfo>> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    public async IAsyncEnumerable<ServiceBusTopicInfo> ListTopicsAsync(
+        TokenCredential credential, 
+        ServiceBusNamespaceInfo namespaceInfo,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var armClient = new ArmClient(credential);
-        var queues = new List<ServiceBusQueueInfo>();
-
-        try
+        var cacheKey = GetCacheKey(namespaceInfo);
+        
+        await foreach (var topic in CachedStreamAsync(
+            _cache.GetTopics(cacheKey),
+            ct => FetchTopicsAsync(credential, namespaceInfo, ct),
+            fresh => _cache.SetTopics(cacheKey, fresh),
+            cancellationToken))
         {
-            Console.WriteLine($"Fetching queues for {namespaceInfo.Name}...");
-            var subscriptionId = namespaceInfo.SubscriptionId;
-            var resourceGroup = namespaceInfo.ResourceGroup;
-            var namespaceName = namespaceInfo.Name;
-
-            var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{subscriptionId}")).GetAsync();
-            var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(resourceGroup);
-            var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceName);
-
-            await foreach (var queue in serviceBusNamespace.Value.GetServiceBusQueues().GetAllAsync())
-            {
-                var queueInfo = new ServiceBusQueueInfo
-                {
-                    Name = queue.Data.Name,
-                    Status = queue.Data.Status?.ToString() ?? "Unknown",
-                    ActiveMessageCount = queue.Data.CountDetails?.ActiveMessageCount ?? 0,
-                    DeadLetterMessageCount = queue.Data.CountDetails?.DeadLetterMessageCount ?? 0,
-                    ScheduledMessageCount = queue.Data.CountDetails?.ScheduledMessageCount ?? 0,
-                    TransferMessageCount = queue.Data.CountDetails?.TransferMessageCount ?? 0,
-                    TransferDeadLetterMessageCount = queue.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0,
-                    MaxSizeInMegabytes = queue.Data.MaxSizeInMegabytes ?? 0,
-                    SizeInBytes = queue.Data.SizeInBytes ?? 0
-                };
-                queues.Add(queueInfo);
-            }
-
-            Console.WriteLine($"Found {queues.Count} queues");
+            yield return topic;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error listing queues: {ex.Message}");
-        }
-
-        return queues;
     }
 
-    public async Task<List<ServiceBusTopicInfo>> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    private async IAsyncEnumerable<ServiceBusTopicInfo> FetchTopicsAsync(
+        TokenCredential credential,
+        ServiceBusNamespaceInfo namespaceInfo,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var armClient = new ArmClient(credential);
-        var topics = new List<ServiceBusTopicInfo>();
+        var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{namespaceInfo.SubscriptionId}")).GetAsync();
+        var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(namespaceInfo.ResourceGroup);
+        var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceInfo.Name);
 
-        try
+        await foreach (var topic in serviceBusNamespace.Value.GetServiceBusTopics().GetAllAsync())
         {
-            Console.WriteLine($"Fetching topics for {namespaceInfo.Name}...");
-            var subscriptionId = namespaceInfo.SubscriptionId;
-            var resourceGroup = namespaceInfo.ResourceGroup;
-            var namespaceName = namespaceInfo.Name;
-
-            var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{subscriptionId}")).GetAsync();
-            var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(resourceGroup);
-            var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceName);
-
-            await foreach (var topic in serviceBusNamespace.Value.GetServiceBusTopics().GetAllAsync())
+            if (cancellationToken.IsCancellationRequested) yield break;
+            
+            yield return new ServiceBusTopicInfo
             {
-                var topicInfo = new ServiceBusTopicInfo
-                {
-                    Name = topic.Data.Name,
-                    Status = topic.Data.Status?.ToString() ?? "Unknown",
-                    ScheduledMessageCount = topic.Data.CountDetails?.ScheduledMessageCount ?? 0,
-                    MaxSizeInMegabytes = topic.Data.MaxSizeInMegabytes ?? 0,
-                    SizeInBytes = topic.Data.SizeInBytes ?? 0,
-                    SubscriptionCount = topic.Data.SubscriptionCount ?? 0
-                };
-                topics.Add(topicInfo);
-            }
-
-            Console.WriteLine($"Found {topics.Count} topics");
+                Name = topic.Data.Name,
+                Status = topic.Data.Status?.ToString() ?? "Unknown",
+                ScheduledMessageCount = topic.Data.CountDetails?.ScheduledMessageCount ?? 0,
+                MaxSizeInMegabytes = topic.Data.MaxSizeInMegabytes ?? 0,
+                SizeInBytes = topic.Data.SizeInBytes ?? 0,
+                SubscriptionCount = topic.Data.SubscriptionCount ?? 0
+            };
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error listing topics: {ex.Message}");
-        }
-
-        return topics;
     }
 
-    public async Task<List<ServiceBusSubscriptionInfo>> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName)
+    public async IAsyncEnumerable<ServiceBusSubscriptionInfo> ListSubscriptionsAsync(
+        TokenCredential credential, 
+        ServiceBusNamespaceInfo namespaceInfo, 
+        string topicName,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var cacheKey = GetSubscriptionCacheKey(namespaceInfo, topicName);
+        
+        await foreach (var sub in CachedStreamAsync(
+            _cache.GetSubscriptions(cacheKey),
+            ct => FetchSubscriptionsAsync(credential, namespaceInfo, topicName, ct),
+            fresh => _cache.SetSubscriptions(cacheKey, fresh),
+            cancellationToken))
+        {
+            yield return sub;
+        }
+    }
+
+    private async IAsyncEnumerable<ServiceBusSubscriptionInfo> FetchSubscriptionsAsync(
+        TokenCredential credential,
+        ServiceBusNamespaceInfo namespaceInfo,
+        string topicName,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var armClient = new ArmClient(credential);
-        var subscriptions = new List<ServiceBusSubscriptionInfo>();
+        var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{namespaceInfo.SubscriptionId}")).GetAsync();
+        var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(namespaceInfo.ResourceGroup);
+        var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceInfo.Name);
+        var topic = await serviceBusNamespace.Value.GetServiceBusTopicAsync(topicName);
 
-        try
+        await foreach (var sub in topic.Value.GetServiceBusSubscriptions().GetAllAsync())
         {
-            Console.WriteLine($"Fetching subscriptions for {namespaceInfo.Name}/{topicName}...");
-            var subscriptionId = namespaceInfo.SubscriptionId;
-            var resourceGroup = namespaceInfo.ResourceGroup;
-            var namespaceName = namespaceInfo.Name;
-
-            var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{subscriptionId}")).GetAsync();
-            var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(resourceGroup);
-            var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceName);
-            var topic = await serviceBusNamespace.Value.GetServiceBusTopicAsync(topicName);
-
-            await foreach (var sub in topic.Value.GetServiceBusSubscriptions().GetAllAsync())
+            if (cancellationToken.IsCancellationRequested) yield break;
+            
+            yield return new ServiceBusSubscriptionInfo
             {
-                var subInfo = new ServiceBusSubscriptionInfo
-                {
-                    Name = sub.Data.Name,
-                    Status = sub.Data.Status?.ToString() ?? "Unknown",
-                    ActiveMessageCount = sub.Data.CountDetails?.ActiveMessageCount ?? 0,
-                    DeadLetterMessageCount = sub.Data.CountDetails?.DeadLetterMessageCount ?? 0,
-                    TransferMessageCount = sub.Data.CountDetails?.TransferMessageCount ?? 0,
-                    TransferDeadLetterMessageCount = sub.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0
-                };
-                subscriptions.Add(subInfo);
-            }
-
-            Console.WriteLine($"Found {subscriptions.Count} subscriptions");
+                Name = sub.Data.Name,
+                Status = sub.Data.Status?.ToString() ?? "Unknown",
+                ActiveMessageCount = sub.Data.CountDetails?.ActiveMessageCount ?? 0,
+                DeadLetterMessageCount = sub.Data.CountDetails?.DeadLetterMessageCount ?? 0,
+                TransferMessageCount = sub.Data.CountDetails?.TransferMessageCount ?? 0,
+                TransferDeadLetterMessageCount = sub.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0
+            };
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error listing subscriptions: {ex.Message}");
-        }
-
-        return subscriptions;
     }
 }

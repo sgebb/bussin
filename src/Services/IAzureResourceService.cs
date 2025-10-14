@@ -5,8 +5,8 @@ namespace ServiceBusExplorer.Blazor.Services;
 
 public interface IAzureResourceService
 {
-    Task<List<ServiceBusNamespaceInfo>> ListServiceBusNamespacesAsync(TokenCredential credential);
-    Task<List<ServiceBusQueueInfo>> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo);
-    Task<List<ServiceBusTopicInfo>> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo);
-    Task<List<ServiceBusSubscriptionInfo>> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName);
+    IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(TokenCredential credential, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<ServiceBusQueueInfo> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<ServiceBusTopicInfo> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<ServiceBusSubscriptionInfo> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName, CancellationToken cancellationToken = default);
 }

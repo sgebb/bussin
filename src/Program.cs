@@ -27,6 +27,7 @@ builder.Services.AddMsalAuthentication(options =>
 
 // Register application services
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddSingleton<ServiceBusEntityCache>();
 builder.Services.AddSingleton<IAzureResourceService, AzureResourceService>();
 builder.Services.AddScoped<IServiceBusJsInteropService, ServiceBusJsInteropService>();
 builder.Services.AddScoped<IServiceBusOperationsService, ServiceBusOperationsService>();
