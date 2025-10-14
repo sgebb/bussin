@@ -16,4 +16,8 @@
     <PackageReference Include="Microsoft.Authentication.WebAssembly.Msal" Version="9.0.9" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="wwwroot\.well-known\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  
 </Project>
