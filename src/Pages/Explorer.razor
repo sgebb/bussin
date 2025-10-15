@@ -27,7 +27,8 @@
                 <div class="spinner-border spinner-border-sm text-primary"></div>
                 <span class="ms-2 small">Loading...</span>
             }
-            else
+
+            @if (!isLoadingEntities || queues.Count > 0 || topics.Count > 0)
             {
                 <div class="row g-2">
                     <!-- Left: Entity Selection -->
@@ -35,12 +36,8 @@
                         <div class="row g-2">
                             <div class="col-12">
                                 <div class="card">
-                                    <div class="card-header py-1 px-2 d-flex justify-content-between align-items-center">
+                                    <div class="card-header py-1 px-2">
                                         <small class="fw-bold">Queues (@queues.Count)</small>
-                                        @if (isRefreshingQueues)
-                                        {
-                                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                                        }
                                     </div>
                                     <div class="entity-list-scroll">
                                         <table class="table table-sm table-hover mb-0">
@@ -73,12 +70,8 @@
                             </div>
                             <div class="col-12">
                                 <div class="card">
-                                    <div class="card-header py-1 px-2 d-flex justify-content-between align-items-center">
+                                    <div class="card-header py-1 px-2">
                                         <small class="fw-bold">Topics (@topics.Count)</small>
-                                        @if (isRefreshingTopics)
-                                        {
-                                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                                        }
                                     </div>
                                     <div class="entity-list-scroll">
                                         <table class="table table-sm table-hover mb-0">
@@ -308,10 +301,7 @@
 
 <ReceiveAndLockModal IsVisible="@showReceiveAndLockModal"
                     OnClose="@(() => showReceiveAndLockModal = false)"
-                    OnLockMessages="@LockMessagesForModal"
-                    OnComplete="@CompleteLockedMessages"
-                    OnAbandon="@AbandonLockedMessages"
-                    OnDeadLetter="@DeadLetterLockedMessages" />
+                    OnLockMessages="@LockMessagesForModal" />
 
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
@@ -343,8 +333,6 @@
     private List<ServiceBusMessage> peekedMessages = new();
     private bool isLoadingEntities = false;
     private bool isLoadingSubscriptions = false;
-    private bool isRefreshingQueues = false;
-    private bool isRefreshingTopics = false;
     private bool isPeeking = false;
     private bool isPurging = false;
     private CancellationTokenSource? _loadCts;
@@ -374,15 +362,6 @@
         showPeekOptions = !showPeekOptions;
     }
 
-    protected override async Task OnInitializedAsync()
-    {
-        if (!string.IsNullOrEmpty(NamespaceParam))
-        {
-            _lastNamespace = NamespaceParam;
-            await LoadEntitiesAsync();
-        }
-    }
-
     protected override async Task OnParametersSetAsync()
     {
         // Only reload if the namespace actually changed
@@ -402,8 +381,6 @@
             selectedTopicName = null;
             selectedSubscriptionName = null;
             peekedMessages.Clear();
-            queueDict.Clear();
-            topicDict.Clear();
             subscriptionDict.Clear();
             
             await LoadEntitiesAsync();
@@ -417,8 +394,7 @@
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
 
-        // Only show loading spinner if we have no cached data
-        isLoadingEntities = queueDict.Count == 0 && topicDict.Count == 0;
+        isLoadingEntities = true;
         errorMessage = null;
 
         try
@@ -431,12 +407,17 @@
                 return;
             }
 
-            _ = LoadQueuesAsync(credential, _currentNamespace);
-            _ = LoadTopicsAsync(credential, _currentNamespace);
+            await Task.WhenAll(
+                LoadQueuesAsync(credential, _currentNamespace),
+                LoadTopicsAsync(credential, _currentNamespace)
+            );
         }
         catch (Exception ex)
         {
             errorMessage = $"Failed to load entities: {ex.Message}";
+        }
+        finally
+        {
             isLoadingEntities = false;
             StateHasChanged();
         }
@@ -445,63 +426,33 @@
     private async Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
         var ct = _loadCts?.Token ?? CancellationToken.None;
-        isRefreshingQueues = true;
-        var firstItem = true;
-        var newQueueDict = new Dictionary<string, ServiceBusQueueInfo>();
         
         try
         {
             await foreach (var queue in ResourceService.ListQueuesAsync(credential, namespaceInfo, ct))
             {
                 if (ct.IsCancellationRequested) break;
-                newQueueDict[queue.Name] = queue;
                 queueDict[queue.Name] = queue;
-                
-                if (firstItem)
-                {
-                    isLoadingEntities = false;
-                    firstItem = false;
-                }
                 StateHasChanged();
             }
         }
         catch (OperationCanceledException) { }
-        finally
-        {
-            isRefreshingQueues = false;
-            StateHasChanged();
-        }
     }
 
     private async Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
         var ct = _loadCts?.Token ?? CancellationToken.None;
-        isRefreshingTopics = true;
-        var firstItem = true;
-        var newTopicDict = new Dictionary<string, ServiceBusTopicInfo>();
         
         try
         {
             await foreach (var topic in ResourceService.ListTopicsAsync(credential, namespaceInfo, ct))
             {
                 if (ct.IsCancellationRequested) break;
-                newTopicDict[topic.Name] = topic;
                 topicDict[topic.Name] = topic;
-                
-                if (firstItem)
-                {
-                    isLoadingEntities = false;
-                    firstItem = false;
-                }
                 StateHasChanged();
             }
         }
         catch (OperationCanceledException) { }
-        finally
-        {
-            isRefreshingTopics = false;
-            StateHasChanged();
-        }
     }
 
     private void SelectQueue(string queueName)
@@ -748,25 +699,6 @@
             return await JsInterop.ReceiveAndLockSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, timeoutSeconds, isViewingDLQ, count);
         }
         return new List<ServiceBusMessage>();
-    }
-
-    private async Task CompleteLockedMessages(string[] lockTokens)
-    {
-        await OperationsService.CompleteMessagesAsync(lockTokens);
-    }
-
-    private async Task AbandonLockedMessages(string[] lockTokens)
-    {
-        await OperationsService.AbandonMessagesAsync(lockTokens);
-    }
-
-    private async Task DeadLetterLockedMessages(string[] lockTokens)
-    {
-        await OperationsService.DeadLetterMessagesAsync(lockTokens, new DeadLetterOptions 
-        { 
-            DeadLetterReason = "Manual dead letter from UI", 
-            DeadLetterErrorDescription = "User initiated dead letter operation" 
-        });
     }
 
     private async Task SendMessage((string body, string? properties) messageData)

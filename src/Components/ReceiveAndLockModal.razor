@@ -1,4 +1,5 @@
 @using ServiceBusExplorer.Blazor.Models
+@inject IServiceBusOperationsService OperationsService
 
 @if (IsVisible)
 {
@@ -114,9 +115,6 @@
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public Func<int, int, bool, Task<List<ServiceBusMessage>>>? OnLockMessages { get; set; }
-    [Parameter] public Func<string[], Task>? OnComplete { get; set; }
-    [Parameter] public Func<string[], Task>? OnAbandon { get; set; }
-    [Parameter] public Func<string[], Task>? OnDeadLetter { get; set; }
 
     private List<ServiceBusMessage> lockedMessages = new();
     private int messageCount = 10;
@@ -155,15 +153,14 @@
 
     private async Task CompleteAll()
     {
-        if (OnComplete == null || !lockedMessages.Any()) return;
+        if (!lockedMessages.Any()) return;
 
         isProcessing = true;
         try
         {
             var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
-            await OnComplete(lockTokens);
+            await OperationsService.CompleteMessagesAsync(lockTokens);
             lockedMessages.Clear();
-            // Don't auto-refresh - user may have other locked messages
         }
         catch (Exception ex)
         {
@@ -177,15 +174,14 @@
 
     private async Task AbandonAll()
     {
-        if (OnAbandon == null || !lockedMessages.Any()) return;
+        if (!lockedMessages.Any()) return;
 
         isProcessing = true;
         try
         {
             var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
-            await OnAbandon(lockTokens);
+            await OperationsService.AbandonMessagesAsync(lockTokens);
             lockedMessages.Clear();
-            // Don't auto-refresh - user may have other locked messages
         }
         catch (Exception ex)
         {
@@ -199,15 +195,18 @@
 
     private async Task DeadLetterAll()
     {
-        if (OnDeadLetter == null || !lockedMessages.Any()) return;
+        if (!lockedMessages.Any()) return;
 
         isProcessing = true;
         try
         {
             var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
-            await OnDeadLetter(lockTokens);
+            await OperationsService.DeadLetterMessagesAsync(lockTokens, new DeadLetterOptions
+            {
+                DeadLetterReason = "Manual dead letter from UI",
+                DeadLetterErrorDescription = "User initiated dead letter operation"
+            });
             lockedMessages.Clear();
-            // Don't auto-refresh - user may have other locked messages
         }
         catch (Exception ex)
         {
@@ -221,13 +220,10 @@
 
     private async Task CompleteSingle(string lockToken)
     {
-        if (OnComplete == null) return;
-
         isProcessing = true;
         try
         {
-            await OnComplete(new[] { lockToken });
-            // Just remove from UI - don't refresh the whole list
+            await OperationsService.CompleteMessagesAsync(new[] { lockToken });
             lockedMessages.RemoveAll(m => m.LockToken == lockToken);
         }
         catch (Exception ex)
@@ -242,13 +238,10 @@
 
     private async Task AbandonSingle(string lockToken)
     {
-        if (OnAbandon == null) return;
-
         isProcessing = true;
         try
         {
-            await OnAbandon(new[] { lockToken });
-            // Just remove from UI - don't refresh the whole list
+            await OperationsService.AbandonMessagesAsync(new[] { lockToken });
             lockedMessages.RemoveAll(m => m.LockToken == lockToken);
         }
         catch (Exception ex)
@@ -263,13 +256,14 @@
 
     private async Task DeadLetterSingle(string lockToken)
     {
-        if (OnDeadLetter == null) return;
-
         isProcessing = true;
         try
         {
-            await OnDeadLetter(new[] { lockToken });
-            // Just remove from UI - don't refresh the whole list
+            await OperationsService.DeadLetterMessagesAsync(new[] { lockToken }, new DeadLetterOptions
+            {
+                DeadLetterReason = "Manual dead letter from UI",
+                DeadLetterErrorDescription = "User initiated dead letter operation"
+            });
             lockedMessages.RemoveAll(m => m.LockToken == lockToken);
         }
         catch (Exception ex)
