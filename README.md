@@ -2,17 +2,16 @@
 
 A zero-backend, installable tool for interacting with Azure Service Bus. Runs entirely in your browser with no server required.
 
-[![Deploy to GitHub Pages](https://github.com/sgebb/bussin/actions/workflows/deploy.yml/badge.svg)](https://github.com/sgebb/bussin/actions/workflows/deploy.yml)
+## 🚀 Use the app
 
-## 🚀 Live Demo
-
-**[https://sgebb.github.io/bussin/](https://sgebb.github.io/bussin/)**
+**[https://bussin.dev/](https://bussin.dev/)**
 
 Can be installed as a Progressive Web App (PWA) for offline access.
 
 ## Features
 
 ### Message Operations
+
 - **Peek Messages** - Non-destructive message viewing with batch loading
 - **Send Messages** - Send messages to queues and topics with custom properties
 - **Send Scheduled Messages** - Schedule messages for future delivery
@@ -22,11 +21,13 @@ Can be installed as a Progressive Web App (PWA) for offline access.
 - **Purge Operations** - Clear all messages from queues or subscriptions
 
 ### Resource Management
+
 - **Browse Resources** - View all Service Bus namespaces in your Azure subscriptions
 - **Entity Explorer** - Navigate queues, topics, and subscriptions
 - **Recent Namespaces** - Quick access to frequently used namespaces
 
 ### User Experience
+
 - **Dark Mode** - Toggle between light and dark themes
 - **Installable PWA** - Install as a desktop or mobile app
 - **Client-Side Only** - No backend server, all operations run in your browser
@@ -67,69 +68,6 @@ Every deployment to GitHub Pages includes build metadata:
 
 You can also check `buildinfo.json` at the root of the deployed site.
 
-## 🛠️ Getting Started
-
-### Prerequisites
-
-- .NET 10.0 SDK or later
-- Azure subscription with Service Bus access
-- Modern browser with WebAssembly support
-
-### Running Locally
-
-```bash
-# Clone the repository
-git clone https://github.com/sgebb/bussin.git
-cd bussin/src
-
-# Run the app
-dotnet run
-
-# Open browser to https://localhost:63079 (or the port shown in console)
-```
-
-### Azure AD App Registration
-
-The app uses a pre-configured Azure AD app registration. If you want to use your own:
-
-1. Create an Azure AD app registration in the Azure Portal
-2. Set it as a Single Page Application (SPA)
-3. Add redirect URIs:
-   - `https://localhost:63079/authentication/login-callback`
-   - `https://sgebb.github.io/bussin/authentication/login-callback`
-4. Request API permissions:
-   - `https://management.azure.com/user_impersonation`
-   - `https://servicebus.azure.net/user_impersonation`
-5. Update `wwwroot/appsettings.json` with your Client ID and Tenant ID
-
-## Project Structure
-
-```
-src/
-├── Models/                    # Data models
-├── Services/                  # Business logic
-│   ├── AuthenticationService.cs
-│   ├── AzureResourceService.cs
-│   ├── ServiceBusJsInteropService.cs
-│   └── ServiceBusOperationsService.cs
-├── Pages/                     # Razor pages
-│   ├── Home.razor            # Namespace browser
-│   ├── Explorer.razor        # Message operations
-│   └── Diagnostics.razor     # Debug info
-├── Components/               # Reusable components
-│   └── MessageList.razor     # Message display
-├── wwwroot/                  # Static assets
-│   ├── js/
-│   │   ├── servicebus-api.js # Compiled AMQP client
-│   │   └── storage.js        # LocalStorage helpers
-│   ├── references/           # TypeScript source
-│   │   └── serviceBusApi.ts  # AMQP client source
-│   ├── service-worker.js     # PWA service worker
-│   ├── manifest.json         # PWA manifest
-│   └── index.html
-└── Program.cs                # App configuration
-```
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
@@ -145,7 +83,7 @@ MIT License - See [LICENSE](LICENSE) file for details
 
 ## Tech Stack
 
-- [Blazor WebAssembly](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor) - .NET 10 running in the browser
+- [Blazor WebAssembly](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor) - .NET running in the browser
 - [rhea](https://github.com/amqp/rhea) - AMQP 1.0 client for JavaScript
 - [MSAL.js](https://github.com/AzureAD/microsoft-authentication-library-for-js) - Microsoft Authentication Library
 - [Bootstrap 5](https://getbootstrap.com/) - UI framework
