@@ -417,10 +417,9 @@
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
 
-        isLoadingEntities = true;
+        // Only show loading spinner if we have no cached data
+        isLoadingEntities = queueDict.Count == 0 && topicDict.Count == 0;
         errorMessage = null;
-        queueDict = new();
-        topicDict = new();
 
         try
         {
@@ -448,12 +447,16 @@
         var ct = _loadCts?.Token ?? CancellationToken.None;
         isRefreshingQueues = true;
         var firstItem = true;
+        var newQueueDict = new Dictionary<string, ServiceBusQueueInfo>();
+        
         try
         {
             await foreach (var queue in ResourceService.ListQueuesAsync(credential, namespaceInfo, ct))
             {
                 if (ct.IsCancellationRequested) break;
+                newQueueDict[queue.Name] = queue;
                 queueDict[queue.Name] = queue;
+                
                 if (firstItem)
                 {
                     isLoadingEntities = false;
@@ -475,12 +478,16 @@
         var ct = _loadCts?.Token ?? CancellationToken.None;
         isRefreshingTopics = true;
         var firstItem = true;
+        var newTopicDict = new Dictionary<string, ServiceBusTopicInfo>();
+        
         try
         {
             await foreach (var topic in ResourceService.ListTopicsAsync(credential, namespaceInfo, ct))
             {
                 if (ct.IsCancellationRequested) break;
+                newTopicDict[topic.Name] = topic;
                 topicDict[topic.Name] = topic;
+                
                 if (firstItem)
                 {
                     isLoadingEntities = false;
@@ -511,6 +518,7 @@
         selectedTopicName = topicName;
         selectedSubscriptionName = null;
         peekedMessages.Clear();
+        subscriptionDict.Clear();
         
         await LoadSubscriptionsAsync(topicName);
     }
@@ -519,19 +527,30 @@
     {
         if (_currentNamespace == null) return;
         
+        // Show loading spinner since we just cleared subscriptions
         isLoadingSubscriptions = true;
-        subscriptionDict = new();
 
         try
         {
             var credential = await AuthService.GetTokenCredentialAsync();
-            if (credential == null) return;
+            if (credential == null)
+            {
+                isLoadingSubscriptions = false;
+                return;
+            }
 
             var ct = _loadCts?.Token ?? CancellationToken.None;
+            var firstItem = true;
             await foreach (var sub in ResourceService.ListSubscriptionsAsync(credential, _currentNamespace, topicName, ct))
             {
                 if (ct.IsCancellationRequested) break;
                 subscriptionDict[sub.Name] = sub;
+                
+                if (firstItem)
+                {
+                    isLoadingSubscriptions = false;
+                    firstItem = false;
+                }
                 StateHasChanged();
             }
         }

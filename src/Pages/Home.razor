@@ -162,7 +162,6 @@
 
         isRefreshing = true;
         errorMessage = null;
-        namespaceDict = new();
 
         try
         {
@@ -170,6 +169,7 @@
             if (credential == null)
             {
                 errorMessage = "Failed to get authentication token";
+                isRefreshing = false;
                 return;
             }
 

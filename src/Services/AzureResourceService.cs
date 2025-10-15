@@ -28,8 +28,7 @@ public sealed class AzureResourceService : IAzureResourceService
         List<T>? cached,
         Func<CancellationToken, IAsyncEnumerable<T>> fetchFresh,
         Action<List<T>> updateCache,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default,
-        Action? onCompleted = null)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (cached != null)
         {
@@ -41,21 +40,14 @@ public sealed class AzureResourceService : IAzureResourceService
         }
 
         var freshItems = new List<T>();
-        try
+        await foreach (var item in fetchFresh(cancellationToken))
         {
-            await foreach (var item in fetchFresh(cancellationToken))
-            {
-                if (cancellationToken.IsCancellationRequested) yield break;
-                freshItems.Add(item);
-                yield return item;
-            }
+            if (cancellationToken.IsCancellationRequested) yield break;
+            freshItems.Add(item);
+            yield return item;
+        }
 
-            updateCache(freshItems);
-        }
-        finally
-        {
-            onCompleted?.Invoke();
-        }
+        updateCache(freshItems);
     }
 
     public async IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(
@@ -127,12 +119,9 @@ public sealed class AzureResourceService : IAzureResourceService
         ServiceBusNamespaceInfo namespaceInfo,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var armClient = new ArmClient(credential);
-        var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{namespaceInfo.SubscriptionId}")).GetAsync();
-        var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(namespaceInfo.ResourceGroup);
-        var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceInfo.Name);
+        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo);
 
-        await foreach (var queue in serviceBusNamespace.Value.GetServiceBusQueues().GetAllAsync())
+        await foreach (var queue in serviceBusNamespace.GetServiceBusQueues().GetAllAsync())
         {
             if (cancellationToken.IsCancellationRequested) yield break;
             
@@ -173,12 +162,9 @@ public sealed class AzureResourceService : IAzureResourceService
         ServiceBusNamespaceInfo namespaceInfo,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var armClient = new ArmClient(credential);
-        var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{namespaceInfo.SubscriptionId}")).GetAsync();
-        var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(namespaceInfo.ResourceGroup);
-        var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceInfo.Name);
+        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo);
 
-        await foreach (var topic in serviceBusNamespace.Value.GetServiceBusTopics().GetAllAsync())
+        await foreach (var topic in serviceBusNamespace.GetServiceBusTopics().GetAllAsync())
         {
             if (cancellationToken.IsCancellationRequested) yield break;
             
@@ -218,11 +204,8 @@ public sealed class AzureResourceService : IAzureResourceService
         string topicName,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var armClient = new ArmClient(credential);
-        var subscription = await armClient.GetSubscriptionResource(new Azure.Core.ResourceIdentifier($"/subscriptions/{namespaceInfo.SubscriptionId}")).GetAsync();
-        var resourceGroupResource = await subscription.Value.GetResourceGroupAsync(namespaceInfo.ResourceGroup);
-        var serviceBusNamespace = await resourceGroupResource.Value.GetServiceBusNamespaceAsync(namespaceInfo.Name);
-        var topic = await serviceBusNamespace.Value.GetServiceBusTopicAsync(topicName);
+        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo);
+        var topic = await serviceBusNamespace.GetServiceBusTopicAsync(topicName);
 
         await foreach (var sub in topic.Value.GetServiceBusSubscriptions().GetAllAsync())
         {
@@ -238,5 +221,15 @@ public sealed class AzureResourceService : IAzureResourceService
                 TransferDeadLetterMessageCount = sub.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0
             };
         }
+    }
+
+    private async Task<ServiceBusNamespaceResource> GetServiceBusNamespaceResourceAsync(
+        TokenCredential credential,
+        ServiceBusNamespaceInfo namespaceInfo)
+    {
+        var armClient = new ArmClient(credential);
+        var resourceId = new Azure.Core.ResourceIdentifier(
+            $"/subscriptions/{namespaceInfo.SubscriptionId}/resourceGroups/{namespaceInfo.ResourceGroup}/providers/Microsoft.ServiceBus/namespaces/{namespaceInfo.Name}");
+        return await armClient.GetServiceBusNamespaceResource(resourceId).GetAsync();
     }
 }
