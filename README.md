@@ -68,6 +68,34 @@ Every deployment to GitHub Pages includes build metadata:
 
 You can also check `buildinfo.json` at the root of the deployed site.
 
+## 📋 Roadmap & TODO
+
+### 🚀 Ready to Start
+
+- [ ] **Confirm-modal on purge** - Add confirmation dialog before purging queues/subscriptions
+- [ ] **General code improvements** - Refactor to be more modular, separate business logic into services, improve component structure
+- [ ] **UI: Better light/dark mode color schemes** - More consistent and polished color palette across themes
+- [ ] **UI: Introduce component framework** - Evaluate Blazorize/MudBlazor for better component consistency and easier theme management
+- [ ] **UI: Maybe Tailwind?** - Consider migrating to Tailwind CSS for more flexible styling
+- [ ] **Include underlying TypeScript code** - Integrate `servicebusapi.ts` into this repository and build/publish as part of the same process instead of separate project
+
+### 🐛 Bugs & Issues
+
+- [ ] **Message scheduling verification** - Verify scheduling actually works, add UI to show number of scheduled messages
+- [ ] **Monitor: broken** - Investigate and fix monitor functionality
+- [ ] **MoveDLQ: sometimes fails** - Debug and fix reliability issues with moving messages from/to DLQ
+
+### 🎨 UX Improvements
+
+- [ ] **Find namespace UX** - Redesign navigation: home page shows favorites/recents, "Discover" button opens modal for finding new namespaces
+- [ ] **Queue/topic/subscription display** - Optimize information density - currently too cluttered but need all necessary information visible
+
+### 🔮 Future / Blocked
+
+- [ ] **Upgrade to .NET 10** - Migrate from current .NET version to .NET 10 (when released/stable)
+- [ ] **Verified publisher in Entra ID** - Complete Microsoft verification process for the app registration
+- [ ] **Consider ads/donate button** - Evaluate monetization options (depends on hosting model, may require Azure Static Web Apps, consider tax implications for foreign income in Norway)
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
