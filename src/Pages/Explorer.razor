@@ -33,203 +33,35 @@
                 <div class="row g-2">
                     <!-- Left: Entity Selection -->
                     <div class="col-md-6">
-                        <div class="row g-2">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header py-1 px-2">
-                                        <small class="fw-bold">Queues (@queues.Count)</small>
-                                    </div>
-                                    <div class="entity-list-scroll">
-                                        <table class="table table-sm table-hover mb-0">
-                                            <thead>
-                                                <tr>
-                                                    <th>Name</th>
-                                                    <th>Active</th>
-                                                    <th>DLQ</th>
-                                                    <th>Scheduled</th>
-                                                    <th>Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var queue in queues)
-                                                {
-                                                    <tr class="@(selectedQueueName == queue.Name ? "table-active" : "")" 
-                                                        @onclick="() => SelectQueue(queue.Name)" 
-                                                        style="cursor: pointer;">
-                                                        <td><small>@queue.Name</small></td>
-                                                        <td><small>@queue.ActiveMessageCount</small></td>
-                                                        <td><small class="@(queue.DeadLetterMessageCount > 0 ? "text-danger fw-bold" : "")">@queue.DeadLetterMessageCount</small></td>
-                                                        <td><small>@queue.ScheduledMessageCount</small></td>
-                                                        <td><small>@queue.Status</small></td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header py-1 px-2">
-                                        <small class="fw-bold">Topics (@topics.Count)</small>
-                                    </div>
-                                    <div class="entity-list-scroll">
-                                        <table class="table table-sm table-hover mb-0">
-                                            <thead>
-                                                <tr>
-                                                    <th>Name</th>
-                                                    <th>Subs</th>
-                                                    <th>Scheduled</th>
-                                                    <th>Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var topic in topics)
-                                                {
-                                                    <tr class="@(selectedTopicName == topic.Name ? "table-active" : "")" 
-                                                        @onclick="() => SelectTopic(topic.Name)" 
-                                                        style="cursor: pointer;">
-                                                        <td><small>@topic.Name</small></td>
-                                                        <td><small>@topic.SubscriptionCount</small></td>
-                                                        <td><small>@topic.ScheduledMessageCount</small></td>
-                                                        <td><small>@topic.Status</small></td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header py-1 px-2">
-                                        <small class="fw-bold">Subscriptions (@subscriptions.Count)</small>
-                                    </div>
-                                    <div class="entity-list-scroll">
-                                        @if (selectedTopicName == null)
-                                        {
-                                            <small class="text-muted p-2 d-block">Select a topic</small>
-                                        }
-                                        else if (isLoadingSubscriptions)
-                                        {
-                                            <div class="p-2"><div class="spinner-border spinner-border-sm"></div></div>
-                                        }
-                                        else
-                                        {
-                                            <table class="table table-sm table-hover mb-0">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Name</th>
-                                                        <th>Active</th>
-                                                        <th>DLQ</th>
-                                                        <th>Status</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach (var sub in subscriptions)
-                                                    {
-                                                        <tr class="@(selectedSubscriptionName == sub.Name ? "table-active" : "")" 
-                                                            @onclick="() => SelectSubscription(sub.Name)" 
-                                                            style="cursor: pointer;">
-                                                            <td><small>@sub.Name</small></td>
-                                                            <td><small>@sub.ActiveMessageCount</small></td>
-                                                            <td><small class="@(sub.DeadLetterMessageCount > 0 ? "text-danger fw-bold" : "")">@sub.DeadLetterMessageCount</small></td>
-                                                            <td><small>@sub.Status</small></td>
-                                                        </tr>
-                                                    }
-                                                </tbody>
-                                            </table>
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <EntitySelectorPanel 
+                            Queues="@queues" 
+                            Topics="@topics" 
+                            Subscriptions="@subscriptions"
+                            SelectedQueueName="@selectedQueueName"
+                            SelectedTopicName="@selectedTopicName"
+                            SelectedSubscriptionName="@selectedSubscriptionName"
+                            IsLoadingSubscriptions="@isLoadingSubscriptions"
+                            OnQueueSelected="@SelectQueue"
+                            OnTopicSelected="@SelectTopic"
+                            OnSubscriptionSelected="@SelectSubscription" />
                     </div>
 
                     <!-- Right: Operations -->
                     <div class="col-md-6">
-                        @if (selectedQueueName != null || selectedSubscriptionName != null)
-                        {
-                            <div class="card">
-                                <div class="card-body p-2">
-                                    <div class="mb-2">
-                                        <small class="fw-bold">@(selectedQueueName != null ? $"Queue: {selectedQueueName}" : $"Topic: {selectedTopicName} / {selectedSubscriptionName}")</small>
-                                    </div>
-                                    <div class="d-flex gap-2 align-items-center mb-2">
-                                        <button class="btn btn-success btn-sm" @onclick="ShowSendMessageModal">
-                                            📤 Send
-                                        </button>
-                                        <div class="form-check form-switch mb-0">
-                                            <input class="form-check-input" type="checkbox" id="dlqToggle" @bind="isViewingDLQ" @bind:after="OnDLQToggleChanged">
-                                            <label class="form-check-label" for="dlqToggle">
-                                                <small>@(isViewingDLQ ? "DLQ" : "View DLQ")</small>
-                                            </label>
-                                        </div>
-                                    </div>
-
-            <!-- Message operations buttons -->
-            <div class="d-flex gap-2 mb-2">
-                <button class="btn btn-primary btn-sm" @onclick="PeekMessages" disabled="@isPeeking">
-                    @if (isPeeking)
-                    {
-                        <span class="spinner-border spinner-border-sm me-1"></span>
-                    }
-                    👁️ Peek
-                </button>
-                @if (!isViewingDLQ)
-                {
-                    <button class="btn btn-info btn-sm" @onclick="ShowMonitorModal">
-                        📡 Monitor
-                    </button>
-                }
-                <button class="btn btn-danger btn-sm" @onclick="PurgeMessages" disabled="@isPurging">
-                    @if (isPurging)
-                    {
-                        <span class="spinner-border spinner-border-sm me-1"></span>
-                    }
-                    🗑️ Purge
-                </button>
-            </div>
-
-            <!-- Peek Options Accordion -->
-            <div class="card mb-2">
-                <div class="card-header py-1 px-2" style="cursor: pointer;" @onclick="TogglePeekOptions">
-                    <small>Peek Options</small>
-                    <span class="float-end">@(showPeekOptions ? "▼" : "▶")</span>
-                </div>
-                @if (showPeekOptions)
-                {
-                    <div class="card-body p-2">
-                        <div class="row g-2">
-                            <div class="col-6">
-                                <label class="form-label small mb-1">Count</label>
-                                <input type="number" class="form-control form-control-sm" @bind="peekCount" min="1" max="100" />
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small mb-1">From Sequence</label>
-                                <input type="number" class="form-control form-control-sm" @bind="peekFromSequence" min="0" />
-                            </div>
-                        </div>
-                    </div>
-                }
-            </div>
-            
-            <!-- Operation hints -->
-            <div class="mt-1">
-                <small class="text-muted">
-                    @if (isViewingDLQ)
-                    {
-                        <span>💡 Select messages to Resubmit or Delete</span>
-                    }
-                    else
-                    {
-                        <span>💡 Select messages to Delete or Move to DLQ</span>
-                    }
-                </small>
-            </div>
-                                </div>
-                            </div>
-                        }
+                        <OperationsPanel 
+                            SelectedQueueName="@selectedQueueName"
+                            SelectedTopicName="@selectedTopicName"
+                            SelectedSubscriptionName="@selectedSubscriptionName"
+                            IsViewingDLQ="@isViewingDLQ"
+                            IsPeeking="@isPeeking"
+                            IsPurging="@isPurging"
+                            PeekCount="@peekCount"
+                            PeekFromSequence="@peekFromSequence"
+                            OnDLQToggleChanged="@OnDLQToggleChanged"
+                            OnPeek="@PeekMessages"
+                            OnMonitor="@ShowMonitorModal"
+                            OnPurge="@PurgeMessages"
+                            OnSendMessage="@ShowSendMessageModal" />
                     </div>
                 </div>
             }
@@ -303,6 +135,16 @@
                     OnClose="@(() => showReceiveAndLockModal = false)"
                     OnLockMessages="@LockMessagesForModal" />
 
+<ConfirmModal IsVisible="@showConfirmModal"
+             Title="@confirmModalTitle"
+             Message="@confirmModalMessage"
+             DetailMessage="@confirmModalDetail"
+             ConfirmButtonText="@confirmModalButtonText"
+             ConfirmButtonClass="@confirmModalButtonClass"
+             IsProcessing="@isConfirmProcessing"
+             OnConfirm="@OnConfirmModalConfirm"
+             OnCancel="@OnConfirmModalCancel" />
+
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
     public string? NamespaceParam { get; set; }
@@ -344,23 +186,25 @@
     private bool showMonitorModal = false;
     private bool showReceiveAndLockModal = false;
     private bool isProcessingBatch = false;
+    private bool showConfirmModal = false;
+    private string confirmModalTitle = "";
+    private string confirmModalMessage = "";
+    private string? confirmModalDetail = null;
+    private string confirmModalButtonText = "Confirm";
+    private string confirmModalButtonClass = "btn-primary";
+    private bool isConfirmProcessing = false;
+    private Func<Task>? confirmModalAction = null;
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
     private int peekCount = 10;
     private int peekFromSequence = 0;
-    private bool showPeekOptions = false;
     private string? errorMessage;
     
     // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
     private string NamespaceNameOnly => NamespaceParam?.Split('.').FirstOrDefault() ?? "";
 
     private string? _lastNamespace;
-
-    private void TogglePeekOptions()
-    {
-        showPeekOptions = !showPeekOptions;
-    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -381,6 +225,10 @@
             selectedTopicName = null;
             selectedSubscriptionName = null;
             peekedMessages.Clear();
+            
+            // Clear all entity dictionaries when switching namespaces
+            queueDict.Clear();
+            topicDict.Clear();
             subscriptionDict.Clear();
             
             await LoadEntitiesAsync();
@@ -632,12 +480,24 @@
         }
     }
 
-    private async Task PurgeMessages()
+    private void PurgeMessages()
     {
-        if (!await ConfirmAction("Are you sure you want to purge all messages? This cannot be undone."))
-            return;
+        var entityName = selectedQueueName ?? $"{selectedTopicName}/{selectedSubscriptionName}";
+        var dlqSuffix = isViewingDLQ ? " (Dead Letter Queue)" : "";
+        
+        ShowConfirmModal(
+            title: "Confirm Purge",
+            message: $"Are you sure you want to purge all messages from {entityName}{dlqSuffix}?",
+            detail: "This action cannot be undone. All messages will be permanently deleted.",
+            confirmText: "Purge All Messages",
+            confirmClass: "btn-danger",
+            onConfirm: ExecutePurgeMessages
+        );
+    }
 
-        isPurging = true;
+    private async Task ExecutePurgeMessages()
+    {
+        isConfirmProcessing = true;
         errorMessage = null;
 
         try
@@ -654,6 +514,7 @@
 
             peekedMessages.Clear();
             Console.WriteLine($"Purged {count} messages");
+            CloseConfirmModal();
         }
         catch (Exception ex)
         {
@@ -662,7 +523,7 @@
         }
         finally
         {
-            isPurging = false;
+            isConfirmProcessing = false;
         }
     }
 
@@ -784,15 +645,41 @@
         }
     }
 
-    private void OnDLQToggleChanged()
+    private void OnDLQToggleChanged(bool newValue)
     {
+        isViewingDLQ = newValue;
         peekedMessages.Clear();
     }
 
-    private async Task<bool> ConfirmAction(string message)
+    private void ShowConfirmModal(string title, string message, string? detail, string confirmText, string confirmClass, Func<Task> onConfirm)
     {
-        // Simple confirmation - in a real app you'd want a proper modal
-        return await Task.FromResult(true); // For now, always confirm
+        confirmModalTitle = title;
+        confirmModalMessage = message;
+        confirmModalDetail = detail;
+        confirmModalButtonText = confirmText;
+        confirmModalButtonClass = confirmClass;
+        confirmModalAction = onConfirm;
+        showConfirmModal = true;
+    }
+
+    private void CloseConfirmModal()
+    {
+        showConfirmModal = false;
+        confirmModalAction = null;
+        isConfirmProcessing = false;
+    }
+
+    private async Task OnConfirmModalConfirm()
+    {
+        if (confirmModalAction != null)
+        {
+            await confirmModalAction();
+        }
+    }
+
+    private void OnConfirmModalCancel()
+    {
+        CloseConfirmModal();
     }
 
     private void GoBack()
@@ -845,12 +732,22 @@
     }
 
     // Batch operations
-    private async Task DeleteMessages(List<long> sequenceNumbers)
+    private void DeleteMessages(List<long> sequenceNumbers)
     {
-        if (!await ConfirmAction($"Delete {sequenceNumbers.Count} message(s)?"))
-            return;
+        ShowConfirmModal(
+            title: "Confirm Delete",
+            message: $"Are you sure you want to delete {sequenceNumbers.Count} message(s)?",
+            detail: "This action cannot be undone.",
+            confirmText: "Delete Messages",
+            confirmClass: "btn-danger",
+            onConfirm: async () => await ExecuteDeleteMessages(sequenceNumbers)
+        );
+    }
 
-        isProcessingBatch = true;
+    private async Task ExecuteDeleteMessages(List<long> sequenceNumbers)
+    {
+
+        isConfirmProcessing = true;
         errorMessage = null;
 
         try
@@ -866,6 +763,7 @@
             
             // Remove deleted messages from the view
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+            CloseConfirmModal();
         }
         catch (Exception ex)
         {
@@ -874,16 +772,26 @@
         }
         finally
         {
-            isProcessingBatch = false;
+            isConfirmProcessing = false;
         }
     }
 
-    private async Task ResubmitMessages(List<long> sequenceNumbers)
+    private void ResubmitMessages(List<long> sequenceNumbers)
     {
-        if (!await ConfirmAction($"Resubmit {sequenceNumbers.Count} message(s) from DLQ?"))
-            return;
+        ShowConfirmModal(
+            title: "Confirm Resubmit",
+            message: $"Resubmit {sequenceNumbers.Count} message(s) from Dead Letter Queue?",
+            detail: "Messages will be sent back to the main queue/subscription.",
+            confirmText: "Resubmit Messages",
+            confirmClass: "btn-primary",
+            onConfirm: async () => await ExecuteResubmitMessages(sequenceNumbers)
+        );
+    }
 
-        isProcessingBatch = true;
+    private async Task ExecuteResubmitMessages(List<long> sequenceNumbers)
+    {
+
+        isConfirmProcessing = true;
         errorMessage = null;
 
         try
@@ -899,6 +807,7 @@
             
             // Remove resubmitted messages from the view
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+            CloseConfirmModal();
         }
         catch (Exception ex)
         {
@@ -906,16 +815,26 @@
         }
         finally
         {
-            isProcessingBatch = false;
+            isConfirmProcessing = false;
         }
     }
 
-    private async Task MoveToDLQMessages(List<long> sequenceNumbers)
+    private void MoveToDLQMessages(List<long> sequenceNumbers)
     {
-        if (!await ConfirmAction($"Move {sequenceNumbers.Count} message(s) to Dead Letter Queue?"))
-            return;
+        ShowConfirmModal(
+            title: "Confirm Move to DLQ",
+            message: $"Move {sequenceNumbers.Count} message(s) to Dead Letter Queue?",
+            detail: "Messages will be moved to the DLQ and marked as dead-lettered.",
+            confirmText: "Move to DLQ",
+            confirmClass: "btn-warning",
+            onConfirm: async () => await ExecuteMoveToDLQMessages(sequenceNumbers)
+        );
+    }
 
-        isProcessingBatch = true;
+    private async Task ExecuteMoveToDLQMessages(List<long> sequenceNumbers)
+    {
+
+        isConfirmProcessing = true;
         errorMessage = null;
 
         try
@@ -931,6 +850,7 @@
             
             // Remove moved messages from the view
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+            CloseConfirmModal();
         }
         catch (Exception ex)
         {
@@ -939,26 +859,26 @@
         }
         finally
         {
-            isProcessingBatch = false;
+            isConfirmProcessing = false;
         }
     }
 
     // Single message operations
-    private async Task DeleteSingleMessage(long sequenceNumber)
+    private void DeleteSingleMessage(long sequenceNumber)
     {
-        await DeleteMessages(new List<long> { sequenceNumber });
         CloseMessageDetail();
+        DeleteMessages(new List<long> { sequenceNumber });
     }
 
-    private async Task ResubmitSingleMessage(long sequenceNumber)
+    private void ResubmitSingleMessage(long sequenceNumber)
     {
-        await ResubmitMessages(new List<long> { sequenceNumber });
         CloseMessageDetail();
+        ResubmitMessages(new List<long> { sequenceNumber });
     }
 
-    private async Task MoveToDLQSingleMessage(long sequenceNumber)
+    private void MoveToDLQSingleMessage(long sequenceNumber)
     {
-        await MoveToDLQMessages(new List<long> { sequenceNumber });
         CloseMessageDetail();
+        MoveToDLQMessages(new List<long> { sequenceNumber });
     }
 }

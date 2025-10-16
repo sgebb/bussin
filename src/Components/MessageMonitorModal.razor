@@ -117,6 +117,7 @@
     [Parameter] public string? SubscriptionName { get; set; }
 
     private List<ServiceBusMessage> messages = new();
+    private HashSet<long> seenSequenceNumbers = new(); // Track seen messages by sequence number
     private bool isMonitoring = false;
     private string? errorMessage;
     private IJSObjectReference? monitorController;
@@ -141,12 +142,16 @@
                 return;
             }
 
-            // Create callback
+            // Create callback with deduplication
             callback = new MessageMonitorCallback(
                 onMessage: (msg) =>
                 {
-                    messages.Add(msg);
-                    InvokeAsync(StateHasChanged);
+                    // Only add message if we haven't seen this sequence number before
+                    if (msg.SequenceNumber.HasValue && seenSequenceNumbers.Add(msg.SequenceNumber.Value))
+                    {
+                        messages.Add(msg);
+                        InvokeAsync(StateHasChanged);
+                    }
                 },
                 onError: (err) =>
                 {
@@ -198,6 +203,7 @@
     private void ClearMessages()
     {
         messages.Clear();
+        seenSequenceNumbers.Clear();
     }
 
     private async Task Close()
