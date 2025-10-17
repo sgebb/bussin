@@ -1,0 +1,48 @@
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject IAnalyticsService Analytics
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Track initial page view
+        TrackPageView();
+        
+        // Subscribe to navigation events
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        TrackPageView();
+    }
+
+    private async void TrackPageView()
+    {
+        try
+        {
+            var uri = Navigation.Uri;
+            var title = GetPageTitle(Navigation.ToBaseRelativePath(uri));
+            await Analytics.TrackPageViewAsync(uri, title);
+        }
+        catch
+        {
+            // Silently fail
+        }
+    }
+
+    private string GetPageTitle(string path)
+    {
+        // Extract a meaningful title from the path
+        if (string.IsNullOrEmpty(path) || path == "/")
+            return "Home";
+        
+        var segments = path.TrimStart('/').Split('/');
+        return segments.Length > 0 ? segments[0] : "Page";
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

@@ -18,6 +18,22 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="bussin" />
+    
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-46J4E5R4DN"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        
+        // Configure GA4 with enhanced measurement
+        gtag('config', 'G-46J4E5R4DN', {
+            'send_page_view': true,
+            'cookie_flags': 'SameSite=None;Secure',
+            'allow_google_signals': true,
+            'allow_ad_personalization_signals': false
+        });
+    </script>
 </head>
 
 <body>
@@ -39,6 +55,7 @@
     </div>
     
     <script src="js/storage.js"></script>
+    <script src="js/analytics.js"></script>
     <script src="_content/Microsoft.Authentication.WebAssembly.Msal/AuthenticationService.js"></script>
     <script src="js/servicebus-api.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>

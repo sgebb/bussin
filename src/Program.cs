@@ -35,5 +35,6 @@ builder.Services.AddScoped<IPreferencesService, PreferencesService>();
 builder.Services.AddScoped<IMessageParsingService, MessageParsingService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NavigationStateService>();
+builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 await builder.Build().RunAsync();
