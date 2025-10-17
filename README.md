@@ -8,6 +8,18 @@ A zero-backend, installable tool for interacting with Azure Service Bus. Runs en
 
 Can be installed as a Progressive Web App (PWA) for offline access.
 
+## 📋 Prerequisites
+
+To use this application, you need:
+
+1. **Azure AD Authentication** - You must consent to the app's permissions when first signing in
+2. **Azure RBAC Roles** - You need appropriate roles on the Service Bus namespaces you want to manage:
+   - **Azure Service Bus Data Receiver** - To read/peek messages
+   - **Azure Service Bus Data Sender** - To send messages  
+   - **Azure Service Bus Data Owner** - For full access (delete, purge, dead-letter operations)
+
+The app will prompt you to sign in with your Microsoft account and request consent for Azure Resource Manager access to discover your Service Bus resources.
+
 ## Features
 
 ### Message Operations
@@ -72,18 +84,13 @@ You can also check `buildinfo.json` at the root of the deployed site.
 
 ### 🚀 Ready to Start
 
-- [ ] **Confirm-modal on purge** - Add confirmation dialog before purging queues/subscriptions
 - [ ] **General code improvements** - Refactor to be more modular, separate business logic into services, improve component structure
 - [ ] **UI: Better light/dark mode color schemes** - More consistent and polished color palette across themes
 - [ ] **UI: Introduce component framework** - Evaluate Blazorize/MudBlazor for better component consistency and easier theme management
-- [ ] **UI: Maybe Tailwind?** - Consider migrating to Tailwind CSS for more flexible styling
-- [ ] **Include underlying TypeScript code** - Integrate `servicebusapi.ts` into this repository and build/publish as part of the same process instead of separate project
 
 ### 🐛 Bugs & Issues
 
 - [ ] **Message scheduling verification** - Verify scheduling actually works, add UI to show number of scheduled messages
-- [ ] **Monitor: broken** - Investigate and fix monitor functionality
-- [ ] **MoveDLQ: sometimes fails** - Debug and fix reliability issues with moving messages from/to DLQ
 
 ### 🎨 UX Improvements
 
@@ -95,6 +102,55 @@ You can also check `buildinfo.json` at the root of the deployed site.
 - [ ] **Upgrade to .NET 10** - Migrate from current .NET version to .NET 10 (when released/stable)
 - [ ] **Verified publisher in Entra ID** - Complete Microsoft verification process for the app registration
 - [ ] **Consider ads/donate button** - Evaluate monetization options (depends on hosting model, may require Azure Static Web Apps, consider tax implications for foreign income in Norway)
+
+## 🛠️ Development
+
+### Prerequisites
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [Node.js 20+](https://nodejs.org/) and npm
+
+### Building
+
+This repository contains two components:
+
+1. **client-js** - TypeScript AMQP client library (builds to `src/wwwroot/js/servicebus-api.js`)
+2. **src** - Blazor WebAssembly application
+
+**Build everything:**
+```bash
+# Windows PowerShell
+.\build.ps1
+
+# Linux/macOS
+./build.sh
+```
+
+**Build specific components:**
+```bash
+# Windows PowerShell
+.\build.ps1 -Target js          # Build only client-js
+.\build.ps1 -Target dotnet      # Build only .NET app
+
+# Linux/macOS
+./build.sh js                   # Build only client-js
+./build.sh dotnet               # Build only .NET app
+```
+
+### Running Locally
+
+```bash
+# Build client-js first
+cd client-js
+npm install
+npm run build
+
+# Run .NET app
+cd ../src
+dotnet run
+```
+
+The app will be available at `https://localhost:5001`
 
 ## 🤝 Contributing
 

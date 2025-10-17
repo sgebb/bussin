@@ -42,6 +42,31 @@
     <script src="_content/Microsoft.Authentication.WebAssembly.Msal/AuthenticationService.js"></script>
     <script src="js/servicebus-api.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
+    
+    <script>
+        // Helper functions for monitoring with DotNetObjectReference callbacks
+        window.startMonitoringQueue = async function(namespaceName, queueName, token, dotnetRef) {
+            return await ServiceBusAPI.monitorQueue(
+                namespaceName,
+                queueName,
+                token,
+                (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
+                (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
+            );
+        };
+
+        window.startMonitoringSubscription = async function(namespaceName, topicName, subscriptionName, token, dotnetRef) {
+            return await ServiceBusAPI.monitorSubscription(
+                namespaceName,
+                topicName,
+                subscriptionName,
+                token,
+                (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
+                (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
+            );
+        };
+    </script>
+    
     <script>
         // Register service worker for PWA installability
         if ('serviceWorker' in navigator) {

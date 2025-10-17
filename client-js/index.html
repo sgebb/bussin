@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Service Bus Browser Client</title>
+<script type="module">
+  // Setup Buffer and EventEmitter polyfills for browser (needed by rhea)
+  import { Buffer } from 'buffer';
+  import { EventEmitter } from 'events';
+  
+  window.Buffer = Buffer;
+  globalThis.Buffer = Buffer;
+  window.EventEmitter = EventEmitter;
+  globalThis.EventEmitter = EventEmitter;
+  
+  // Ensure process is defined for debugging
+  if (typeof window.process === 'undefined') {
+    window.process = { env: { NODE_DEBUG: false } };
+  }
+</script>
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .info {
+        background: #e3f2fd;
+        padding: 15px;
+        border-left: 4px solid #2196f3;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    .controls {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+    .controls label {
+        display: block;
+        margin-bottom: 10px;
+    }
+    .controls input, .controls select {
+        width: 100%;
+        padding: 8px;
+        margin-top: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .section {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    .section h3 {
+        margin-top: 0;
+        color: #0078d4;
+    }
+    button {
+        background: #0078d4;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px 5px 5px 0;
+        font-size: 14px;
+    }
+    button:hover {
+        background: #106ebe;
+    }
+    button.danger {
+        background: #d13438;
+    }
+    button.danger:hover {
+        background: #a72b2e;
+    }
+    button.success {
+        background: #107c10;
+    }
+    button.success:hover {
+        background: #0d630d;
+    }
+    button.warning {
+        background: #ff8c00;
+    }
+    button.warning:hover {
+        background: #cc7000;
+    }
+    pre {
+        background: #f9f9f9;
+        padding: 15px;
+        border-radius: 4px;
+        overflow-x: auto;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        margin-top: 10px;
+    }
+    .checkbox-label input[type="checkbox"] {
+        width: auto;
+        margin-right: 8px;
+    }
+</style>
+</head>
+<body>
+<h1>🚀 Azure Service Bus Browser Client</h1>
+
+<div class="info">
+    <strong>ℹ️ Browser-based Service Bus Operations</strong><br>
+    Connect directly to Azure Service Bus from your browser using AMQP over WebSocket.
+    No backend required - authenticate with your Azure AD token.
+</div>
+
+<div class="controls">
+    <div class="grid">
+        <label>
+            Namespace:
+            <input id="namespace" type="text" placeholder="myservicebus">
+        </label>
+        <label>
+            AAD Token:
+            <input id="aadToken" type="password" placeholder="eyJ0eXAiOiJKV1Q...">
+        </label>
+    </div>
+    <div class="grid">
+        <label>
+            Entity Type:
+            <select id="entityType">
+                <option value="queue">Queue</option>
+                <option value="subscription">Topic/Subscription</option>
+            </select>
+        </label>
+        <label id="queueNameLabel">
+            Queue Name:
+            <input id="queueName" type="text" placeholder="myqueue">
+        </label>
+        <label id="topicNameLabel" style="display:none;">
+            Topic Name:
+            <input id="topicName" type="text" placeholder="mytopic">
+        </label>
+    </div>
+    <div id="subscriptionNameDiv" style="display:none;">
+        <label>
+            Subscription Name:
+            <input id="subscriptionName" type="text" placeholder="mysubscription">
+        </label>
+    </div>
+    <label class="checkbox-label">
+        <input type="checkbox" id="fromDeadLetter">
+        Use Dead Letter Queue
+    </label>
+</div>
+
+<div class="section">
+    <h3>📥 Read Operations</h3>
+    <label>
+        Count:
+        <input id="messageCount" type="number" value="10" min="1" max="100" style="width: 80px;">
+    </label>
+    <label>
+        From Sequence (for paging):
+        <input id="fromSequence" type="number" value="0" min="0" style="width: 100px;">
+    </label>
+    <br><br>
+    <button id="peekBtn">Peek Messages</button>
+    <button id="peekLockBtn">Peek-Lock Messages</button>
+</div>
+
+<div class="section">
+    <h3>📤 Write Operations</h3>
+    <label>
+        Message Body:
+        <input id="messageBody" type="text" placeholder='{"message": "Hello World"}'>
+    </label>
+    <button id="sendBtn" class="success">Send Message</button>
+    <br><br>
+    <label class="checkbox-label">
+        <input type="checkbox" id="scheduleMessage">
+        Schedule Message
+    </label>
+    <div id="scheduleDiv" style="display:none; margin-top: 10px;">
+        <label>
+            Schedule Time (ISO format or relative):
+            <input id="scheduleTime" type="text" placeholder="2025-12-31T23:59:59Z or +5m">
+        </label>
+        <small style="color: #666;">ℹ️ Examples: +5m (5 minutes), +1h (1 hour), +1d (1 day), or ISO timestamp</small>
+    </div>
+</div>
+
+
+<div class="section">
+    <h3>🗑️ Destructive Operations</h3>
+    <button id="purgeBtn" class="danger">Purge All Messages</button>
+    <span id="purgeStatus" style="margin-left: 10px; font-weight: bold;"></span>
+</div>
+
+<div class="section">
+    <h3>🔒 Locked Message Operations</h3>
+    <small style="color: #666;">ℹ️ These operations work on locked messages. Use Peek-Lock button above first.</small>
+    <br><br>
+    <div id="lockedMessagesList" style="margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+        <em>No messages locked. Use Peek-Lock button above.</em>
+    </div>
+    <button id="completeAllBtn" class="success">Complete All</button>
+    <button id="abandonAllBtn" class="warning">Abandon All</button>
+    <button id="deadLetterAllBtn" class="danger">Dead Letter All</button>
+    <br><br>
+    <label>
+        Resend All To (queue or topic name):
+        <input id="resendTarget" type="text" placeholder="target-queue or target-topic">
+    </label>
+    <button id="resendAllBtn" class="warning">Resend All & Complete</button>
+</div>
+
+<pre id="output">Ready. Click "Peek Messages" or "Send Message" to start...</pre>
+
+<script type="module" src="/serviceBusApi.ts"></script>
+<script type="module">
+import { 
+    peekQueueMessages, 
+    peekSubscriptionMessages,
+    sendQueueMessage, 
+    sendTopicMessage,
+    sendScheduledQueueMessage,
+    sendScheduledTopicMessage,
+    receiveAndLockQueueMessage,
+    receiveAndLockSubscriptionMessage,
+    complete,
+    abandon,
+    deadLetter,
+    purgeQueue,
+    purgeSubscription
+} from './serviceBusApi.ts';
+
+const output = document.getElementById('output');
+const lockedMessagesMap = new Map(); // Track locked messages
+
+function log(message) {
+    output.textContent += message + '\n';
+}
+
+function clearLog() {
+    output.textContent = '';
+}
+
+function updateLockedMessagesList() {
+    const listEl = document.getElementById('lockedMessagesList');
+    if (lockedMessagesMap.size === 0) {
+        listEl.innerHTML = '<em>No messages locked. Use Peek-Lock button above.</em>';
+    } else {
+        listEl.innerHTML = Array.from(lockedMessagesMap.entries())
+            .map(([token, msg]) => `<div style="margin: 5px 0; padding: 5px; background: white; border-radius: 3px;">
+                <strong>Seq ${msg.sequenceNumber}</strong> - ${msg.messageId || 'no-id'}<br>
+                <small style="color: #666;">Lock: ${token.substring(0, 16)}...</small>
+            </div>`)
+            .join('');
+    }
+}
+
+function getConfig() {
+    const namespace = document.getElementById('namespace').value.trim();
+    const token = document.getElementById('aadToken').value.trim();
+    const entityType = document.getElementById('entityType').value;
+    const fromDeadLetter = document.getElementById('fromDeadLetter').checked;
+    
+    if (entityType === 'queue') {
+        const queueName = document.getElementById('queueName').value.trim();
+        return { namespace, token, entityType, queueName, fromDeadLetter };
+    } else {
+        const topicName = document.getElementById('topicName').value.trim();
+        const subscriptionName = document.getElementById('subscriptionName').value.trim();
+        return { namespace, token, entityType, topicName, subscriptionName, fromDeadLetter };
+    }
+}
+
+function validateConfig(config, requireMessage = false) {
+    if (!config.namespace || !config.token) {
+        return 'Please fill in namespace and token';
+    }
+    if (config.entityType === 'queue' && !config.queueName) {
+        return 'Please fill in queue name';
+    }
+    if (config.entityType === 'subscription' && (!config.topicName || !config.subscriptionName)) {
+        return 'Please fill in topic and subscription names';
+    }
+    if (requireMessage) {
+        const messageBody = document.getElementById('messageBody').value.trim();
+        if (!messageBody) return 'Please fill in message body';
+    }
+    return null;
+}
+
+// Entity type switcher
+document.getElementById('entityType').addEventListener('change', (e) => {
+    const isQueue = e.target.value === 'queue';
+    document.getElementById('queueNameLabel').style.display = isQueue ? 'block' : 'none';
+    document.getElementById('topicNameLabel').style.display = isQueue ? 'none' : 'block';
+    document.getElementById('subscriptionNameDiv').style.display = isQueue ? 'none' : 'block';
+});
+
+// Schedule message toggle
+document.getElementById('scheduleMessage').addEventListener('change', (e) => {
+    document.getElementById('scheduleDiv').style.display = e.target.checked ? 'block' : 'none';
+});
+
+// Peek Messages
+document.getElementById('peekBtn').addEventListener('click', async () => {
+    clearLog();
+    const config = getConfig();
+    const error = validateConfig(config);
+    if (error) {
+        log('❌ ERROR: ' + error);
+        return;
+    }
+    
+    const count = parseInt(document.getElementById('messageCount').value) || 10;
+    const fromSeq = parseInt(document.getElementById('fromSequence').value) || 0;
+    
+    log(`👀 Peeking ${count} messages from sequence ${fromSeq}${config.fromDeadLetter ? ' (DLQ)' : ''}...`);
+    
+    try {
+        const messages = config.entityType === 'queue'
+            ? await peekQueueMessages(config.namespace, config.queueName, config.token, count, fromSeq, config.fromDeadLetter)
+            : await peekSubscriptionMessages(config.namespace, config.topicName, config.subscriptionName, config.token, count, fromSeq, config.fromDeadLetter);
+        
+        if (messages.length === 0) {
+            log('No messages found');
+        } else {
+            log(`✅ Found ${messages.length} message(s):`);
+            log('═══════════════════════════════════════');
+            messages.forEach((msg, index) => {
+                log(`\n─── Message ${index + 1} ───`);
+                log(`Message ID: ${msg.messageId}`);
+                log(`Sequence: ${msg.sequenceNumber}`);
+                log(`Delivery Count: ${msg.deliveryCount}`);
+                log(`Enqueued: ${msg.enqueuedTime}`);
+                log(`Content Type: ${msg.contentType || 'none'}`);
+                
+                // Show if message is scheduled
+                const scheduledTime = msg.properties?.['x-opt-scheduled-enqueue-time'];
+                if (scheduledTime) {
+                    log(`📅 Scheduled for: ${new Date(scheduledTime).toISOString()}`);
+                }
+                
+                log('\nBody:');
+                log(typeof msg.body === 'object' ? JSON.stringify(msg.body, null, 2) : msg.body);
+            });
+            log('\n═══════════════════════════════════════');
+            
+            // Show next sequence for paging
+            if (messages.length > 0) {
+                const lastSeq = messages[messages.length - 1].sequenceNumber;
+                log(`\n💡 To see next page, set "From Sequence" to ${lastSeq + 1}`);
+            }
+        }
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        console.error(err);
+    }
+});
+
+// Send Message
+document.getElementById('sendBtn').addEventListener('click', async () => {
+    clearLog();
+    const config = getConfig();
+    const error = validateConfig(config, true);
+    if (error) {
+        log('❌ ERROR: ' + error);
+        return;
+    }
+    
+    const messageBody = document.getElementById('messageBody').value.trim();
+    const isScheduled = document.getElementById('scheduleMessage').checked;
+    
+    try {
+        let body;
+        try {
+            body = JSON.parse(messageBody);
+        } catch {
+            body = messageBody;
+        }
+        
+        if (isScheduled) {
+            const scheduleInput = document.getElementById('scheduleTime').value.trim();
+            if (!scheduleInput) {
+                log('❌ ERROR: Please enter a schedule time');
+                return;
+            }
+            
+            // Parse schedule time (relative or absolute)
+            let scheduleTime;
+            if (scheduleInput.startsWith('+')) {
+                const match = scheduleInput.match(/\+(\d+)([mhd])/);
+                if (!match) {
+                    log('❌ ERROR: Invalid relative time format. Use +5m, +1h, or +1d');
+                    return;
+                }
+                const value = parseInt(match[1]);
+                const unit = match[2];
+                scheduleTime = new Date();
+                if (unit === 'm') scheduleTime.setMinutes(scheduleTime.getMinutes() + value);
+                else if (unit === 'h') scheduleTime.setHours(scheduleTime.getHours() + value);
+                else if (unit === 'd') scheduleTime.setDate(scheduleTime.getDate() + value);
+            } else {
+                scheduleTime = new Date(scheduleInput);
+                if (isNaN(scheduleTime.getTime())) {
+                    log('❌ ERROR: Invalid date format');
+                    return;
+                }
+            }
+            
+            log(`📅 Sending scheduled message (visible at ${scheduleTime.toISOString()})...`);
+            
+            if (config.entityType === 'queue') {
+                await sendScheduledQueueMessage(config.namespace, config.queueName, config.token, body, scheduleTime);
+            } else {
+                await sendScheduledTopicMessage(config.namespace, config.topicName, config.token, body, scheduleTime);
+            }
+            
+            log('✅ Scheduled message sent successfully!');
+            log(`\nWill be visible at: ${scheduleTime.toISOString()}`);
+        } else {
+            log('📤 Sending message...');
+            
+            if (config.entityType === 'queue') {
+                await sendQueueMessage(config.namespace, config.queueName, config.token, body);
+            } else {
+                await sendTopicMessage(config.namespace, config.topicName, config.token, body);
+            }
+            
+            log('✅ Message sent successfully!');
+        }
+        
+        log('\nMessage body:');
+        log(JSON.stringify(body, null, 2));
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        console.error(err);
+    }
+});
+
+// Peek-Lock
+document.getElementById('peekLockBtn').addEventListener('click', async () => {
+    clearLog();
+    const config = getConfig();
+    const error = validateConfig(config);
+    if (error) {
+        log('❌ ERROR: ' + error);
+        return;
+    }
+    
+    const count = parseInt(document.getElementById('messageCount').value) || 10;
+    
+    log(`🔒 Locking ${count} message(s)${config.fromDeadLetter ? ' from DLQ' : ''}...`);
+    
+    try {
+        const messages = config.entityType === 'queue'
+            ? await receiveAndLockQueueMessage(config.namespace, config.queueName, config.token, 5, config.fromDeadLetter, count)
+            : await receiveAndLockSubscriptionMessage(config.namespace, config.topicName, config.subscriptionName, config.token, 5, config.fromDeadLetter, count);
+        
+        if (messages.length === 0) {
+            log('No messages available');
+        } else {
+            log(`✅ Locked ${messages.length} message(s):`);
+            messages.forEach((msg, index) => {
+                log(`\n${index + 1}. Seq ${msg.sequenceNumber} - ${msg.messageId || 'no-id'}`);
+                log(`   Lock: ${msg.lockToken.substring(0, 32)}...`);
+                lockedMessagesMap.set(msg.lockToken, msg);
+            });
+            updateLockedMessagesList();
+            log(`\n⚠️ Use the "Locked Message Operations" section below to process these messages`);
+        }
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        console.error(err);
+    }
+});
+
+// Purge
+document.getElementById('purgeBtn').addEventListener('click', async () => {
+    const config = getConfig();
+    const source = config.fromDeadLetter ? 'DLQ' : 'active queue/subscription';
+    if (!confirm(`⚠️ This will DELETE ALL messages from ${source}. Are you sure?`)) {
+        return;
+    }
+    
+    clearLog();
+    const error = validateConfig(config);
+    if (error) {
+        log('❌ ERROR: ' + error);
+        return;
+    }
+    
+    log(`🗑️ Purging all messages from ${source}...`);
+    const statusEl = document.getElementById('purgeStatus');
+    
+    try {
+        const controller = config.entityType === 'queue'
+            ? await purgeQueue(config.namespace, config.queueName, config.token, (count) => {
+                statusEl.textContent = `Deleted: ${count}`;
+            }, config.fromDeadLetter)
+            : await purgeSubscription(config.namespace, config.topicName, config.subscriptionName, config.token, (count) => {
+                statusEl.textContent = `Deleted: ${count}`;
+            }, config.fromDeadLetter);
+        
+        const totalDeleted = await controller.promise;
+        log(`✅ Purge complete! Deleted ${totalDeleted} message(s)`);
+        statusEl.textContent = '';
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        statusEl.textContent = '';
+        console.error(err);
+    }
+});
+
+// Complete All Locked Messages
+document.getElementById('completeAllBtn').addEventListener('click', async () => {
+    clearLog();
+    if (lockedMessagesMap.size === 0) {
+        log('❌ ERROR: No locked messages. Use Peek-Lock button first.');
+        return;
+    }
+    
+    log(`✅ Completing ${lockedMessagesMap.size} message(s)...`);
+    
+    try {
+        const lockTokens = Array.from(lockedMessagesMap.keys());
+        const result = await complete(lockTokens);
+        log(`✅ Success: ${result.successCount}`);
+        log(`❌ Failed: ${result.failureCount}`);
+        if (result.errors.length > 0) {
+            log('\nErrors:');
+            result.errors.forEach(e => log(`  - ${e.messageId.substring(0, 16)}...: ${e.error}`));
+        }
+        lockedMessagesMap.clear();
+        updateLockedMessagesList();
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        console.error(err);
+    }
+});
+
+// Abandon All Locked Messages
+document.getElementById('abandonAllBtn').addEventListener('click', async () => {
+    clearLog();
+    if (lockedMessagesMap.size === 0) {
+        log('❌ ERROR: No locked messages. Use Peek-Lock button first.');
+        return;
+    }
+    
+    log(`⚠️ Abandoning ${lockedMessagesMap.size} message(s)...`);
+    
+    try {
+        const lockTokens = Array.from(lockedMessagesMap.keys());
+        const result = await abandon(lockTokens);
+        log(`✅ Success: ${result.successCount}`);
+        log(`❌ Failed: ${result.failureCount}`);
+        if (result.errors.length > 0) {
+            log('\nErrors:');
+            result.errors.forEach(e => log(`  - ${e.messageId.substring(0, 16)}...: ${e.error}`));
+        }
+        lockedMessagesMap.clear();
+        updateLockedMessagesList();
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        console.error(err);
+    }
+});
+
+// Dead Letter All Locked Messages
+document.getElementById('deadLetterAllBtn').addEventListener('click', async () => {
+    clearLog();
+    if (lockedMessagesMap.size === 0) {
+        log('❌ ERROR: No locked messages. Use Peek-Lock button first.');
+        return;
+    }
+    
+    log(`💀 Moving ${lockedMessagesMap.size} message(s) to dead letter queue...`);
+    
+    try {
+        const lockTokens = Array.from(lockedMessagesMap.keys());
+        const result = await deadLetter(lockTokens, {
+            deadLetterReason: 'Manual dead letter from browser',
+            deadLetterErrorDescription: 'User manually dead lettered these messages'
+        });
+        log(`✅ Success: ${result.successCount}`);
+        log(`❌ Failed: ${result.failureCount}`);
+        if (result.errors.length > 0) {
+            log('\nErrors:');
+            result.errors.forEach(e => log(`  - ${e.messageId.substring(0, 16)}...: ${e.error}`));
+        }
+        lockedMessagesMap.clear();
+        updateLockedMessagesList();
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        console.error(err);
+    }
+});
+
+// Resend All Locked Messages (Blazor-style orchestration: send + complete)
+document.getElementById('resendAllBtn').addEventListener('click', async () => {
+    clearLog();
+    if (lockedMessagesMap.size === 0) {
+        log('❌ ERROR: No locked messages. Use Peek-Lock button first.');
+        return;
+    }
+    
+    const targetEntity = document.getElementById('resendTarget').value.trim();
+    if (!targetEntity) {
+        log('❌ ERROR: Please enter a target queue or topic name');
+        return;
+    }
+    
+    const config = getConfig();
+    const error = validateConfig(config, true);
+    if (error) {
+        log('❌ ERROR: ' + error);
+        return;
+    }
+    
+    log(`🔄 Resending ${lockedMessagesMap.size} message(s) to: ${targetEntity}...`);
+    
+    try {
+        const messages = Array.from(lockedMessagesMap.values());
+        const lockTokens = Array.from(lockedMessagesMap.keys());
+        let sentCount = 0;
+        let sendErrors = [];
+        
+        // Step 1: Send all messages to target
+        for (const msg of messages) {
+            try {
+                await sendQueueMessage(config.namespace, targetEntity, config.token, msg.body);
+                sentCount++;
+            } catch (err) {
+                sendErrors.push({ messageId: msg.lockToken.substring(0, 16), error: err.message });
+            }
+        }
+        
+        log(`📤 Sent: ${sentCount}/${messages.length}`);
+        
+        // Step 2: Complete (delete) originals using lock tokens
+        const result = await complete(lockTokens);
+        log(`✅ Completed: ${result.successCount}`);
+        log(`❌ Failed to complete: ${result.failureCount}`);
+        
+        if (sendErrors.length > 0) {
+            log('\nSend errors:');
+            sendErrors.forEach(e => log(`  - ${e.messageId}...: ${e.error}`));
+        }
+        if (result.errors.length > 0) {
+            log('\nComplete errors:');
+            result.errors.forEach(e => log(`  - ${e.messageId.substring(0, 16)}...: ${e.error}`));
+        }
+        
+        lockedMessagesMap.clear();
+        updateLockedMessagesList();
+        document.getElementById('resendTarget').value = '';
+    } catch (err) {
+        log('❌ ERROR: ' + err.message);
+        console.error(err);
+    }
+});
+</script>
+</body>
+</html>

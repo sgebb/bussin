@@ -258,20 +258,13 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     {
         try
         {
-            // Create a helper function and invoke it
-            var helperFunc = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "eval",
-                @"(async function(ns, queue, token, dotnetRef) {
-                    return await ServiceBusAPI.monitorQueue(
-                        ns, 
-                        queue, 
-                        token,
-                        (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
-                        (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
-                    );
-                })");
-            
-            var controller = await helperFunc.InvokeAsync<IJSObjectReference>("call", null, namespaceName, queueName, token, callbackRef);
+            // Call the JavaScript helper function directly
+            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "startMonitoringQueue",
+                namespaceName, 
+                queueName, 
+                token, 
+                callbackRef);
             
             return controller;
         }
@@ -286,21 +279,14 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     {
         try
         {
-            // Create a helper function and invoke it
-            var helperFunc = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "eval",
-                @"(async function(ns, topic, sub, token, dotnetRef) {
-                    return await ServiceBusAPI.monitorSubscription(
-                        ns, 
-                        topic,
-                        sub,
-                        token,
-                        (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
-                        (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
-                    );
-                })");
-            
-            var controller = await helperFunc.InvokeAsync<IJSObjectReference>("call", null, namespaceName, topicName, subscriptionName, token, callbackRef);
+            // Call the JavaScript helper function directly
+            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "startMonitoringSubscription",
+                namespaceName, 
+                topicName, 
+                subscriptionName, 
+                token, 
+                callbackRef);
             
             return controller;
         }

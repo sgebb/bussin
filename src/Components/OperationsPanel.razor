@@ -1,0 +1,125 @@
+@* Operations panel for selected entity *@
+@if (SelectedQueueName != null || SelectedSubscriptionName != null)
+{
+    <div class="card">
+        <div class="card-body p-2">
+            <div class="mb-2">
+                <small class="fw-bold">@(SelectedQueueName != null ? $"Queue: {SelectedQueueName}" : $"Topic: {SelectedTopicName} / {SelectedSubscriptionName}")</small>
+            </div>
+
+            <!-- Send and DLQ Toggle -->
+            <div class="d-flex gap-2 align-items-center mb-2">
+                <button class="btn btn-success btn-sm" @onclick="OnSendMessage">
+                    📤 Send
+                </button>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="dlqToggle" @bind="isDLQ" @bind:after="HandleDLQToggleChanged">
+                    <label class="form-check-label" for="dlqToggle">
+                        <small>@(isDLQ ? "DLQ" : "View DLQ")</small>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Message operations buttons -->
+            <div class="d-flex gap-2 mb-2">
+                <button class="btn btn-primary btn-sm" @onclick="OnPeek" disabled="@IsPeeking">
+                    @if (IsPeeking)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    👁️ Peek
+                </button>
+                @if (!isDLQ)
+                {
+                    <button class="btn btn-info btn-sm" @onclick="OnMonitor">
+                        📡 Monitor
+                    </button>
+                }
+                <button class="btn btn-danger btn-sm" @onclick="OnPurge" disabled="@IsPurging">
+                    @if (IsPurging)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    🗑️ Purge
+                </button>
+            </div>
+
+            <!-- Peek Options Accordion -->
+            <div class="card mb-2">
+                <div class="card-header py-1 px-2" style="cursor: pointer;" @onclick="TogglePeekOptions">
+                    <small>Peek Options</small>
+                    <span class="float-end">@(showPeekOptions ? "▼" : "▶")</span>
+                </div>
+                @if (showPeekOptions)
+                {
+                    <div class="card-body p-2">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small mb-1">Count</label>
+                                <input type="number" class="form-control form-control-sm" @bind="peekCount" min="1" max="100" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small mb-1">From Sequence</label>
+                                <input type="number" class="form-control form-control-sm" @bind="peekFromSequence" min="0" />
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            
+            <!-- Operation hints -->
+            <div class="mt-1">
+                <small class="text-muted">
+                    @if (isDLQ)
+                    {
+                        <span>💡 Select messages to Resubmit or Delete</span>
+                    }
+                    else
+                    {
+                        <span>💡 Select messages to Delete or Move to DLQ</span>
+                    }
+                </small>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? SelectedQueueName { get; set; }
+    [Parameter] public string? SelectedTopicName { get; set; }
+    [Parameter] public string? SelectedSubscriptionName { get; set; }
+    [Parameter] public bool IsViewingDLQ { get; set; }
+    [Parameter] public bool IsPeeking { get; set; }
+    [Parameter] public bool IsPurging { get; set; }
+    [Parameter] public int PeekCount { get; set; } = 10;
+    [Parameter] public int PeekFromSequence { get; set; } = 0;
+    [Parameter] public EventCallback<bool> OnDLQToggleChanged { get; set; }
+    [Parameter] public EventCallback OnPeek { get; set; }
+    [Parameter] public EventCallback OnMonitor { get; set; }
+    [Parameter] public EventCallback OnPurge { get; set; }
+    [Parameter] public EventCallback OnSendMessage { get; set; }
+    [Parameter] public EventCallback<int> OnPeekCountChanged { get; set; }
+    [Parameter] public EventCallback<int> OnPeekFromSequenceChanged { get; set; }
+
+    private bool showPeekOptions = false;
+    private bool isDLQ;
+    private int peekCount;
+    private int peekFromSequence;
+
+    protected override void OnParametersSet()
+    {
+        isDLQ = IsViewingDLQ;
+        peekCount = PeekCount;
+        peekFromSequence = PeekFromSequence;
+    }
+
+    private void TogglePeekOptions()
+    {
+        showPeekOptions = !showPeekOptions;
+    }
+
+    private async Task HandleDLQToggleChanged()
+    {
+        await OnDLQToggleChanged.InvokeAsync(isDLQ);
+    }
+}

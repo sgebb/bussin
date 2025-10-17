@@ -85,6 +85,9 @@ ScaffoldingReadMe.txt
 # Node modules (if using npm for any tooling)
 node_modules/
 
+# Build artifacts from client-js
+src/wwwroot/js/servicebus-api.js
+
 # macOS
 .DS_Store
 
