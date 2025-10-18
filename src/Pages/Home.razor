@@ -1,8 +1,14 @@
 @page "/"
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using Microsoft.JSInterop
+@using System.Text.Json
 @inject IAuthenticationService AuthService
 @inject IAzureResourceService ResourceService
+@inject IAccessTokenProvider TokenProvider
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
+@inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
 
 <PageTitle>bussin</PageTitle>
 
@@ -12,54 +18,105 @@
             <h1>bussin</h1>
             <p class="lead mb-3">A zero-backend PWA for managing Azure Service Bus—peek messages, purge queues, monitor metrics, and more. All processing happens in your browser, with no data sent to external servers.</p>
 
-            @if (isRefreshing)
+            @if (needsServiceBusConsent && !isGrantingConsent)
             {
-                <div class="d-flex align-items-center gap-2 mb-3">
-                    <div class="spinner-border spinner-border-sm" role="status">
-                        <span class="visually-hidden">Refreshing...</span>
+                <div class="alert alert-warning">
+                    <h5><i class="bi bi-shield-lock"></i> One More Permission Needed</h5>
+                    <p class="mb-3">
+                        You can see your Service Bus namespaces below, but to actually <strong>send and receive messages</strong>, 
+                        you need to grant one more permission.
+                    </p>
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title">What you're granting now:</h6>
+                            <ul class="mb-0">
+                                <li><strong>Azure Service Bus API</strong> - Send and receive messages from queues, topics, and subscriptions</li>
+                            </ul>
+                        </div>
                     </div>
-                    <small class="text-muted">Refreshing...</small>
+                    <div class="card mb-3 bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title">What you already granted:</h6>
+                            <ul class="mb-0">
+                                <li><strong>Azure Management API</strong> - Browse and list your Service Bus resources (this is why you can see namespaces)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        <strong>Why two separate permissions?</strong> Azure AD requires separate consent for different services. 
+                        Management API lets you browse resources, while Service Bus API lets you send/receive messages.
+                    </p>
+                    @if (!string.IsNullOrEmpty(consentErrorMessage))
+                    {
+                        <div class="alert alert-danger mb-3">
+                            @consentErrorMessage
+                        </div>
+                    }
+                    <button class="btn btn-warning btn-lg" @onclick="GrantConsent" disabled="@isGrantingConsent">
+                        <i class="bi bi-check-circle"></i> Grant Service Bus Permission
+                    </button>
                 </div>
             }
-
-            @if (namespaces.Count == 0)
+            else if (isGrantingConsent)
             {
-                @if (!isRefreshing)
-                {
-                    <div class="alert alert-info">
-                        <h5>No Service Bus namespaces found</h5>
-                        <p>You don't have access to any Service Bus namespaces, or none exist in your subscriptions.</p>
-                        <p>Make sure you have the appropriate permissions to view Service Bus resources.</p>
+                <div class="alert alert-info">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span>Opening consent popup...</span>
                     </div>
-                }
+                </div>
             }
             else
             {
-                <div class="mb-3">
-                    <input type="text" class="form-control" placeholder="Search namespaces..." 
-                           @bind="searchTerm" @bind:event="oninput" />
-                </div>
+                @if (isRefreshing)
+                {
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <div class="spinner-border spinner-border-sm" role="status">
+                            <span class="visually-hidden">Refreshing...</span>
+                        </div>
+                        <small class="text-muted">Refreshing...</small>
+                    </div>
+                }
 
-                <div class="row">
-                    @foreach (var ns in FilteredNamespaces)
+                @if (namespaces.Count == 0)
+                {
+                    @if (!isRefreshing)
                     {
-                        <div class="col-md-4 mb-3">
-                            <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
-                                <div class="card-body">
-                                    <h5 class="card-title">@ns.Name</h5>
-                                    <p class="card-text">
-                                        <small class="text-muted">
-                                            <strong>Subscription:</strong> @ns.SubscriptionName<br />
-                                            <strong>Resource Group:</strong> @ns.ResourceGroup<br />
-                                            <strong>Location:</strong> @ns.Location<br />
-                                            <strong>Tenant:</strong> @ns.TenantId
-                                        </small>
-                                    </p>
-                                </div>
-                            </div>
+                        <div class="alert alert-info">
+                            <h5>No Service Bus namespaces found</h5>
+                            <p>You don't have access to any Service Bus namespaces, or none exist in your subscriptions.</p>
+                            <p>Make sure you have the appropriate permissions to view Service Bus resources.</p>
                         </div>
                     }
-                </div>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <input type="text" class="form-control" placeholder="Search namespaces..." 
+                               @bind="searchTerm" @bind:event="oninput" />
+                    </div>
+
+                    <div class="row">
+                        @foreach (var ns in FilteredNamespaces)
+                        {
+                            <div class="col-md-4 mb-3">
+                                <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
+                                    <div class="card-body">
+                                        <h5 class="card-title">@ns.Name</h5>
+                                        <p class="card-text">
+                                            <small class="text-muted">
+                                                <strong>Subscription:</strong> @ns.SubscriptionName<br />
+                                                <strong>Resource Group:</strong> @ns.ResourceGroup<br />
+                                                <strong>Location:</strong> @ns.Location<br />
+                                                <strong>Tenant:</strong> @ns.TenantId
+                                            </small>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
             }
 
             @if (!string.IsNullOrEmpty(errorMessage))
@@ -92,11 +149,24 @@
                                 {
                                     <div class="card-body">
                                         <h5>What permissions are requested?</h5>
-                                        <p>When you sign in, this application requests consent for two Azure permissions:</p>
-                                        <ul>
-                                            <li><strong>Azure Management API</strong> - To list your Service Bus namespaces, queues, topics, and subscriptions</li>
-                                            <li><strong>Azure Service Bus</strong> - To peek, send, and manage messages in your Service Bus entities</li>
-                                        </ul>
+                                        <p>This application requires two separate Azure permissions:</p>
+                                        <div class="mb-3">
+                                            <strong>1. Azure Management API</strong> (requested at initial sign-in)
+                                            <ul>
+                                                <li>Browse and list your Service Bus namespaces, queues, topics, and subscriptions</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mb-3">
+                                            <strong>2. Azure Service Bus API</strong> (requested via popup after sign-in)
+                                            <ul>
+                                                <li>Send and receive messages from queues, topics, and subscriptions</li>
+                                                <li>Perform message operations (peek, delete, purge, etc.)</li>
+                                            </ul>
+                                        </div>
+                                        <p class="text-muted small">
+                                            <strong>Why two permissions?</strong> Azure AD requires separate consent for different services. 
+                                            You'll be asked to consent to each one separately.
+                                        </p>
                                         
                                         <h5 class="mt-3">Is this safe?</h5>
                                         <p>Yes! This application is completely safe:</p>
@@ -131,6 +201,9 @@
     private bool showSecurityInfo = false;
     private string searchTerm = "";
     private CancellationTokenSource? _loadCts;
+    private bool needsServiceBusConsent = false;
+    private bool isGrantingConsent = false;
+    private string? consentErrorMessage = null;
 
     private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
         string.IsNullOrWhiteSpace(searchTerm) 
@@ -150,7 +223,78 @@
         var isAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (isAuthenticated)
         {
+            await CheckServiceBusConsent();
             _ = LoadNamespacesAsync();
+        }
+    }
+
+    private async Task CheckServiceBusConsent()
+    {
+        try
+        {
+            var result = await TokenProvider.RequestAccessToken(new AccessTokenRequestOptions
+            {
+                Scopes = ["https://servicebus.azure.net/user_impersonation"]
+            });
+
+            needsServiceBusConsent = result.Status == AccessTokenResultStatus.RequiresRedirect;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking Service Bus consent: {ex.Message}");
+        }
+    }
+
+    private async Task GrantConsent()
+    {
+        isGrantingConsent = true;
+        consentErrorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var clientId = Configuration["AzureAd:ClientId"];
+            var authority = Configuration["AzureAd:Authority"];
+            
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                window.msalConfig = {{
+                    clientId: '{clientId}',
+                    authority: '{authority}'
+                }};
+            ");
+
+            var result = await JSRuntime.InvokeAsync<JsonElement>("msalHelper.acquireTokenPopup", 
+                "https://servicebus.azure.net/user_impersonation");
+
+            if (result.TryGetProperty("success", out var success) && success.GetBoolean())
+            {
+                Console.WriteLine("✓ Service Bus consent granted successfully - reloading page to refresh tokens");
+                Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+                return;
+            }
+            else if (result.TryGetProperty("error", out var error))
+            {
+                var errorMsg = error.GetString() ?? "Unknown error";
+                if (!errorMsg.Contains("user_cancelled"))
+                {
+                    consentErrorMessage = errorMsg;
+                    Console.WriteLine($"✗ Consent failed: {consentErrorMessage}");
+                }
+                else
+                {
+                    Console.WriteLine("Consent cancelled by user");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            consentErrorMessage = ex.Message;
+            Console.WriteLine($"✗ Error during consent: {ex}");
+        }
+        finally
+        {
+            isGrantingConsent = false;
+            StateHasChanged();
         }
     }
 

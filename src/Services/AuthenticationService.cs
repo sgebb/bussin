@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 
 namespace ServiceBusExplorer.Blazor.Services;
 
-public sealed class AuthenticationService(IAccessTokenProvider tokenProvider, AuthenticationStateProvider authStateProvider) : IAuthenticationService
+public sealed class AuthenticationService(
+    IAccessTokenProvider tokenProvider, 
+    AuthenticationStateProvider authStateProvider) : IAuthenticationService
 {
     public async Task<bool> IsAuthenticatedAsync()
     {
@@ -47,6 +49,7 @@ public sealed class AuthenticationService(IAccessTokenProvider tokenProvider, Au
     public async Task<string?> GetServiceBusTokenAsync()
     {
         // Get Service Bus token for message operations
+        // User should have consented to this scope during initial login
         var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
         {
             Scopes = ["https://servicebus.azure.net/user_impersonation"]
@@ -59,9 +62,12 @@ public sealed class AuthenticationService(IAccessTokenProvider tokenProvider, Au
         }
 
         Console.WriteLine($"✗ Failed to get Service Bus token. Status: {result.Status}");
+        
         if (result.Status == AccessTokenResultStatus.RequiresRedirect)
         {
-            Console.WriteLine("⚠ Requires redirect - user needs to consent to Service Bus scope");
+            Console.WriteLine("⚠ Service Bus scope requires consent.");
+            Console.WriteLine("   This usually means the user needs to sign out and sign in again to consent to all required scopes.");
+            Console.WriteLine("   Or admin consent wasn't granted for the Service Bus API permission.");
         }
 
         return null;

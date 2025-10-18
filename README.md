@@ -18,7 +18,14 @@ To use this application, you need:
    - **Azure Service Bus Data Sender** - To send messages  
    - **Azure Service Bus Data Owner** - For full access (delete, purge, dead-letter operations)
 
-The app will prompt you to sign in with your Microsoft account and request consent for Azure Resource Manager access to discover your Service Bus resources.
+### Authentication Flow
+
+The app requires consent for two separate Azure AD resources:
+
+1. **Azure Management API** - Granted at initial login to browse your Service Bus resources
+2. **Azure Service Bus API** - Requested via popup after login for message operations
+
+This two-step consent is required because Azure AD doesn't allow requesting multiple resources in a single OAuth flow. When you first sign in, you'll grant Management API access. After login, the home page will show a consent warning with a "Grant Permission" button that opens a popup for Service Bus access.
 
 ## Features
 
