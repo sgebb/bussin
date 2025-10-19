@@ -24,15 +24,14 @@ public class ServiceBusEntityCache
         return null;
     }
 
-    public void AddNamespace(ServiceBusNamespaceInfo ns)
-    {
-        _namespacesCache.Add(ns);
-        _namespacesCacheTime = DateTime.UtcNow;
-    }
-
-    public void ClearNamespaces()
+    public void SetNamespaces(List<ServiceBusNamespaceInfo> namespaces)
     {
         _namespacesCache.Clear();
+        foreach (var ns in namespaces)
+        {
+            _namespacesCache.Add(ns);
+        }
+        _namespacesCacheTime = DateTime.UtcNow;
     }
 
     public List<ServiceBusQueueInfo>? GetQueues(string namespaceKey)

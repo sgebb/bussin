@@ -1,0 +1,158 @@
+@page "/user"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@attribute [Authorize]
+@inject IAuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>User - bussin</PageTitle>
+
+<div class="container-fluid p-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <h2 class="mb-4">User Settings</h2>
+            
+            <!-- User Info Card -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-person-circle"></i> Account</h5>
+                </div>
+                <div class="card-body">
+                    @if (authState != null && authState.User.Identity?.IsAuthenticated == true)
+                    {
+                        <p><strong>Email:</strong> @authState.User.Identity?.Name</p>
+                        <p class="mb-0"><strong>Name:</strong> @(authState.User.Claims.FirstOrDefault(c => c.Type == "name")?.Value ?? "N/A")</p>
+                    }
+                </div>
+            </div>
+
+            <!-- Consent Status Card -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-shield-check"></i> API Permissions</h5>
+                </div>
+                <div class="card-body">
+                    @if (!isCheckingConsent)
+                    {
+                        <button class="btn btn-primary btn-sm mb-3" @onclick="CheckConsent">
+                            <i class="bi bi-arrow-clockwise"></i> Check Permissions
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        <span>Checking...</span>
+                    }
+
+                    @if (consentStatus != null)
+                    {
+                        <div class="mt-3">
+                            <div class="@(consentStatus.HasServiceBus ? "alert alert-success" : "alert alert-warning")">
+                                @if (consentStatus.HasServiceBus)
+                                {
+                                    <div><i class="bi bi-check-circle"></i> <strong>Service Bus API</strong> - Granted</div>
+                                    <p class="mb-0 mt-2 small">Required for Service Bus operations</p>
+                                }
+                                else
+                                {
+                                    <div><i class="bi bi-exclamation-triangle"></i> <strong>Service Bus API</strong> - Not granted</div>
+                                    <p class="mb-0 mt-2 small">Sign out and sign in again to grant</p>
+                                }
+                            </div>
+
+                            <div class="@(consentStatus.HasArmManagement ? "alert alert-success" : "alert alert-info")">
+                                @if (consentStatus.HasArmManagement)
+                                {
+                                    <div><i class="bi bi-check-circle"></i> <strong>Azure Management API</strong> - Granted</div>
+                                    <p class="mb-0 mt-2 small">Enables automatic resource discovery</p>
+                                }
+                                else
+                                {
+                                    <div><i class="bi bi-info-circle"></i> <strong>Azure Management API</strong> - Not granted</div>
+                                    <p class="mb-0 mt-2 small">Optional - grant on home page if needed</p>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Logout Card -->
+            <div class="card">
+                <div class="card-body">
+                    <button class="btn btn-danger" @onclick="BeginLogout">
+                        <i class="bi bi-box-arrow-right"></i> Sign Out
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private AuthenticationState? authState;
+    private ConsentStatus? consentStatus;
+    private bool isCheckingConsent = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask != null)
+        {
+            authState = await AuthenticationStateTask;
+        }
+    }
+
+    private async Task CheckConsent()
+    {
+        isCheckingConsent = true;
+        consentStatus = new ConsentStatus();
+
+        try
+        {
+            // Check Service Bus token
+            var sbToken = await AuthService.GetServiceBusTokenAsync();
+            consentStatus.HasServiceBus = !string.IsNullOrEmpty(sbToken);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Service Bus token check error: {ex.Message}");
+            consentStatus.HasServiceBus = false;
+        }
+
+        try
+        {
+            // Check ARM Management token
+            var mgmtCred = await AuthService.GetTokenCredentialAsync();
+            if (mgmtCred != null)
+            {
+                var token = await mgmtCred.GetTokenAsync(
+                    new Azure.Core.TokenRequestContext(new[] { "https://management.azure.com/.default" }),
+                    default);
+                consentStatus.HasArmManagement = !string.IsNullOrEmpty(token.Token);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ARM Management token check error: {ex.Message}");
+            consentStatus.HasArmManagement = false;
+        }
+
+        isCheckingConsent = false;
+    }
+
+    private void BeginLogout()
+    {
+        Navigation.NavigateToLogout("authentication/logout");
+    }
+
+    private class ConsentStatus
+    {
+        public bool HasServiceBus { get; set; }
+        public bool HasArmManagement { get; set; }
+    }
+}

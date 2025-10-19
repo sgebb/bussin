@@ -13,8 +13,9 @@ builder.Services.AddMsalAuthentication(options =>
 {
     builder.Configuration.Bind("AzureAd", options.ProviderOptions.Authentication);
     
-    // Only Management API at login - Service Bus scope requested via popup (see Home.razor)
-    options.ProviderOptions.DefaultAccessTokenScopes.Add("https://management.azure.com/user_impersonation");
+    // Request Service Bus data plane permission at login (required for send/receive/peek operations)
+    // Management API scope (for listing namespaces) is optional and requested later
+    options.ProviderOptions.DefaultAccessTokenScopes.Add("https://servicebus.azure.net/user_impersonation");
     
     options.ProviderOptions.LoginMode = "redirect";
     options.ProviderOptions.Cache.CacheLocation = "localStorage";
@@ -28,7 +29,7 @@ builder.Services.AddScoped<IServiceBusOperationsService, ServiceBusOperationsSer
 builder.Services.AddScoped<IPreferencesService, PreferencesService>();
 builder.Services.AddScoped<IMessageParsingService, MessageParsingService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
-builder.Services.AddSingleton<NavigationStateService>();
+builder.Services.AddScoped<NavigationStateService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 await builder.Build().RunAsync();

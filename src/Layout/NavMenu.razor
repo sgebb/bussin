@@ -1,44 +1,159 @@
-@inject NavigationManager Navigation
 @inject NavigationStateService NavState
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
 
 <div class="nav-menu">
-    <div class="p-3">
-        <h4 title="Zero-backend Azure Service Bus management">bussin</h4>
+    <!-- Clickable Header -->
+    <div class="nav-header" @onclick="@(() => Navigation.NavigateTo("/"))" style="cursor: pointer;">
+        <h5 class="mb-0">bussin</h5>
     </div>
-    <nav class="flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span aria-hidden="true">🔍</span> Explore
-            </NavLink>
-        </div>
-        
-        <AuthorizeView>
-            <Authorized>
-                @if (NavState.RecentNamespaces.Any())
-                {
-                    <div class="px-3 mt-3">
-                        <small class="text-muted fw-bold">RECENT</small>
-                        <div class="mt-2">
-                            @foreach (var ns in NavState.RecentNamespaces)
+
+    <!-- Scrollable Favorites Section -->
+    <div class="nav-favorites-scroll">
+        <nav class="flex-column">
+            <AuthorizeView>
+                <Authorized>
+                    @if (NavState.IsInitialized && NavState.Folders.Any())
+                    {
+                        <div class="px-3 mt-3">
+                            @foreach (var folder in NavState.Folders)
                             {
-                                <a href="@GetExplorerUrl(ns)" class="recent-namespace-tile d-block mb-2 p-2">
-                                    <div class="fw-semibold">@ns.Name</div>
-                                    <small class="text-muted">@ns.Location</small>
-                                </a>
+                                <div class="mb-2">
+                                    <div class="folder-header d-flex align-items-center justify-content-between @(dragOverFolderId == folder.Id ? "drag-over" : "")"
+                                         @ondragover="(e) => OnDragOver(e, folder.Id)"
+                                         @ondragover:preventDefault="true"
+                                         @ondragleave="OnDragLeave"
+                                         @ondrop="(e) => OnDrop(e, folder.Id)"
+                                         @ondrop:preventDefault="true">
+                                        <div @onclick="() => ToggleFolder(folder.Id)" style="cursor: pointer; flex: 1;">
+                                            <span class="me-2">@(folder.IsExpanded ? "▼" : "▶")</span>
+                                            <strong>@folder.Name</strong>
+                                            <small class="text-muted ms-2">(@folder.Namespaces.Count)</small>
+                                        </div>
+                                        @if (folder.Name != "Namespaces")
+                                        {
+                                            <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => ShowDeleteFolderConfirmation(folder.Id, folder.Name)" @onclick:stopPropagation="true" title="Delete folder">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                    @if (folder.IsExpanded)
+                                    {
+                                        <div class="mt-2 ms-3">
+                                            @foreach (var ns in folder.Namespaces)
+                                            {
+                                                <a href="@GetExplorerUrl(ns)" 
+                                                   class="recent-namespace-tile d-block mb-2 p-2"
+                                                   draggable="true"
+                                                   @ondragstart="() => OnDragStart(ns.FullyQualifiedNamespace)"
+                                                   @ondragend="OnDragEnd">
+                                                    <div class="fw-semibold">@ns.DisplayName</div>
+                                                    <small class="text-muted">@ns.FullyQualifiedNamespace</small>
+                                                </a>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            
+                            @if (!isCreatingFolder)
+                            {
+                                <button class="btn btn-sm btn-outline-primary w-100" @onclick="ShowCreateFolder">
+                                    <i class="bi bi-plus"></i> New Folder
+                                </button>
+                            }
+                            else
+                            {
+                                <div class="mt-3">
+                                    <input type="text" class="form-control form-control-sm mb-2" placeholder="Folder name" @bind="newFolderName" @onkeyup="HandleFolderNameKeyUp" />
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-primary flex-fill" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(newFolderName)">Create</button>
+                                        <button class="btn btn-sm btn-secondary flex-fill" @onclick="CancelCreateFolder">Cancel</button>
+                                    </div>
+                                </div>
                             }
                         </div>
-                    </div>
-                }
-            </Authorized>
-        </AuthorizeView>
-    </nav>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </nav>
+    </div>
+
+    <!-- Fixed Bottom Section -->
+    <div class="nav-footer">
+        <div class="user-section" @onclick="@(() => Navigation.NavigateTo("/user"))" style="cursor: pointer;">
+            <i class="bi bi-person-circle"></i>
+            <span class="ms-2">@userName</span>
+        </div>
+        <div class="dark-mode-toggle">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="darkModeToggle" 
+                       checked="@IsDarkMode" @onchange="OnDarkModeToggle">
+                <label class="form-check-label" for="darkModeToggle">
+                    @(IsDarkMode ? "🌙" : "☀️")
+                </label>
+            </div>
+        </div>
+    </div>
 </div>
 
+<!-- Delete Folder Confirmation Modal -->
+@if (showDeleteConfirmation)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Folder</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDeleteFolder"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the folder <strong>@folderToDelete</strong>?</p>
+                    @if (folderToDeleteCount > 0)
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> This folder contains <strong>@folderToDeleteCount</strong> namespace(s). They will be moved to the default "Namespaces" folder.
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDeleteFolder">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteFolder">Delete Folder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
-    protected override void OnInitialized()
+    [Parameter] public bool IsDarkMode { get; set; }
+    [Parameter] public EventCallback OnToggleDarkMode { get; set; }
+
+    private bool isCreatingFolder = false;
+    private string newFolderName = "";
+    private string userName = "User";
+    private bool showDeleteConfirmation = false;
+    private string folderIdToDelete = "";
+    private string folderToDelete = "";
+    private int folderToDeleteCount = 0;
+    
+    // Drag and drop state
+    private string? draggedNamespace = null;
+    private string? dragOverFolderId = null;
+
+    protected override async Task OnInitializedAsync()
     {
         NavState.OnChange += StateHasChanged;
+        
+        // Get authenticated user name
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userName = authState.User.Identity?.Name?.Split('@')[0] ?? "User";
+    }
+
+    private async Task OnDarkModeToggle()
+    {
+        await OnToggleDarkMode.InvokeAsync();
     }
 
     public void Dispose()
@@ -46,8 +161,110 @@
         NavState.OnChange -= StateHasChanged;
     }
 
-    private string GetExplorerUrl(ServiceBusNamespaceInfo ns)
+    private string GetExplorerUrl(NamespaceConnection ns)
     {
-        return $"explorer?namespace={Uri.EscapeDataString(ns.FullyQualifiedNamespace)}&rg={Uri.EscapeDataString(ns.ResourceGroup)}&sub={Uri.EscapeDataString(ns.SubscriptionId)}&name={Uri.EscapeDataString(ns.Name)}";
+        return $"explorer?namespace={Uri.EscapeDataString(ns.FullyQualifiedNamespace)}&rg={Uri.EscapeDataString(ns.ResourceGroup)}&sub={Uri.EscapeDataString(ns.SubscriptionId)}&name={Uri.EscapeDataString(ns.DisplayName)}";
+    }
+
+    private async Task ToggleFolder(string folderId)
+    {
+        await NavState.ToggleFolderExpandedAsync(folderId);
+    }
+
+    private void ShowCreateFolder()
+    {
+        isCreatingFolder = true;
+        newFolderName = "";
+    }
+
+    private void CancelCreateFolder()
+    {
+        isCreatingFolder = false;
+        newFolderName = "";
+    }
+
+    private async Task CreateFolder()
+    {
+        if (string.IsNullOrWhiteSpace(newFolderName)) return;
+
+        await NavState.CreateFolderAsync(newFolderName.Trim());
+        isCreatingFolder = false;
+        newFolderName = "";
+    }
+
+    private void ShowDeleteFolderConfirmation(string folderId, string folderName)
+    {
+        var folder = NavState.Folders.FirstOrDefault(f => f.Id == folderId);
+        if (folder == null) return;
+
+        folderIdToDelete = folderId;
+        folderToDelete = folderName;
+        folderToDeleteCount = folder.Namespaces.Count;
+        showDeleteConfirmation = true;
+    }
+
+    private void CancelDeleteFolder()
+    {
+        showDeleteConfirmation = false;
+        folderIdToDelete = "";
+        folderToDelete = "";
+        folderToDeleteCount = 0;
+    }
+
+    private async Task ConfirmDeleteFolder()
+    {
+        if (!string.IsNullOrEmpty(folderIdToDelete))
+        {
+            await NavState.DeleteFolderAsync(folderIdToDelete);
+        }
+        CancelDeleteFolder();
+    }
+
+    private async Task HandleFolderNameKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newFolderName))
+        {
+            await CreateFolder();
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelCreateFolder();
+        }
+    }
+
+    // Drag and drop handlers
+    private void OnDragStart(string fullyQualifiedNamespace)
+    {
+        draggedNamespace = fullyQualifiedNamespace;
+    }
+
+    private void OnDragEnd()
+    {
+        draggedNamespace = null;
+        dragOverFolderId = null;
+    }
+
+    private void OnDragOver(DragEventArgs e, string folderId)
+    {
+        if (!string.IsNullOrEmpty(draggedNamespace))
+        {
+            dragOverFolderId = folderId;
+        }
+    }
+
+    private void OnDragLeave()
+    {
+        dragOverFolderId = null;
+    }
+
+    private async Task OnDrop(DragEventArgs e, string targetFolderId)
+    {
+        dragOverFolderId = null;
+        
+        if (!string.IsNullOrEmpty(draggedNamespace))
+        {
+            await NavState.MoveNamespaceToFolderAsync(draggedNamespace, targetFolderId);
+            draggedNamespace = null;
+        }
     }
 }

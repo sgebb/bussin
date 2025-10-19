@@ -28,9 +28,10 @@ public sealed class AzureResourceService : IAzureResourceService
         List<T>? cached,
         Func<CancellationToken, IAsyncEnumerable<T>> fetchFresh,
         Action<List<T>> updateCache,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) where T : class
     {
-        if (cached != null)
+        // Yield cached items first for instant display
+        if (cached != null && cached.Count > 0)
         {
             foreach (var item in cached)
             {
@@ -39,14 +40,26 @@ public sealed class AzureResourceService : IAzureResourceService
             }
         }
 
+        // Fetch fresh items - these will replace the cache
         var freshItems = new List<T>();
+        
         await foreach (var item in fetchFresh(cancellationToken))
         {
-            if (cancellationToken.IsCancellationRequested) yield break;
+            if (cancellationToken.IsCancellationRequested) 
+            {
+                // Update cache with partial fresh results if cancelled
+                if (freshItems.Count > 0)
+                {
+                    updateCache(freshItems);
+                }
+                yield break;
+            }
+            
             freshItems.Add(item);
             yield return item;
         }
 
+        // Update cache with complete fresh list (replaces old cache)
         updateCache(freshItems);
     }
 
@@ -57,12 +70,7 @@ public sealed class AzureResourceService : IAzureResourceService
         await foreach (var ns in CachedStreamAsync(
             _cache.GetNamespaces(),
             ct => FetchNamespacesAsync(credential, ct),
-            fresh => 
-            {
-                _cache.ClearNamespaces();
-                foreach (var item in fresh)
-                    _cache.AddNamespace(item);
-            },
+            fresh => _cache.SetNamespaces(fresh),
             cancellationToken))
         {
             yield return ns;

@@ -8,95 +8,224 @@
 @inject IServiceBusJsInteropService JsInterop
 @inject IMessageParsingService MessageParsingService
 @inject NavigationManager Navigation
+@inject NavigationStateService NavState
 
 <PageTitle>Explorer - bussin</PageTitle>
 
-<div class="explorer-container">
-    <!-- Fixed Header Section -->
+<div class="explorer-layout">
+    <!-- Section 1: Compact Header -->
     <div class="explorer-header">
-        <div class="container-fluid p-2">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-                <div>
-                    <h6 class="mb-0">@NameParam</h6>
-                    <small class="text-muted">@NamespaceParam</small>
-                </div>
-            </div>
-
-            @if (isLoadingEntities)
-            {
-                <div class="spinner-border spinner-border-sm text-primary"></div>
-                <span class="ms-2 small">Loading...</span>
-            }
-
-            @if (!isLoadingEntities || queues.Count > 0 || topics.Count > 0)
-            {
-                <div class="row g-2">
-                    <!-- Left: Entity Selection -->
-                    <div class="col-md-6">
-                        <EntitySelectorPanel 
-                            Queues="@queues" 
-                            Topics="@topics" 
-                            Subscriptions="@subscriptions"
-                            SelectedQueueName="@selectedQueueName"
-                            SelectedTopicName="@selectedTopicName"
-                            SelectedSubscriptionName="@selectedSubscriptionName"
-                            IsLoadingSubscriptions="@isLoadingSubscriptions"
-                            OnQueueSelected="@SelectQueue"
-                            OnTopicSelected="@SelectTopic"
-                            OnSubscriptionSelected="@SelectSubscription" />
-                    </div>
-
-                    <!-- Right: Operations -->
-                    <div class="col-md-6">
-                        <OperationsPanel 
-                            SelectedQueueName="@selectedQueueName"
-                            SelectedTopicName="@selectedTopicName"
-                            SelectedSubscriptionName="@selectedSubscriptionName"
-                            IsViewingDLQ="@isViewingDLQ"
-                            IsPeeking="@isPeeking"
-                            IsPurging="@isPurging"
-                            PeekCount="@peekCount"
-                            PeekFromSequence="@peekFromSequence"
-                            OnDLQToggleChanged="@OnDLQToggleChanged"
-                            OnPeek="@PeekMessages"
-                            OnMonitor="@ShowMonitorModal"
-                            OnPurge="@PurgeMessages"
-                            OnSendMessage="@ShowSendMessageModal" />
-                    </div>
-                </div>
-            }
-        </div>
-    </div>
-
-    <!-- Scrollable Messages Section -->
-    <div class="explorer-content">
-        <div class="container-fluid">
-            @if (!string.IsNullOrEmpty(errorMessage))
-            {
-                <div class="alert alert-danger">
-                    <strong>Error:</strong> @errorMessage
-                </div>
-            }
-
-            @if (peekedMessages.Count > 0)
-            {
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0">Messages (@peekedMessages.Count @(peekedMessages.Count >= 1000 ? "- Max Reached" : ""))</h6>
-                    @if (peekedMessages.Count < 1000)
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2">
+                    <h1 class="explorer-namespace-title mb-0">@displayName</h1>
+                    @if (NavState.IsFavorite(NamespaceParam ?? ""))
                     {
-                        <button class="btn btn-sm btn-outline-secondary" @onclick="PeekNext" disabled="@isPeeking">
-                            ⬇️ Load More
+                        <button class="btn btn-sm btn-link" @onclick="ToggleEditMode" title="Edit name">
+                            <i class="bi bi-pencil"></i>
                         </button>
                     }
+                    @if (isLoadingEntities)
+                    {
+                        <div class="spinner-border spinner-border-sm text-muted" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    }
                 </div>
-                <MessageList Messages="@peekedMessages"
-                            IsDLQ="@isViewingDLQ"
-                            IsProcessing="@isProcessingBatch"
-                            OnMessageSelected="@ShowMessageDetail"
-                            OnDeleteMessages="@DeleteMessages"
-                            OnResubmitMessages="@ResubmitMessages"
-                            OnMoveToDLQMessages="@MoveToDLQMessages" />
+                <small class="text-muted">@NamespaceParam</small>
+            </div>
+            @if (NavState.IsFavorite(NamespaceParam ?? ""))
+            {
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-warning btn-sm" @onclick="() => ToggleFavorite()" title="Remove from favorites">
+                        <i class="bi bi-star-fill"></i>
+                    </button>
+                    <select class="form-select form-select-sm" style="width: auto;" value="@selectedFolderId" @onchange="OnFolderChanged">
+                        @foreach (var folder in NavState.Folders)
+                        {
+                            <option value="@folder.Id">@folder.Name</option>
+                        }
+                    </select>
+                </div>
             }
+            else
+            {
+                <button class="btn btn-outline-warning btn-sm" @onclick="() => ToggleFavorite()" title="Add to favorites">
+                    <i class="bi bi-star"></i>
+                </button>
+            }
+        </div>
+        @if (isEditingName)
+        {
+            <div class="mt-2">
+                <div class="input-group input-group-sm" style="max-width: 400px;">
+                    <input type="text" class="form-control" @bind="displayName" @bind:event="oninput" />
+                    <button class="btn btn-success" @onclick="SaveRename" disabled="@string.IsNullOrWhiteSpace(displayName)">Save</button>
+                    <button class="btn btn-secondary" @onclick="() => isEditingName = false">Cancel</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Section 2: Compact Entity Selector (3 Columns) -->
+    @if (queues.Count > 0 || topics.Count > 0)
+    {
+        <div class="explorer-entities">
+            <div class="explorer-entities-grid-3col">
+                <!-- Queues Column -->
+                <div class="entity-column">
+                    <div class="entity-column-header">
+                        <i class="bi bi-list-ul"></i> Queues (@queues.Count)
+                    </div>
+                    <div class="entity-list-scroll">
+                        @foreach (var queue in queues)
+                        {
+                            <div class="entity-item @(selectedQueueName == queue.Name ? "active" : "")" @onclick="() => SelectQueue(queue.Name)">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>@queue.Name</span>
+                                    @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0)
+                                    {
+                                        <span class="badge bg-secondary">@queue.ActiveMessageCount / @queue.DeadLetterMessageCount</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Topics Column -->
+                <div class="entity-column">
+                    <div class="entity-column-header">
+                        <i class="bi bi-broadcast"></i> Topics (@topics.Count)
+                    </div>
+                    <div class="entity-list-scroll">
+                        @foreach (var topic in topics)
+                        {
+                            <div class="entity-item @(selectedTopicName == topic.Name ? "active" : "")" @onclick="() => SelectTopic(topic.Name)">
+                                <div>@topic.Name</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Subscriptions Column -->
+                <div class="entity-column">
+                    <div class="entity-column-header">
+                        <i class="bi bi-envelope"></i> Subscriptions (@subscriptions.Count)
+                    </div>
+                    <div class="entity-list-scroll">
+                        @if (isLoadingSubscriptions)
+                        {
+                            <div class="text-center p-2">
+                                <div class="spinner-border spinner-border-sm"></div>
+                            </div>
+                        }
+                        else if (selectedTopicName == null)
+                        {
+                            <div class="text-center p-3 text-muted small">
+                                Select a topic
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var sub in subscriptions)
+                            {
+                                <div class="entity-item @(selectedSubscriptionName == sub.Name ? "active" : "")" @onclick="() => SelectSubscription(sub.Name)">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>@sub.Name</span>
+                                        @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
+                                        {
+                                            <span class="badge bg-secondary">@sub.ActiveMessageCount / @sub.DeadLetterMessageCount</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Section 3: Messages (Takes Majority of Space) -->
+    <div class="explorer-messages">
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger alert-sm mb-2">
+                <strong>Error:</strong> @errorMessage
+            </div>
+        }
+
+        <div class="explorer-messages-header">
+            <!-- Header removed - just the message list -->
+        </div>
+
+        <div class="explorer-messages-content">
+            <div class="explorer-messages-list">
+                @if (peekedMessages.Count > 0)
+                {
+                    <MessageList Messages="@peekedMessages"
+                                IsDLQ="@isViewingDLQ"
+                                IsProcessing="@isProcessingBatch"
+                                OnMessageSelected="@ShowMessageDetail"
+                                OnDeleteMessages="@DeleteMessages"
+                                OnResubmitMessages="@ResubmitMessages"
+                                OnMoveToDLQMessages="@MoveToDLQMessages" />
+                }
+                else if (selectedQueueName != null || selectedSubscriptionName != null)
+                {
+                    <div class="text-center text-muted p-4">
+                        <p>No messages found</p>
+                        <button class="btn btn-primary" @onclick="PeekMessages" disabled="@isPeeking">
+                            <i class="bi bi-search"></i> Peek Messages
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted p-4">
+                        <p>Select a queue or topic subscription to view messages</p>
+                    </div>
+                }
+            </div>
+
+            <div class="explorer-actions-sidebar">
+                <!-- DLQ Toggle -->
+                @if (selectedQueueName != null || selectedSubscriptionName != null)
+                {
+                    <div class="action-btn-group dlq-toggle-group">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="dlqSwitch" checked="@isViewingDLQ" @onchange="OnDLQToggleChanged">
+                            <label class="form-check-label" for="dlqSwitch">Dead Letter Queue</label>
+                        </div>
+                    </div>
+                }
+
+                <!-- Permanent Actions -->
+                <div class="action-btn-group">
+                    <div class="action-btn-group-title">Actions</div>
+                    <button class="btn btn-sm btn-primary w-100" @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" disabled="@(isPeeking || (selectedQueueName == null && selectedSubscriptionName == null))">
+                        <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
+                    </button>
+                    <button class="btn btn-sm btn-success w-100" @onclick="ShowSendMessageModal" disabled="@(selectedQueueName == null && selectedTopicName == null)">
+                        <i class="bi bi-envelope"></i> Send
+                    </button>
+                    <button class="btn btn-sm btn-info w-100" @onclick="ShowMonitorModal" disabled="@(selectedQueueName == null && selectedSubscriptionName == null)">
+                        <i class="bi bi-graph-up"></i> Monitor
+                    </button>
+                </div>
+
+                <!-- Contextual Actions -->
+                @if (selectedQueueName != null || selectedSubscriptionName != null)
+                {
+                    <div class="action-btn-group">
+                        <div class="action-btn-group-title">Dangerous</div>
+                        <button class="btn btn-sm btn-danger w-100" @onclick="() => PurgeMessages()" disabled="@isPurging">
+                            <i class="bi bi-trash"></i> Purge All
+                        </button>
+                    </div>
+                }
+            </div>
         </div>
     </div>
 </div>
@@ -200,6 +329,9 @@
     private int peekCount = 10;
     private int peekFromSequence = 0;
     private string? errorMessage;
+    private string displayName = "";
+    private string? selectedFolderId = null;
+    private bool isEditingName = false;
     
     // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
     private string NamespaceNameOnly => NamespaceParam?.Split('.').FirstOrDefault() ?? "";
@@ -231,8 +363,66 @@
             topicDict.Clear();
             subscriptionDict.Clear();
             
+            // Initialize rename and folder selection
+            if (!string.IsNullOrEmpty(NamespaceParam))
+            {
+                var connection = NavState.GetNamespaceConnection(NamespaceParam);
+                if (connection != null)
+                {
+                    displayName = connection.DisplayName;
+                    selectedFolderId = NavState.GetCurrentFolderId(NamespaceParam);
+                }
+                else
+                {
+                    displayName = NameParam ?? "";
+                }
+            }
+            
             await LoadEntitiesAsync();
         }
+    }
+
+    private async Task SaveRename()
+    {
+        if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrEmpty(NamespaceParam)) return;
+        
+        await NavState.RenameNamespaceAsync(NamespaceParam, displayName.Trim());
+        isEditingName = false;
+    }
+
+    private void ToggleEditMode()
+    {
+        isEditingName = !isEditingName;
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (string.IsNullOrEmpty(NamespaceParam)) return;
+
+        if (NavState.IsFavorite(NamespaceParam))
+        {
+            await NavState.RemoveFromFavoritesAsync(NamespaceParam);
+        }
+        else
+        {
+            if (string.IsNullOrEmpty(ResourceGroupParam) || string.IsNullOrEmpty(SubscriptionIdParam))
+            {
+                errorMessage = "Cannot add to favorites: missing resource group or subscription information";
+                return;
+            }
+            
+            await NavState.AddToFavoritesAsync(NamespaceParam, ResourceGroupParam, SubscriptionIdParam, displayName);
+        }
+    }
+
+    private async Task OnFolderChanged(ChangeEventArgs e)
+    {
+        if (e.Value == null || string.IsNullOrEmpty(NamespaceParam)) return;
+        
+        var targetFolderId = e.Value.ToString();
+        if (string.IsNullOrEmpty(targetFolderId)) return;
+        
+        await NavState.MoveNamespaceToFolderAsync(NamespaceParam, targetFolderId);
     }
 
     private async Task LoadEntitiesAsync()
@@ -645,9 +835,9 @@
         }
     }
 
-    private void OnDLQToggleChanged(bool newValue)
+    private void OnDLQToggleChanged(ChangeEventArgs e)
     {
-        isViewingDLQ = newValue;
+        isViewingDLQ = e.Value is bool b && b;
         peekedMessages.Clear();
     }
 

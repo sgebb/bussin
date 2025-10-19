@@ -14,37 +14,17 @@
 
 <AuthorizeView>
     <Authorized>
-        <div class="container-fluid mt-4">
-            <h1>bussin</h1>
-            <p class="lead mb-3">A zero-backend PWA for managing Azure Service Bus—peek messages, purge queues, monitor metrics, and more. All processing happens in your browser, with no data sent to external servers.</p>
-
-            @if (needsServiceBusConsent && !isGrantingConsent)
+        <div class="container-fluid p-4">
+            @if (!hasArmPermission && !isGrantingArmConsent)
             {
-                <div class="alert alert-warning">
-                    <h5><i class="bi bi-shield-lock"></i> One More Permission Needed</h5>
+                <div class="alert alert-info">
+                    <h5><i class="bi bi-info-circle"></i> Optional: List Namespaces Automatically</h5>
                     <p class="mb-3">
-                        You can see your Service Bus namespaces below, but to actually <strong>send and receive messages</strong>, 
-                        you need to grant one more permission.
+                        We need the <strong>Azure Management API</strong> permission to automatically list all Service Bus namespaces in your tenant. 
+                        The app only uses this to <strong>list namespaces</strong>—it never creates or modifies any Azure resources.
                     </p>
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h6 class="card-title">What you're granting now:</h6>
-                            <ul class="mb-0">
-                                <li><strong>Azure Service Bus API</strong> - Send and receive messages from queues, topics, and subscriptions</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="card mb-3 bg-light">
-                        <div class="card-body">
-                            <h6 class="card-title">What you already granted:</h6>
-                            <ul class="mb-0">
-                                <li><strong>Azure Management API</strong> - Browse and list your Service Bus resources (this is why you can see namespaces)</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <p class="text-muted small mb-3">
-                        <strong>Why two separate permissions?</strong> Azure AD requires separate consent for different services. 
-                        Management API lets you browse resources, while Service Bus API lets you send/receive messages.
+                    <p class="mb-3">
+                        <strong>But if you prefer not to grant this permission</strong>, you can add namespaces manually below by pasting their name.
                     </p>
                     @if (!string.IsNullOrEmpty(consentErrorMessage))
                     {
@@ -52,12 +32,12 @@
                             @consentErrorMessage
                         </div>
                     }
-                    <button class="btn btn-warning btn-lg" @onclick="GrantConsent" disabled="@isGrantingConsent">
-                        <i class="bi bi-check-circle"></i> Grant Service Bus Permission
+                    <button class="btn btn-primary" @onclick="GrantArmConsent" disabled="@isGrantingArmConsent">
+                        <i class="bi bi-check-circle"></i> Grant Permission to List Namespaces
                     </button>
                 </div>
             }
-            else if (isGrantingConsent)
+            else if (isGrantingArmConsent)
             {
                 <div class="alert alert-info">
                     <div class="d-flex align-items-center gap-2">
@@ -66,42 +46,49 @@
                     </div>
                 </div>
             }
-            else
+            
+
+            @if (hasArmPermission)
             {
-                @if (isRefreshing)
-                {
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <div class="spinner-border spinner-border-sm" role="status">
-                            <span class="visually-hidden">Refreshing...</span>
+                <div class="row justify-content-center mb-4">
+                    <div class="col-lg-6">
+                        <div class="position-relative">
+                            <input type="text" class="form-control form-control-lg text-center" placeholder="Search namespaces..." 
+                                   @bind="searchTerm" @bind:event="oninput" />
+                            @if (isRefreshing)
+                            {
+                                <div class="position-absolute top-50 end-0 translate-middle-y me-3">
+                                    <div class="spinner-border spinner-border-sm text-muted" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            }
                         </div>
-                        <small class="text-muted">Refreshing...</small>
+                    </div>
+                </div>
+
+                @if (isRefreshing && namespaces.Count == 0)
+                {
+                    <div class="text-center mb-3">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
                     </div>
                 }
-
-                @if (namespaces.Count == 0)
+                else if (namespaces.Count > 0)
                 {
-                    @if (!isRefreshing)
-                    {
-                        <div class="alert alert-info">
-                            <h5>No Service Bus namespaces found</h5>
-                            <p>You don't have access to any Service Bus namespaces, or none exist in your subscriptions.</p>
-                            <p>Make sure you have the appropriate permissions to view Service Bus resources.</p>
-                        </div>
-                    }
-                }
-                else
-                {
-                    <div class="mb-3">
-                        <input type="text" class="form-control" placeholder="Search namespaces..." 
-                               @bind="searchTerm" @bind:event="oninput" />
-                    </div>
-
-                    <div class="row">
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
                         @foreach (var ns in FilteredNamespaces)
                         {
                             <div class="col-md-4 mb-3">
-                                <div class="card h-100 namespace-card" @onclick="() => NavigateToExplorer(ns)" style="cursor: pointer;">
-                                    <div class="card-body">
+                                <div class="card h-100 namespace-card" style="cursor: pointer;">
+                                    <button class="favorite-btn @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "favorited" : "not-favorited")" 
+                                            @onclick="async () => await ToggleFavorite(ns.FullyQualifiedNamespace)" 
+                                            @onclick:stopPropagation="true"
+                                            title="@(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "Remove from favorites" : "Add to favorites")">
+                                        @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "★" : "☆")
+                                    </button>
+                                    <div class="card-body" @onclick="() => NavigateToExplorer(ns)">
                                         <h5 class="card-title">@ns.Name</h5>
                                         <p class="card-text">
                                             <small class="text-muted">
@@ -149,23 +136,25 @@
                                 {
                                     <div class="card-body">
                                         <h5>What permissions are requested?</h5>
-                                        <p>This application requires two separate Azure permissions:</p>
+                                        <p>This application uses a privacy-first approach with minimal required permissions:</p>
                                         <div class="mb-3">
-                                            <strong>1. Azure Management API</strong> (requested at initial sign-in)
-                                            <ul>
-                                                <li>Browse and list your Service Bus namespaces, queues, topics, and subscriptions</li>
-                                            </ul>
-                                        </div>
-                                        <div class="mb-3">
-                                            <strong>2. Azure Service Bus API</strong> (requested via popup after sign-in)
+                                            <strong>1. Azure Service Bus API</strong> (required at initial sign-in)
                                             <ul>
                                                 <li>Send and receive messages from queues, topics, and subscriptions</li>
                                                 <li>Perform message operations (peek, delete, purge, etc.)</li>
+                                                <li>List queues and topics within a namespace you provide</li>
+                                            </ul>
+                                        </div>
+                                        <div class="mb-3">
+                                            <strong>2. Azure Management API</strong> (optional - requested after sign-in)
+                                            <ul>
+                                                <li>Automatically browse and list your Service Bus namespaces</li>
+                                                <li><strong>You can skip this</strong> and add namespaces manually instead</li>
                                             </ul>
                                         </div>
                                         <p class="text-muted small">
-                                            <strong>Why two permissions?</strong> Azure AD requires separate consent for different services. 
-                                            You'll be asked to consent to each one separately.
+                                            <strong>Why this approach?</strong> The Management API permission can feel intrusive since it allows listing all your Azure resources. 
+                                            We made it optional so you can use the app with just the Service Bus permission and manually add namespaces.
                                         </p>
                                         
                                         <h5 class="mt-3">Is this safe?</h5>
@@ -201,8 +190,8 @@
     private bool showSecurityInfo = false;
     private string searchTerm = "";
     private CancellationTokenSource? _loadCts;
-    private bool needsServiceBusConsent = false;
-    private bool isGrantingConsent = false;
+    private bool hasArmPermission = false;
+    private bool isGrantingArmConsent = false;
     private string? consentErrorMessage = null;
 
     private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
@@ -223,31 +212,36 @@
         var isAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (isAuthenticated)
         {
-            await CheckServiceBusConsent();
-            _ = LoadNamespacesAsync();
+            await NavState.InitializeAsync();
+            await CheckArmPermission();
+            if (hasArmPermission)
+            {
+                _ = LoadNamespacesAsync();
+            }
         }
     }
 
-    private async Task CheckServiceBusConsent()
+    private async Task CheckArmPermission()
     {
         try
         {
             var result = await TokenProvider.RequestAccessToken(new AccessTokenRequestOptions
             {
-                Scopes = ["https://servicebus.azure.net/user_impersonation"]
+                Scopes = ["https://management.azure.com/user_impersonation"]
             });
 
-            needsServiceBusConsent = result.Status == AccessTokenResultStatus.RequiresRedirect;
+            hasArmPermission = result.Status != AccessTokenResultStatus.RequiresRedirect;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error checking Service Bus consent: {ex.Message}");
+            Console.WriteLine($"Error checking ARM permission: {ex.Message}");
+            hasArmPermission = false;
         }
     }
 
-    private async Task GrantConsent()
+    private async Task GrantArmConsent()
     {
-        isGrantingConsent = true;
+        isGrantingArmConsent = true;
         consentErrorMessage = null;
         StateHasChanged();
 
@@ -264,11 +258,11 @@
             ");
 
             var result = await JSRuntime.InvokeAsync<JsonElement>("msalHelper.acquireTokenPopup", 
-                "https://servicebus.azure.net/user_impersonation");
+                "https://management.azure.com/user_impersonation");
 
             if (result.TryGetProperty("success", out var success) && success.GetBoolean())
             {
-                Console.WriteLine("✓ Service Bus consent granted successfully - reloading page to refresh tokens");
+                Console.WriteLine("✓ ARM consent granted successfully - reloading page to refresh tokens");
                 Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
                 return;
             }
@@ -293,7 +287,7 @@
         }
         finally
         {
-            isGrantingConsent = false;
+            isGrantingArmConsent = false;
             StateHasChanged();
         }
     }
@@ -323,6 +317,7 @@
                 namespaceDict[ns.Name] = ns;
                 StateHasChanged();
             }
+            
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -338,10 +333,24 @@
 
     private void NavigateToExplorer(ServiceBusNamespaceInfo ns)
     {
-        // Add to recent namespaces
-        NavState.AddRecentNamespace(ns);
-        
         var url = $"explorer?namespace={Uri.EscapeDataString(ns.FullyQualifiedNamespace)}&rg={Uri.EscapeDataString(ns.ResourceGroup)}&sub={Uri.EscapeDataString(ns.SubscriptionId)}&name={Uri.EscapeDataString(ns.Name)}";
         Navigation.NavigateTo(url);
     }
+
+    private async Task ToggleFavorite(string fullyQualifiedNamespace)
+    {
+        var ns = namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
+        if (ns == null) return;
+
+        if (NavState.IsFavorite(fullyQualifiedNamespace))
+        {
+            await NavState.RemoveFromFavoritesAsync(fullyQualifiedNamespace);
+        }
+        else
+        {
+            var displayName = ns.Name.Replace(".servicebus.windows.net", "");
+            await NavState.AddToFavoritesAsync(fullyQualifiedNamespace, ns.ResourceGroup, ns.SubscriptionId, displayName);
+        }
+    }
+
 }
