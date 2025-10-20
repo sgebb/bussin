@@ -15,46 +15,28 @@
 <div class="explorer-layout">
     <!-- Section 1: Compact Header -->
     <div class="explorer-header">
-        <div class="d-flex justify-content-between align-items-start">
-            <div class="flex-grow-1">
-                <div class="d-flex align-items-center gap-2">
-                    <h1 class="explorer-namespace-title mb-0">@displayName</h1>
-                    @if (NavState.IsFavorite(NamespaceParam ?? ""))
-                    {
-                        <button class="btn btn-sm btn-link" @onclick="ToggleEditMode" title="Edit name">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                    }
-                    @if (isLoadingEntities)
-                    {
-                        <div class="spinner-border spinner-border-sm text-muted" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                    }
-                </div>
-                <small class="text-muted">@NamespaceParam</small>
-            </div>
+        <div class="d-flex align-items-center gap-2">
+            <h1 class="explorer-namespace-title mb-0">@displayName</h1>
+            <button class="btn @(NavState.IsFavorite(NamespaceParam ?? "") ? "btn-warning" : "btn-outline-warning")" 
+                    @onclick="() => ToggleFavorite()" 
+                    title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Remove from favorites" : "Add to favorites")"
+                    style="font-size: 1.5rem; line-height: 1;">
+                <i class="bi bi-star@(NavState.IsFavorite(NamespaceParam ?? "") ? "-fill" : "")"></i>
+            </button>
             @if (NavState.IsFavorite(NamespaceParam ?? ""))
             {
-                <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-warning btn-sm" @onclick="() => ToggleFavorite()" title="Remove from favorites">
-                        <i class="bi bi-star-fill"></i>
-                    </button>
-                    <select class="form-select form-select-sm" style="width: auto;" value="@selectedFolderId" @onchange="OnFolderChanged">
-                        @foreach (var folder in NavState.Folders)
-                        {
-                            <option value="@folder.Id">@folder.Name</option>
-                        }
-                    </select>
-                </div>
-            }
-            else
-            {
-                <button class="btn btn-outline-warning btn-sm" @onclick="() => ToggleFavorite()" title="Add to favorites">
-                    <i class="bi bi-star"></i>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleEditMode" title="Edit name">
+                    <i class="bi bi-pencil"></i>
                 </button>
             }
+            @if (isLoadingEntities)
+            {
+                <div class="spinner-border spinner-border-sm text-muted" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            }
         </div>
+        <small class="text-muted d-block mt-1">@NamespaceParam</small>
         @if (isEditingName)
         {
             <div class="mt-2">
@@ -293,13 +275,14 @@
     private Dictionary<string, ServiceBusTopicInfo> topicDict = new();
     private Dictionary<string, ServiceBusSubscriptionInfo> subscriptionDict = new();
     
-    private List<ServiceBusQueueInfo> queues => queueDict.Values.ToList();
-    private List<ServiceBusTopicInfo> topics => topicDict.Values.ToList();
-    private List<ServiceBusSubscriptionInfo> subscriptions => subscriptionDict.Values.ToList();
+    private List<ServiceBusQueueInfo> queues => queueDict.Values.OrderBy(q => q.Name).ToList();
+    private List<ServiceBusTopicInfo> topics => topicDict.Values.OrderBy(t => t.Name).ToList();
+    private List<ServiceBusSubscriptionInfo> subscriptions => subscriptionDict.Values.OrderBy(s => s.Name).ToList();
     
     private string? selectedQueueName;
     private string? selectedTopicName;
     private string? selectedSubscriptionName;
+    private string? _loadedSubscriptionsForTopic; // Track which topic the current subscriptions belong to
     
     private List<ServiceBusMessage> peekedMessages = new();
     private bool isLoadingEntities = false;
@@ -330,7 +313,6 @@
     private int peekFromSequence = 0;
     private string? errorMessage;
     private string displayName = "";
-    private string? selectedFolderId = null;
     private bool isEditingName = false;
     
     // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
@@ -363,14 +345,13 @@
             topicDict.Clear();
             subscriptionDict.Clear();
             
-            // Initialize rename and folder selection
+            // Initialize display name
             if (!string.IsNullOrEmpty(NamespaceParam))
             {
                 var connection = NavState.GetNamespaceConnection(NamespaceParam);
                 if (connection != null)
                 {
                     displayName = connection.DisplayName;
-                    selectedFolderId = NavState.GetCurrentFolderId(NamespaceParam);
                 }
                 else
                 {
@@ -413,16 +394,6 @@
             
             await NavState.AddToFavoritesAsync(NamespaceParam, ResourceGroupParam, SubscriptionIdParam, displayName);
         }
-    }
-
-    private async Task OnFolderChanged(ChangeEventArgs e)
-    {
-        if (e.Value == null || string.IsNullOrEmpty(NamespaceParam)) return;
-        
-        var targetFolderId = e.Value.ToString();
-        if (string.IsNullOrEmpty(targetFolderId)) return;
-        
-        await NavState.MoveNamespaceToFolderAsync(NamespaceParam, targetFolderId);
     }
 
     private async Task LoadEntitiesAsync()
@@ -499,6 +470,7 @@
         selectedTopicName = null;
         selectedSubscriptionName = null;
         peekedMessages.Clear();
+        peekFromSequence = 0;
     }
 
     private async Task SelectTopic(string topicName)
@@ -507,7 +479,14 @@
         selectedTopicName = topicName;
         selectedSubscriptionName = null;
         peekedMessages.Clear();
-        subscriptionDict.Clear();
+        peekFromSequence = 0;
+        
+        // Only clear subscriptions if switching to a different topic
+        if (_loadedSubscriptionsForTopic != topicName)
+        {
+            subscriptionDict.Clear();
+            _loadedSubscriptionsForTopic = null;
+        }
         
         await LoadSubscriptionsAsync(topicName);
     }
@@ -516,8 +495,19 @@
     {
         if (_currentNamespace == null) return;
         
-        // Show loading spinner since we just cleared subscriptions
+        // Cancel any previous subscription loading
+        _loadCts?.Cancel();
+        _loadCts = new CancellationTokenSource();
+        var ct = _loadCts.Token;
+        
+        // Show loading spinner
         isLoadingSubscriptions = true;
+        
+        // Clear subscriptions if loading for a different topic
+        if (_loadedSubscriptionsForTopic != topicName)
+        {
+            subscriptionDict.Clear();
+        }
 
         try
         {
@@ -528,12 +518,16 @@
                 return;
             }
 
-            var ct = _loadCts?.Token ?? CancellationToken.None;
             var firstItem = true;
             await foreach (var sub in ResourceService.ListSubscriptionsAsync(credential, _currentNamespace, topicName, ct))
             {
                 if (ct.IsCancellationRequested) break;
-                subscriptionDict[sub.Name] = sub;
+                
+                // Only add if we're still loading for the same topic
+                if (selectedTopicName == topicName)
+                {
+                    subscriptionDict[sub.Name] = sub;
+                }
                 
                 if (firstItem)
                 {
@@ -542,6 +536,16 @@
                 }
                 StateHasChanged();
             }
+            
+            // Mark that we've loaded subscriptions for this topic
+            if (!ct.IsCancellationRequested && selectedTopicName == topicName)
+            {
+                _loadedSubscriptionsForTopic = topicName;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when switching topics quickly
         }
         catch (Exception ex)
         {
@@ -559,12 +563,14 @@
         selectedSubscriptionName = subName;
         selectedQueueName = null;
         peekedMessages.Clear();
+        peekFromSequence = 0;
     }
 
     private async Task PeekMessages()
     {
         isPeeking = true;
         peekedMessages.Clear();
+        peekFromSequence = 0;
         errorMessage = null;
 
         try
@@ -639,7 +645,7 @@
             {
                 newMessages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, peekCount, peekFromSequence, isViewingDLQ);
             }
-            else if (selectedSubscriptionName != null && selectedTopicName != null)
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
             {
                 newMessages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, peekCount, peekFromSequence, isViewingDLQ);
             }
@@ -703,6 +709,7 @@
             }
 
             peekedMessages.Clear();
+            peekFromSequence = 0;
             Console.WriteLine($"Purged {count} messages");
             CloseConfirmModal();
         }
@@ -839,6 +846,7 @@
     {
         isViewingDLQ = e.Value is bool b && b;
         peekedMessages.Clear();
+        peekFromSequence = 0;
     }
 
     private void ShowConfirmModal(string title, string message, string? detail, string confirmText, string confirmClass, Func<Task> onConfirm)
@@ -953,6 +961,11 @@
             
             // Remove deleted messages from the view
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+            // Reset peek sequence if all messages are cleared
+            if (peekedMessages.Count == 0)
+            {
+                peekFromSequence = 0;
+            }
             CloseConfirmModal();
         }
         catch (Exception ex)
@@ -997,6 +1010,11 @@
             
             // Remove resubmitted messages from the view
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+            // Reset peek sequence if all messages are cleared
+            if (peekedMessages.Count == 0)
+            {
+                peekFromSequence = 0;
+            }
             CloseConfirmModal();
         }
         catch (Exception ex)
@@ -1040,6 +1058,11 @@
             
             // Remove moved messages from the view
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+            // Reset peek sequence if all messages are cleared
+            if (peekedMessages.Count == 0)
+            {
+                peekFromSequence = 0;
+            }
             CloseConfirmModal();
         }
         catch (Exception ex)

@@ -22,8 +22,26 @@
                 <div class="card-body">
                     @if (authState != null && authState.User.Identity?.IsAuthenticated == true)
                     {
-                        <p><strong>Email:</strong> @authState.User.Identity?.Name</p>
-                        <p class="mb-0"><strong>Name:</strong> @(authState.User.Claims.FirstOrDefault(c => c.Type == "name")?.Value ?? "N/A")</p>
+                        var nameClaim = authState.User.Claims.FirstOrDefault(c => c.Type == "name")?.Value;
+                        var emailClaim = authState.User.Claims.FirstOrDefault(c => c.Type == "emails" || c.Type == "email")?.Value;
+                        var preferredUsername = authState.User.Claims.FirstOrDefault(c => c.Type == "preferred_username")?.Value;
+                        
+                        @if (!string.IsNullOrEmpty(nameClaim))
+                        {
+                            <p class="mb-0"><strong>Name:</strong> @nameClaim</p>
+                        }
+                        @if (!string.IsNullOrEmpty(emailClaim))
+                        {
+                            <p class="mb-0"><strong>Email:</strong> @emailClaim</p>
+                        }
+                        else if (!string.IsNullOrEmpty(preferredUsername))
+                        {
+                            <p class="mb-0"><strong>Username:</strong> @preferredUsername</p>
+                        }
+                        else if (!string.IsNullOrEmpty(authState.User.Identity?.Name))
+                        {
+                            <p class="mb-0"><strong>User:</strong> @authState.User.Identity?.Name</p>
+                        }
                     }
                 </div>
             </div>

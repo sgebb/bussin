@@ -184,7 +184,7 @@
 
 @code {
     private Dictionary<string, ServiceBusNamespaceInfo> namespaceDict = new();
-    private List<ServiceBusNamespaceInfo> namespaces => namespaceDict.Values.ToList();
+    private List<ServiceBusNamespaceInfo> namespaces => namespaceDict.Values.OrderBy(ns => ns.Name).ToList();
     private bool isRefreshing = false;
     private string? errorMessage;
     private bool showSecurityInfo = false;

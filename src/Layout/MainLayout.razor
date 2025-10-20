@@ -3,6 +3,8 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inherits LayoutComponentBase
 @inject IPreferencesService PreferencesService
+@inject NavigationStateService NavState
+@inject IAuthenticationService AuthService
 
 <AuthorizeView>
     <Authorized>
@@ -34,6 +36,13 @@
         // Load dark mode preference
         var prefs = await PreferencesService.LoadPreferencesAsync();
         isDarkMode = prefs.DarkMode;
+        
+        // Initialize NavState for all authenticated pages
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            await NavState.InitializeAsync();
+        }
     }
 
     private async Task ToggleDarkMode()

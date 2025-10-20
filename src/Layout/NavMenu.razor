@@ -33,15 +33,19 @@
                                         </div>
                                         @if (folder.Name != "Namespaces")
                                         {
-                                            <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => ShowDeleteFolderConfirmation(folder.Id, folder.Name)" @onclick:stopPropagation="true" title="Delete folder">
-                                                <i class="bi bi-x-circle"></i>
+                                            <button class="btn btn-sm btn-danger" 
+                                                    @onclick="() => ShowDeleteFolderConfirmation(folder.Id, folder.Name)" 
+                                                    @onclick:stopPropagation="true" 
+                                                    title="Delete folder"
+                                                    style="padding: 0.125rem 0.375rem;">
+                                                <i class="bi bi-x-lg"></i>
                                             </button>
                                         }
                                     </div>
                                     @if (folder.IsExpanded)
                                     {
                                         <div class="mt-2 ms-3">
-                                            @foreach (var ns in folder.Namespaces)
+                                            @foreach (var ns in folder.Namespaces.OrderBy(n => n.DisplayName))
                                             {
                                                 <a href="@GetExplorerUrl(ns)" 
                                                    class="recent-namespace-tile d-block mb-2 p-2"

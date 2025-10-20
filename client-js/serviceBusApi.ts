@@ -515,6 +515,15 @@ async function purgeEntity(
         const purgePromise = new Promise<number>((resolve, reject) => {
             let noMessageTimeout: NodeJS.Timeout | null = null;
             
+            // Set initial timeout in case queue is already empty
+            noMessageTimeout = setTimeout(() => {
+                if (isRunning) {
+                    receiver.close();
+                    connection.close();
+                    resolve(deletedCount);
+                }
+            }, 2000);  // 2 seconds of no messages = queue empty
+            
             receiver.receive(
                 (message: any) => {
                     deletedCount++;
@@ -537,6 +546,9 @@ async function purgeEntity(
                     }, 2000);  // 2 seconds of no messages = queue empty
                 },
                 (error: Error) => {
+                    if (noMessageTimeout) {
+                        clearTimeout(noMessageTimeout);
+                    }
                     receiver.close();
                     connection.close();
                     reject(new Error(`Purge failed: ${error.message}`));
