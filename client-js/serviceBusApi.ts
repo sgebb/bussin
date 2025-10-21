@@ -513,7 +513,7 @@ async function purgeEntity(
         });
         
         const purgePromise = new Promise<number>((resolve, reject) => {
-            const batchSize = 1000; // Receive up to 1000 messages at a time
+            const batchSize = 6000; // Receive up to 6000 messages at a time
             let batchMessages: any[] = [];
             let consecutiveEmptyBatches = 0;
             const maxEmptyBatches = 3;
