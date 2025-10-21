@@ -84,6 +84,23 @@
                 (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
             );
         };
+        
+        // Helper to start purge with progress callback
+        // Queue signature: (namespace, queueName, token, callbackRef, fromDeadLetter, "queue")
+        // Subscription signature: (namespace, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription")
+        window.startPurgeWithProgress = async function(...args) {
+            const type = args[args.length - 1]; // Last argument is type
+            
+            if (type === 'queue') {
+                const [namespace, queueName, token, callbackRef, fromDeadLetter] = args;
+                const progressCallback = (count) => callbackRef.invokeMethodAsync('OnProgress', count);
+                return await ServiceBusAPI.purgeQueue(namespace, queueName, token, progressCallback, fromDeadLetter);
+            } else {
+                const [namespace, topicName, subscriptionName, token, callbackRef, fromDeadLetter] = args;
+                const progressCallback = (count) => callbackRef.invokeMethodAsync('OnProgress', count);
+                return await ServiceBusAPI.purgeSubscription(namespace, topicName, subscriptionName, token, progressCallback, fromDeadLetter);
+            }
+        };
     </script>
     
     <script>

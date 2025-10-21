@@ -14,15 +14,37 @@
                     {
                         <small class="text-muted">@DetailMessage</small>
                     }
+                    @if (ProgressCount.HasValue)
+                    {
+                        <div class="mt-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Progress:</strong>
+                                <span class="badge bg-primary">@ProgressCount messages deleted</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" 
+                                     style="width: 100%"></div>
+                            </div>
+                        </div>
+                    }
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="Cancel" disabled="@IsProcessing">
-                        @CancelButtonText
+                    <button type="button" class="btn btn-secondary" @onclick="Cancel">
+                        @(IsProcessing && ProgressCount.HasValue ? "Stop" : CancelButtonText)
                     </button>
+                    @if (OnAlternativeConfirm.HasDelegate && !IsProcessing && !string.IsNullOrEmpty(AlternativeConfirmButtonText))
+                    {
+                        <button type="button" class="btn @AlternativeConfirmButtonClass" @onclick="AlternativeConfirm">
+                            @AlternativeConfirmButtonText
+                        </button>
+                    }
                     <button type="button" class="btn @ConfirmButtonClass" @onclick="Confirm" disabled="@IsProcessing">
                         @if (IsProcessing)
                         {
-                            <span class="spinner-border spinner-border-sm me-1"></span>
+                            <span class="spinner-border spinner-border-sm me-1" role="status">
+                                <span class="visually-hidden">Processing...</span>
+                            </span>
                         }
                         @ConfirmButtonText
                     </button>
@@ -41,12 +63,22 @@
     [Parameter] public string CancelButtonText { get; set; } = "Cancel";
     [Parameter] public string ConfirmButtonClass { get; set; } = "btn-primary";
     [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public int? ProgressCount { get; set; }
     [Parameter] public EventCallback OnConfirm { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+    
+    [Parameter] public string AlternativeConfirmButtonText { get; set; } = "Alternative";
+    [Parameter] public string AlternativeConfirmButtonClass { get; set; } = "btn-secondary";
+    [Parameter] public EventCallback OnAlternativeConfirm { get; set; }
 
     private async Task Confirm()
     {
         await OnConfirm.InvokeAsync();
+    }
+    
+    private async Task AlternativeConfirm()
+    {
+        await OnAlternativeConfirm.InvokeAsync();
     }
 
     private async Task Cancel()

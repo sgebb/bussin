@@ -6,6 +6,8 @@ namespace ServiceBusExplorer.Blazor.Services;
 
 public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJsInteropService
 {
+    public IJSRuntime JSRuntime => jsRuntime;
+    
     // Queue Operations
     
     public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
@@ -316,14 +318,10 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     {
         try
         {
-            // Create JS callback wrapper using helper function
-            var callback = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "createProgressCallback",
-                callbackRef);
-            
+            // Call JS function that wraps the purge with progress callback
             var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "ServiceBusAPI.purgeQueue",
-                namespaceName, queueName, token, callback, fromDeadLetter);
+                "startPurgeWithProgress",
+                namespaceName, queueName, token, callbackRef, fromDeadLetter, "queue");
             
             return controller;
         }
@@ -338,14 +336,10 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     {
         try
         {
-            // Create JS callback wrapper using helper function
-            var callback = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "createProgressCallback",
-                callbackRef);
-            
+            // Call JS function that wraps the purge with progress callback
             var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "ServiceBusAPI.purgeSubscription",
-                namespaceName, topicName, subscriptionName, token, callback, fromDeadLetter);
+                "startPurgeWithProgress",
+                namespaceName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription");
             
             return controller;
         }

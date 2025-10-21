@@ -5,7 +5,7 @@ namespace ServiceBusExplorer.Blazor.Services;
 public sealed class NavigationStateService(IPreferencesService preferencesService)
 {
     private const string DefaultFolderId = "namespaces";
-    private const string DefaultFolderName = "Namespaces";
+    private const string DefaultFolderName = "Favorites";
     private AppPreferences _preferences = new();
     private bool _isInitialized = false;
 
@@ -134,18 +134,18 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         var folderToDelete = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
         if (folderToDelete == null) return;
 
-        // Don't allow deleting the default "Namespaces" folder
-        if (folderToDelete.Name == "Namespaces") return;
+        // Don't allow deleting the default folder
+        if (folderToDelete.Id == DefaultFolderId) return;
 
-        // Move all namespaces from this folder to the default "Namespaces" folder
-        var defaultFolder = _preferences.Folders.FirstOrDefault(f => f.Name == "Namespaces");
+        // Move all namespaces from this folder to the default folder
+        var defaultFolder = _preferences.Folders.FirstOrDefault(f => f.Id == DefaultFolderId);
         if (defaultFolder == null)
         {
             // Create default folder if it doesn't exist
             defaultFolder = new Folder
             {
-                Id = Guid.NewGuid().ToString(),
-                Name = "Namespaces",
+                Id = DefaultFolderId,
+                Name = DefaultFolderName,
                 IsExpanded = true
             };
             _preferences.Folders.Add(defaultFolder);

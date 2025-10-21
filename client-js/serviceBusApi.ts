@@ -507,68 +507,127 @@ async function purgeEntity(
         await connection.authenticateCBS(entityPath);
         
         const receiver = new MessageReceiver(connection, entityPath, {
-            peekMode: false,  // Receive and delete
+            peekMode: false,  // Receive and delete mode
             maxMessages: null,  // Continuous
             autoClose: false
         });
         
         const purgePromise = new Promise<number>((resolve, reject) => {
-            let noMessageTimeout: NodeJS.Timeout | null = null;
+            const batchSize = 1000; // Receive up to 1000 messages at a time
+            let batchMessages: any[] = [];
+            let consecutiveEmptyBatches = 0;
+            const maxEmptyBatches = 3;
+            let batchTimeout: NodeJS.Timeout | null = null;
+            let hasReceivedAnyMessages = false;
             
-            // Set initial timeout in case queue is already empty
-            noMessageTimeout = setTimeout(() => {
-                if (isRunning) {
-                    receiver.close();
-                    connection.close();
-                    resolve(deletedCount);
-                }
-            }, 2000);  // 2 seconds of no messages = queue empty
-            
-            receiver.receive(
-                (message: any) => {
-                    deletedCount++;
+            const processBatch = () => {
+                if (batchMessages.length > 0) {
+                    deletedCount += batchMessages.length;
                     if (onProgress) {
                         onProgress(deletedCount);
                     }
+                    batchMessages = [];
+                    consecutiveEmptyBatches = 0;
+                } else {
+                    consecutiveEmptyBatches++;
+                }
+                
+                if (!isRunning || consecutiveEmptyBatches >= maxEmptyBatches) {
+                    receiver.close();
+                    connection.close();
+                    resolve(deletedCount);
+                } else {
+                    // Request next batch
+                    receiver.add_credit(batchSize);
                     
-                    // Reset timeout - we got a message
-                    if (noMessageTimeout) {
-                        clearTimeout(noMessageTimeout);
+                    // Set timeout for this batch - if no messages arrive, process empty batch
+                    // Use shorter timeout if we've never received messages (empty queue)
+                    const timeout = !hasReceivedAnyMessages ? 1000 : (consecutiveEmptyBatches > 0 ? 2000 : 500);
+                    batchTimeout = setTimeout(() => {
+                        processBatch();
+                    }, timeout);
+                }
+            };
+            
+            receiver.receive(
+                (message: any) => {
+                    if (batchTimeout) {
+                        clearTimeout(batchTimeout);
+                        batchTimeout = null;
                     }
                     
-                    // Set timeout to detect when queue is empty
-                    noMessageTimeout = setTimeout(() => {
-                        if (isRunning) {
-                            receiver.close();
-                            connection.close();
-                            resolve(deletedCount);
+                    batchMessages.push(message);
+                    hasReceivedAnyMessages = true;
+                    
+                    // If we hit batch size, process immediately and request more
+                    if (batchMessages.length >= batchSize) {
+                        if (batchMessages.length > 0) {
+                            deletedCount += batchMessages.length;
+                            if (onProgress) {
+                                onProgress(deletedCount);
+                            }
+                            batchMessages = [];
+                            consecutiveEmptyBatches = 0;
                         }
-                    }, 2000);  // 2 seconds of no messages = queue empty
+                        
+                        if (isRunning) {
+                            receiver.add_credit(batchSize);
+                        }
+                    } else {
+                        // Set a short timeout to process partial batch if no more messages
+                        if (batchTimeout) clearTimeout(batchTimeout);
+                        batchTimeout = setTimeout(() => {
+                            processBatch();
+                        }, 100);
+                    }
                 },
-                (error: Error) => {
-                    if (noMessageTimeout) {
-                        clearTimeout(noMessageTimeout);
+                (error: any) => {
+                    if (batchTimeout) {
+                        clearTimeout(batchTimeout);
                     }
                     receiver.close();
                     connection.close();
-                    reject(new Error(`Purge failed: ${error.message}`));
+                    
+                    // Extract error message from various error formats
+                    let errorMsg = 'Unknown error';
+                    if (error) {
+                        if (typeof error === 'string') {
+                            errorMsg = error;
+                        } else if (error.message) {
+                            errorMsg = error.message;
+                        } else if (error.description) {
+                            errorMsg = error.description;
+                        } else if (error.condition) {
+                            errorMsg = error.condition;
+                        } else if (error.toString && error.toString() !== '[object Object]') {
+                            errorMsg = error.toString();
+                        }
+                    }
+                    
+                    reject(new Error(`Purge failed: ${errorMsg}`));
                 }
             );
+            
+            // Start receiving first batch
+            receiver.add_credit(batchSize);
+            
+            // Set initial timeout in case queue is completely empty
+            batchTimeout = setTimeout(() => {
+                processBatch();
+            }, 1000);
         });
         
         return {
             promise: purgePromise,
             stop: () => {
                 isRunning = false;
-                receiver.close();
-                connection.close();
                 return deletedCount;
             },
             getCount: () => deletedCount
         };
     } catch (err) {
         connection.close();
-        throw new Error(`Purge failed: ${(err as Error).message}`);
+        throw new Error(`Failed to start purge: ${(err as Error).message}`);
     }
 }
 

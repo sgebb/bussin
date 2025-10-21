@@ -85,6 +85,15 @@ export class MessageReceiver {
     }
 
     /**
+     * Add credit to request more messages (for batch operations)
+     */
+    add_credit(credit: number): void {
+        if (this.receiver) {
+            this.receiver.add_credit(credit);
+        }
+    }
+
+    /**
      * Close the receiver
      */
     close(): void {

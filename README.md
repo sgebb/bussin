@@ -98,11 +98,7 @@ You can also check `buildinfo.json` at the root of the deployed site.
 ### 🐛 Bugs & Issues
 
 - [ ] **Message scheduling verification** - Verify scheduling actually works, add UI to show number of scheduled messages
-
-### 🎨 UX Improvements
-
-- [ ] **Find namespace UX** - Redesign navigation: home page shows favorites/recents, "Discover" button opens modal for finding new namespaces
-- [ ] **Queue/topic/subscription display** - Optimize information density - currently too cluttered but need all necessary information visible
+- [] **Faster purge** - Multiple processes running purge at the same time?
 
 ### 🔮 Future / Blocked
 

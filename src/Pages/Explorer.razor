@@ -9,6 +9,7 @@
 @inject IMessageParsingService MessageParsingService
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
+@inject BackgroundPurgeService BackgroundPurge
 
 <PageTitle>Explorer - bussin</PageTitle>
 
@@ -133,7 +134,8 @@
     <div class="explorer-messages">
         @if (!string.IsNullOrEmpty(errorMessage))
         {
-            <div class="alert alert-danger alert-sm mb-2">
+            <div class="alert alert-danger alert-dismissible alert-sm mb-2" style="max-height: 120px; overflow-y: auto;">
+                <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
                 <strong>Error:</strong> @errorMessage
             </div>
         }
@@ -252,8 +254,12 @@
              DetailMessage="@confirmModalDetail"
              ConfirmButtonText="@confirmModalButtonText"
              ConfirmButtonClass="@confirmModalButtonClass"
+             AlternativeConfirmButtonText="@confirmModalAlternativeButtonText"
+             AlternativeConfirmButtonClass="@confirmModalAlternativeButtonClass"
              IsProcessing="@isConfirmProcessing"
+             ProgressCount="@purgeProgressCount"
              OnConfirm="@OnConfirmModalConfirm"
+             OnAlternativeConfirm="@OnConfirmModalAlternativeConfirm"
              OnCancel="@OnConfirmModalCancel" />
 
 @code {
@@ -304,8 +310,14 @@
     private string? confirmModalDetail = null;
     private string confirmModalButtonText = "Confirm";
     private string confirmModalButtonClass = "btn-primary";
+    private string confirmModalAlternativeButtonText = "";
+    private string confirmModalAlternativeButtonClass = "btn-secondary";
     private bool isConfirmProcessing = false;
+    private int? purgeProgressCount = null;
+    private IJSObjectReference? purgeController = null;
+    private DotNetObjectReference<PurgeProgressCallback>? purgeCallbackRef = null;
     private Func<Task>? confirmModalAction = null;
+    private Func<Task>? confirmModalAlternativeAction = null;
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
@@ -329,7 +341,7 @@
             
             _currentNamespace = new ServiceBusNamespaceInfo
             {
-                Name = NameParam ?? "",
+                Name = NamespaceNameOnly,
                 FullyQualifiedNamespace = NamespaceParam ?? "",
                 ResourceGroup = ResourceGroupParam ?? "",
                 SubscriptionId = SubscriptionIdParam ?? ""
@@ -596,13 +608,24 @@
         catch (Exception ex)
         {
             var errorMsg = ex.Message;
+            
+            // Clean up nested error messages
+            if (errorMsg.StartsWith("Peek failed: Peek failed:"))
+            {
+                errorMsg = errorMsg.Replace("Peek failed: Peek failed:", "Peek failed:");
+            }
+            
             if (errorMsg.Contains("WebSocket") || errorMsg.Contains("websocket"))
             {
-                errorMessage = $"WebSocket connection failed. This could be due to: (1) Token expiration - try refreshing the page, (2) Browser security policies, or (3) Network issues. Error: {ex.Message}";
+                errorMessage = $"WebSocket connection failed. This could be due to token expiration (try refreshing) or network issues. Details: {errorMsg}";
+            }
+            else if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
+            {
+                errorMessage = $"Permission denied: {errorMsg}";
             }
             else
             {
-                errorMessage = $"Failed to peek messages: {ex.Message}";
+                errorMessage = errorMsg;
             }
             Console.WriteLine($"Peek error: {ex}");
         }
@@ -681,46 +704,126 @@
         var entityName = selectedQueueName ?? $"{selectedTopicName}/{selectedSubscriptionName}";
         var dlqSuffix = isViewingDLQ ? " (Dead Letter Queue)" : "";
         
-        ShowConfirmModal(
+        ShowConfirmModalWithAlternative(
             title: "Confirm Purge",
             message: $"Are you sure you want to purge all messages from {entityName}{dlqSuffix}?",
-            detail: "This action cannot be undone. All messages will be permanently deleted.",
-            confirmText: "Purge All Messages",
+            detail: "This action cannot be undone. All messages will be permanently deleted.\n\n" +
+                    "• Purge with Progress: Stay on this page and watch live progress.\n" +
+                    "• Purge in Background: Purge continues even if you navigate away. You'll get a notification when complete. Background purges persist until completion, page refresh, or closing the app.",
+            confirmText: "Purge with Progress",
             confirmClass: "btn-danger",
-            onConfirm: ExecutePurgeMessages
+            alternativeText: "Purge in Background",
+            alternativeClass: "btn-outline-danger",
+            onConfirm: ExecutePurgeMessages,
+            onAlternativeConfirm: ExecuteBackgroundPurge
         );
+    }
+    
+    private async Task ExecuteBackgroundPurge()
+    {
+        isConfirmProcessing = true;
+        errorMessage = null;
+        
+        try
+        {
+            var entityType = selectedQueueName != null ? "queue" : "subscription";
+            var entityPath = selectedQueueName ?? $"{selectedTopicName}/{selectedSubscriptionName}";
+            
+            await BackgroundPurge.StartPurgeAsync(
+                NamespaceNameOnly,
+                entityType,
+                entityPath,
+                isViewingDLQ
+            );
+            
+            peekedMessages.Clear();
+            peekFromSequence = 0;
+            await CloseConfirmModal();
+            
+            // Note: Toast notification will appear when purge completes (handled by background service)
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to start background purge: {ex.Message}";
+            Console.WriteLine($"Background purge error: {ex}");
+        }
+        finally
+        {
+            isConfirmProcessing = false;
+        }
     }
 
     private async Task ExecutePurgeMessages()
     {
         isConfirmProcessing = true;
+        purgeProgressCount = 0;
         errorMessage = null;
 
         try
         {
-            int count = 0;
+            var token = await AuthService.GetServiceBusTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Service Bus token not available";
+                return;
+            }
+
+            // Create progress callback
+            var callback = new PurgeProgressCallback(count =>
+            {
+                purgeProgressCount = count;
+                InvokeAsync(StateHasChanged);
+            });
+            purgeCallbackRef = DotNetObjectReference.Create(callback);
+
+            // Start purge with progress tracking
             if (selectedQueueName != null)
             {
-                count = await OperationsService.PurgeQueueAsync(NamespaceNameOnly, selectedQueueName, isViewingDLQ);
+                purgeController = await JsInterop.StartPurgeQueueAsync(NamespaceNameOnly, selectedQueueName, token, purgeCallbackRef, isViewingDLQ);
             }
             else if (selectedSubscriptionName != null && selectedTopicName != null)
             {
-                count = await OperationsService.PurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, isViewingDLQ);
+                purgeController = await JsInterop.StartPurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, purgeCallbackRef, isViewingDLQ);
+            }
+
+            // Wait for completion
+            if (purgeController != null)
+            {
+                var finalCount = await JsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", purgeController);
+                Console.WriteLine($"Purged {finalCount} messages");
             }
 
             peekedMessages.Clear();
             peekFromSequence = 0;
-            Console.WriteLine($"Purged {count} messages");
-            CloseConfirmModal();
+            await CloseConfirmModal();
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to purge messages: {ex.Message}";
+            var errorMsg = ex.Message;
+            
+            // Clean up nested error messages
+            if (errorMsg.Contains("Purge failed: Purge failed:"))
+            {
+                errorMsg = errorMsg.Replace("Purge failed: Purge failed:", "Purge failed:");
+            }
+            
+            if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
+            {
+                errorMessage = $"Permission denied: You don't have the required permissions to purge messages from this entity.";
+            }
+            else
+            {
+                errorMessage = errorMsg;
+            }
             Console.WriteLine($"Purge error: {ex}");
         }
         finally
         {
             isConfirmProcessing = false;
+            purgeProgressCount = null;
+            purgeCallbackRef?.Dispose();
+            purgeCallbackRef = null;
+            purgeController = null;
         }
     }
 
@@ -857,14 +960,47 @@
         confirmModalButtonText = confirmText;
         confirmModalButtonClass = confirmClass;
         confirmModalAction = onConfirm;
+        confirmModalAlternativeAction = null;
+        confirmModalAlternativeButtonText = "";
+        showConfirmModal = true;
+    }
+    
+    private void ShowConfirmModalWithAlternative(string title, string message, string? detail, string confirmText, string confirmClass, string alternativeText, string alternativeClass, Func<Task> onConfirm, Func<Task> onAlternativeConfirm)
+    {
+        confirmModalTitle = title;
+        confirmModalMessage = message;
+        confirmModalDetail = detail;
+        confirmModalButtonText = confirmText;
+        confirmModalButtonClass = confirmClass;
+        confirmModalAlternativeButtonText = alternativeText;
+        confirmModalAlternativeButtonClass = alternativeClass;
+        confirmModalAction = onConfirm;
+        confirmModalAlternativeAction = onAlternativeConfirm;
         showConfirmModal = true;
     }
 
-    private void CloseConfirmModal()
+    private async Task CloseConfirmModal()
     {
+        // If purging, stop it
+        if (purgeController != null)
+        {
+            try
+            {
+                await purgeController.InvokeVoidAsync("stop");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error stopping purge: {ex.Message}");
+            }
+        }
+        
         showConfirmModal = false;
         confirmModalAction = null;
         isConfirmProcessing = false;
+        purgeProgressCount = null;
+        purgeCallbackRef?.Dispose();
+        purgeCallbackRef = null;
+        purgeController = null;
     }
 
     private async Task OnConfirmModalConfirm()
@@ -874,10 +1010,18 @@
             await confirmModalAction();
         }
     }
-
-    private void OnConfirmModalCancel()
+    
+    private async Task OnConfirmModalAlternativeConfirm()
     {
-        CloseConfirmModal();
+        if (confirmModalAlternativeAction != null)
+        {
+            await confirmModalAlternativeAction();
+        }
+    }
+
+    private async Task OnConfirmModalCancel()
+    {
+        await CloseConfirmModal();
     }
 
     private void GoBack()
@@ -966,7 +1110,7 @@
             {
                 peekFromSequence = 0;
             }
-            CloseConfirmModal();
+            await CloseConfirmModal();
         }
         catch (Exception ex)
         {
@@ -1015,7 +1159,7 @@
             {
                 peekFromSequence = 0;
             }
-            CloseConfirmModal();
+            await CloseConfirmModal();
         }
         catch (Exception ex)
         {
@@ -1063,7 +1207,7 @@
             {
                 peekFromSequence = 0;
             }
-            CloseConfirmModal();
+            await CloseConfirmModal();
         }
         catch (Exception ex)
         {

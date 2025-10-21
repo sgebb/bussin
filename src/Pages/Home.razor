@@ -17,23 +17,28 @@
         <div class="container-fluid p-4">
             @if (!hasArmPermission && !isGrantingArmConsent)
             {
-                <div class="alert alert-info">
-                    <h5><i class="bi bi-info-circle"></i> Optional: List Namespaces Automatically</h5>
+                <div class="alert alert-warning">
+                    <h5><i class="bi bi-exclamation-triangle"></i> Permission Required</h5>
                     <p class="mb-3">
-                        We need the <strong>Azure Management API</strong> permission to automatically list all Service Bus namespaces in your tenant. 
-                        The app only uses this to <strong>list namespaces</strong>—it never creates or modifies any Azure resources.
+                        <strong>To see your Service Bus namespaces here, you need to grant Azure Management API permission.</strong>
+                        This allows bussin to read and list your Service Bus namespaces across your Azure subscriptions.
                     </p>
                     <p class="mb-3">
-                        <strong>But if you prefer not to grant this permission</strong>, you can add namespaces manually below by pasting their name.
+                        <strong>What we use it for:</strong>
                     </p>
+                    <ul class="mb-3">
+                        <li>List all Service Bus namespaces in your tenant</li>
+                        <li>Read queue/topic/subscription metadata (message counts, status, etc.)</li>
+                        <li>Nothing else - we never create, modify, or delete any Azure resources</li>
+                    </ul>
                     @if (!string.IsNullOrEmpty(consentErrorMessage))
                     {
                         <div class="alert alert-danger mb-3">
                             @consentErrorMessage
                         </div>
                     }
-                    <button class="btn btn-primary" @onclick="GrantArmConsent" disabled="@isGrantingArmConsent">
-                        <i class="bi bi-check-circle"></i> Grant Permission to List Namespaces
+                    <button class="btn btn-warning" @onclick="GrantArmConsent" disabled="@isGrantingArmConsent">
+                        <i class="bi bi-check-circle"></i> Grant Azure Management API Permission
                     </button>
                 </div>
             }

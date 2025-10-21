@@ -31,5 +31,6 @@ builder.Services.AddScoped<IMessageParsingService, MessageParsingService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddScoped<NavigationStateService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+builder.Services.AddSingleton<BackgroundPurgeService>();
 
 await builder.Build().RunAsync();

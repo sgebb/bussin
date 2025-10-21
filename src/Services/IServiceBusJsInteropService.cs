@@ -5,6 +5,7 @@ namespace ServiceBusExplorer.Blazor.Services;
 
 public interface IServiceBusJsInteropService
 {
+    IJSRuntime JSRuntime { get; }
     // Queue Operations
     Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false);
     Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, MessageProperties? properties = null);
