@@ -6,6 +6,8 @@
 import type { ServiceBusConnection } from './connection.js';
 import type { MessageProperties } from './types.js';
 import type { Sender } from 'rhea';
+import { message as rheaMessage } from 'rhea';
+import { Buffer } from 'buffer';
 
 /**
  * Message Sender - for sending messages
@@ -48,51 +50,77 @@ export class MessageSender {
     /**
      * Send a message
      */
-    async send(body: string | object | Uint8Array | ArrayBuffer, properties: MessageProperties = {}): Promise<void> {
+    async send(body: string | null | undefined, properties: MessageProperties = {}): Promise<void> {
         if (!this.sender) {
             throw new Error('Sender not opened. Call open() first.');
         }
 
-        // Generate unique message ID if not provided
+        const message = this.createAmqpMessage(body, properties);
+        await this.dispatchMessage(message);
+    }
+
+    private createAmqpMessage(body: string | null | undefined, properties: MessageProperties): any {
         const messageId = properties.message_id || properties.messageId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Determine content type and encode body
-        let encodedBody: Uint8Array;
-        let contentType = properties.content_type || properties.contentType;
-        
-        if (typeof body === 'string') {
-            // String body - encode as UTF-8 bytes (like portal does)
-            const encoder = new TextEncoder();
-            encodedBody = encoder.encode(body);
-            contentType = contentType || 'text/plain';
-        } else if (body instanceof Uint8Array) {
-            // Already binary
-            encodedBody = body;
-            contentType = contentType || 'application/octet-stream';
-        } else if (body instanceof ArrayBuffer) {
-            encodedBody = new Uint8Array(body);
-            contentType = contentType || 'application/octet-stream';
-        } else {
-            // Object - serialize to JSON and encode as bytes
-            const encoder = new TextEncoder();
-            encodedBody = encoder.encode(JSON.stringify(body));
-            contentType = contentType || 'application/json';
+
+        if (properties.original_body && properties.original_content_type) {
+            const message: any = {
+                body: properties.original_body,
+                content_type: properties.original_content_type,
+                message_id: messageId,
+                creation_time: new Date(),
+                ...properties
+            };
+
+            delete message.original_body;
+            delete message.original_content_type;
+            delete message.contentType;
+            delete message.messageId;
+
+            if (!message.creation_time) {
+                message.creation_time = new Date();
+            }
+
+            return message;
         }
-        
+
+        const textBody = this.normalizeBodyToString(body);
+        const encodedBody = Buffer.from(textBody, 'utf8');
+        const contentType = properties.content_type || properties.contentType || 'text/plain; charset=utf-8';
+
         const message: any = {
-            body: encodedBody,
+            body: rheaMessage.data_section(encodedBody),
             content_type: contentType,
             message_id: messageId,
             creation_time: new Date(),
             ...properties
         };
-        
-        // Remove duplicate properties
+
+        delete message.original_body;
+        delete message.original_content_type;
         delete message.contentType;
         delete message.messageId;
 
-        return new Promise((resolve, reject) => {
-            // Wait for sender to be sendable
+        if (!message.creation_time) {
+            message.creation_time = new Date();
+        }
+
+        return message;
+    }
+
+    private normalizeBodyToString(body: string | null | undefined): string {
+        if (body === undefined || body === null) {
+            return '';
+        }
+
+        if (typeof body !== 'string') {
+            return String(body);
+        }
+
+        return body;
+    }
+
+    private async dispatchMessage(message: any): Promise<void> {
+        await new Promise<void>((resolve, reject) => {
             const sendHandler = () => {
                 try {
                     this.sender!.send(message);
@@ -101,17 +129,18 @@ export class MessageSender {
                     reject(err);
                 }
             };
-            
+
             if (this.sender!.sendable()) {
                 sendHandler();
-            } else {
-                this.sender!.once('sendable', sendHandler);
-                // Timeout
-                setTimeout(() => {
-                    this.sender!.removeListener('sendable', sendHandler);
-                    reject(new Error('Send timeout - sender not ready'));
-                }, 5000);
+                return;
             }
+
+            this.sender!.once('sendable', sendHandler);
+
+            setTimeout(() => {
+                this.sender!.removeListener('sendable', sendHandler);
+                reject(new Error('Send timeout - sender not ready'));
+            }, 5000);
         });
     }
 

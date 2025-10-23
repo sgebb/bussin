@@ -280,15 +280,31 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             {
                 try
                 {
-                    // Preserve original message properties
-                    var props = new MessageProperties
+                    // Use original body and content type if available (preserves exact format)
+                    if (msg.OriginalBody != null && msg.OriginalContentType != null)
                     {
-                        MessageId = msg.MessageId,
-                        ContentType = msg.ContentType,
-                        ApplicationProperties = msg.ApplicationProperties
-                    };
-                    
-                    await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, msg.Body, props);
+                        var props = new MessageProperties
+                        {
+                            MessageId = msg.MessageId,
+                            OriginalBody = msg.OriginalBody,
+                            OriginalContentType = msg.OriginalContentType,
+                            ApplicationProperties = msg.ApplicationProperties
+                        };
+
+                        await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, "", props);
+                    }
+                    else
+                    {
+                        // Fallback to preserving individual properties (original behavior)
+                        var props = new MessageProperties
+                        {
+                            MessageId = msg.MessageId,
+                            ContentType = msg.ContentType,
+                            ApplicationProperties = msg.ApplicationProperties
+                        };
+
+                        await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, msg.Body, props);
+                    }
                     successCount++;
                 }
                 catch (Exception ex)
@@ -345,15 +361,31 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             {
                 try
                 {
-                    // Preserve original message properties
-                    var props = new MessageProperties
+                    // Use original body and content type if available (preserves exact format)
+                    if (msg.OriginalBody != null && msg.OriginalContentType != null)
                     {
-                        MessageId = msg.MessageId,
-                        ContentType = msg.ContentType,
-                        ApplicationProperties = msg.ApplicationProperties
-                    };
-                    
-                    await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, msg.Body, props);
+                        var props = new MessageProperties
+                        {
+                            MessageId = msg.MessageId,
+                            OriginalBody = msg.OriginalBody,
+                            OriginalContentType = msg.OriginalContentType,
+                            ApplicationProperties = msg.ApplicationProperties
+                        };
+
+                        await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, "", props);
+                    }
+                    else
+                    {
+                        // Fallback to preserving individual properties (original behavior)
+                        var props = new MessageProperties
+                        {
+                            MessageId = msg.MessageId,
+                            ContentType = msg.ContentType,
+                            ApplicationProperties = msg.ApplicationProperties
+                        };
+
+                        await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, msg.Body, props);
+                    }
                     successCount++;
                 }
                 catch (Exception ex)

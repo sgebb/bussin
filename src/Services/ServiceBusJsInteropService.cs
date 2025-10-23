@@ -8,6 +8,53 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
 {
     public IJSRuntime JSRuntime => jsRuntime;
     
+    /// <summary>
+    /// Safely deserialize a ServiceBusMessage from JSON, handling errors gracefully.
+    /// If deserialization fails due to malformed data, logs the error and returns null.
+    /// </summary>
+    private static ServiceBusMessage? SafeDeserializeMessage(JsonElement elem)
+    {
+        try
+        {
+            var json = elem.GetRawText();
+            var message = JsonSerializer.Deserialize<ServiceBusMessage>(json);
+
+            // Preserve original body and content type for exact format preservation
+            message.OriginalBody = elem.TryGetProperty("originalBody", out var originalBody) ? originalBody : null;
+            message.OriginalContentType = elem.TryGetProperty("originalContentType", out var originalContentType) ? originalContentType.GetString() : null;
+
+            return message;
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"⚠️ Failed to deserialize message: {ex.Message}");
+            Console.WriteLine($"   Problem: {ex.Path} - {ex.InnerException?.Message}");
+            
+            // Try to extract at least the body and messageId for display
+            try
+            {
+                var bodyProp = elem.TryGetProperty("body", out var body) ? body.GetString() : "[Unable to parse body]";
+                var msgIdProp = elem.TryGetProperty("messageId", out var msgId) ? msgId.GetString() : null;
+                
+                return new ServiceBusMessage
+                {
+                    MessageId = msgIdProp,
+                    Body = bodyProp ?? "[Error parsing message]",
+                    ContentType = "text/plain",
+                    OriginalBody = elem.TryGetProperty("originalBody", out var originalBody) ? originalBody : null,
+                    OriginalContentType = elem.TryGetProperty("originalContentType", out var originalContentType) ? originalContentType.GetString() : null,
+                    LockToken = elem.TryGetProperty("lockToken", out var lockToken) ? lockToken.GetString() : null
+                };
+            }
+            catch
+            {
+                // If we can't even extract basic info, return null
+                Console.WriteLine($"⚠️ Could not extract any message data");
+                return null;
+            }
+        }
+    }
+    
     // Queue Operations
     
     public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
@@ -22,8 +69,8 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
             
             Console.WriteLine($"✓ JS returned {result.Length} messages");
             
-            return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
-                .Where(m => m != null)
+            return result.Select(SafeDeserializeMessage)
+                .OfType<ServiceBusMessage>()
                 .ToList();
         }
         catch (Exception ex)
@@ -83,8 +130,8 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
                 "ServiceBusAPI.receiveAndLockQueueMessage",
                 namespaceName, queueName, token, timeoutSeconds, fromDeadLetter, count);
             
-            return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
-                .Where(m => m != null)
+            return result.Select(SafeDeserializeMessage)
+                .OfType<ServiceBusMessage>()
                 .ToList();
         }
         catch (Exception ex)
@@ -102,8 +149,8 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
                 "ServiceBusAPI.receiveAndLockSubscriptionMessage",
                 namespaceName, topicName, subscriptionName, token, timeoutSeconds, fromDeadLetter, count);
             
-            return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
-                .Where(m => m != null)
+            return result.Select(SafeDeserializeMessage)
+                .OfType<ServiceBusMessage>()
                 .ToList();
         }
         catch (Exception ex)
@@ -174,8 +221,8 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
                 "ServiceBusAPI.peekSubscriptionMessages",
                 namespaceName, topicName, subscriptionName, token, count, fromSequence, fromDeadLetter);
             
-            return result.Select(elem => JsonSerializer.Deserialize<ServiceBusMessage>(elem.GetRawText())!)
-                .Where(m => m != null)
+            return result.Select(SafeDeserializeMessage)
+                .OfType<ServiceBusMessage>()
                 .ToList();
         }
         catch (Exception ex)

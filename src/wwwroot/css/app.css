@@ -66,6 +66,7 @@ main {
 .sidebar {
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
 .top-row {
@@ -96,6 +97,22 @@ main {
 @media (min-width: 768px) {
     .page {
         flex-direction: row;
+        height: 100vh;
+    }
+
+    .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+    }
+
+    .nav-menu {
+        height: 100%;
+    }
+
+    main {
+        height: 100vh;
+        overflow-y: auto;
     }
 }
 

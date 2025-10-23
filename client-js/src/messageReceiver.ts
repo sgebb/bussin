@@ -37,9 +37,9 @@ export class MessageReceiver {
 
         // rcv_settle_mode: 0 = first (receive and delete), 1 = second (peek/browse)
         const settleMode = this.options.peekMode ? 1 : 0;
-        
-        // For peek mode monitoring, use manual credit (0) to avoid automatic re-delivery
-        // For receive-and-delete (purge), use credit_window for continuous flow
+
+        // For peek mode, use manual credit (0) to avoid automatic re-delivery
+        // For receive-and-delete operations, use credit_window for continuous flow
         const creditWindow = this.options.peekMode ? 0 : (this.options.maxMessages || 10);
         
         this.receiver = this.connection.connection.open_receiver({
@@ -65,7 +65,7 @@ export class MessageReceiver {
             }
             
             // For peek mode with manual credit, add one more credit after each message
-            // This prevents re-reading the same messages while still allowing monitoring
+            // This allows continuous message flow without re-reading the same messages
             if (this.options.peekMode && creditWindow === 0) {
                 this.receiver?.add_credit(1);
             }

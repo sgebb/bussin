@@ -21,8 +21,27 @@ interface AMQPMessage {
 /**
  * Parse Service Bus message from AMQP format
  */
-export function parseServiceBusMessage(amqpMessage: AMQPMessage): ServiceBusMessage {
+export function parseServiceBusMessage(amqpMessage: any): ServiceBusMessage {
+    // Extract the original binary body before decoding for display
+    let originalBody: any = undefined;
+    let originalContentType: string | undefined = undefined;
+
+    // Handle AMQP message body - preserve original format
+    if (amqpMessage.body) {
+        originalBody = amqpMessage.body;
+        originalContentType = amqpMessage.content_type;
+    }
+
     const decodedBody = decodeMessageBody(amqpMessage.body);
+    
+    // Safely parse TTL - ensure it's a valid number and within range
+    let ttl: number | undefined = undefined;
+    if (amqpMessage.ttl !== undefined && amqpMessage.ttl !== null) {
+        const ttlValue = Number(amqpMessage.ttl);
+        if (!isNaN(ttlValue) && isFinite(ttlValue)) {
+            ttl = ttlValue;
+        }
+    }
     
     return {
         messageId: amqpMessage.message_id,
@@ -34,9 +53,11 @@ export function parseServiceBusMessage(amqpMessage: AMQPMessage): ServiceBusMess
         lockedUntil: amqpMessage.message_annotations?.['x-opt-locked-until'],
         applicationProperties: amqpMessage.application_properties || {},
         properties: amqpMessage.properties || {},
-        ttl: amqpMessage.ttl,
+        ttl: ttl,
         expiryTime: amqpMessage.absolute_expiry_time,
-        creationTime: amqpMessage.creation_time
+        creationTime: amqpMessage.creation_time,
+        originalBody: originalBody,
+        originalContentType: originalContentType
     };
 }
 

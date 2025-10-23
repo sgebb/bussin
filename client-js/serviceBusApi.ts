@@ -121,7 +121,7 @@ async function sendMessage(
     namespace: string, 
     entityPath: string, 
     token: string, 
-    messageBody: string | object | Uint8Array | ArrayBuffer, 
+    messageBody: string | object | Uint8Array | ArrayBuffer | null | undefined, 
     properties: MessageProperties = {}
 ): Promise<void> {
     const connection = new ServiceBusConnection(namespace, token);
@@ -132,7 +132,30 @@ async function sendMessage(
         
         const sender = new MessageSender(connection, entityPath);
         await sender.open();
-        await sender.send(messageBody, properties);
+        const messageProps: MessageProperties = { ...properties };
+        let bodyToSend: string | null | undefined = messageBody as string | null | undefined;
+        let inferredContentType: string | undefined = undefined;
+
+        if (messageProps.original_body && messageProps.original_content_type) {
+            bodyToSend = '';
+        } else if (typeof messageBody === 'string') {
+            bodyToSend = messageBody;
+        } else if (messageBody instanceof Uint8Array) {
+            bodyToSend = new TextDecoder().decode(messageBody);
+        } else if (messageBody instanceof ArrayBuffer) {
+            bodyToSend = new TextDecoder().decode(new Uint8Array(messageBody));
+        } else if (messageBody !== null && messageBody !== undefined) {
+            bodyToSend = JSON.stringify(messageBody);
+            inferredContentType = 'application/json; charset=utf-8';
+        } else {
+            bodyToSend = '';
+        }
+
+        if (!messageProps.content_type && !messageProps.contentType && inferredContentType) {
+            messageProps.content_type = inferredContentType;
+        }
+
+        await sender.send(bodyToSend ?? '', messageProps);
         
         sender.close();
         connection.close();
@@ -659,41 +682,108 @@ async function monitorSubscription(
     return await startMonitoring(namespace, entityPath, token, onMessage, onError);
 }
 
-// Internal implementation
+// Internal implementation - non-destructive monitoring using Management API
 async function startMonitoring(
-    namespace: string, 
-    entityPath: string, 
-    token: string, 
-    onMessage: MessageCallback, 
+    namespace: string,
+    entityPath: string,
+    token: string,
+    onMessage: MessageCallback,
     onError?: ErrorCallback
 ): Promise<MonitorController> {
     const connection = new ServiceBusConnection(namespace, token);
-    
+    let isRunning = true;
+    let lastSequenceNumber = 0;
+    let pollInterval: NodeJS.Timeout | null = null;
+
+    const pollForMessages = async () => {
+        if (!isRunning) return;
+
+        try {
+            await connection.connect();
+            await connection.authenticateCBS(entityPath);
+
+            const managementClient = new ManagementClient(connection, entityPath);
+            await managementClient.open();
+
+            // Peek messages starting from the last sequence number + 1
+            const messages = await managementClient.peekMessages(lastSequenceNumber + 1, 10);
+
+            managementClient.close();
+            connection.close();
+
+            // Process any new messages
+            for (const message of messages) {
+                if (message.message_annotations?.['x-opt-sequence-number']) {
+                    const seqNum = message.message_annotations['x-opt-sequence-number'];
+                    if (seqNum > lastSequenceNumber) {
+                        lastSequenceNumber = seqNum;
+                        onMessage(parseServiceBusMessage(message));
+                    }
+                }
+            }
+
+            // Schedule next poll if still running (faster polling for better responsiveness)
+            if (isRunning) {
+                pollInterval = setTimeout(pollForMessages, messages.length > 0 ? 500 : 2000); // Faster when messages are flowing
+            }
+
+        } catch (err) {
+            connection.close();
+            if (onError && isRunning) {
+                onError(err as Error);
+            }
+            // Retry connection after error
+            if (isRunning) {
+                pollInterval = setTimeout(pollForMessages, 5000); // Wait 5 seconds before retry
+            }
+        }
+    };
+
+    // Start monitoring
     try {
         await connection.connect();
         await connection.authenticateCBS(entityPath);
-        
-        const receiver = new MessageReceiver(connection, entityPath, {
-            peekMode: true,  // Non-destructive
-            maxMessages: null,  // Continuous
-            autoClose: false
-        });
-        
-        receiver.receive(
-            (message: any) => onMessage(parseServiceBusMessage(message)),
-            onError
-        );
-        
-        return {
-            stop: () => {
-                receiver.close();
-                connection.close();
+
+        const managementClient = new ManagementClient(connection, entityPath);
+        await managementClient.open();
+
+        // Get initial sequence number to start from (try to get the latest message)
+        const initialMessages = await managementClient.peekMessages(0, 100); // Get more messages to find the latest
+        if (initialMessages.length > 0) {
+            // Find the highest sequence number
+            for (const msg of initialMessages) {
+                if (msg.message_annotations?.['x-opt-sequence-number']) {
+                    const seqNum = msg.message_annotations['x-opt-sequence-number'];
+                    if (seqNum > lastSequenceNumber) {
+                        lastSequenceNumber = seqNum;
+                    }
+                }
             }
-        };
+        }
+
+        managementClient.close();
+        connection.close();
+
+        // Start polling
+        pollInterval = setTimeout(pollForMessages, 100);
+
     } catch (err) {
         connection.close();
+        if (onError) {
+            onError(err as Error);
+        }
         throw new Error(`Monitor failed: ${(err as Error).message}`);
     }
+
+    return {
+        stop: () => {
+            isRunning = false;
+            if (pollInterval) {
+                clearTimeout(pollInterval);
+            }
+            connection.close();
+        }
+    };
 }
 
 // ============================================================================

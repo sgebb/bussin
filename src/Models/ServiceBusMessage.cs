@@ -32,7 +32,7 @@ public class ServiceBusMessage
     public Dictionary<string, object>? Properties { get; set; }
     
     [JsonPropertyName("ttl")]
-    public int? Ttl { get; set; }
+    public long? Ttl { get; set; }
     
     [JsonPropertyName("expiryTime")]
     public DateTime? ExpiryTime { get; set; }
@@ -40,6 +40,12 @@ public class ServiceBusMessage
     [JsonPropertyName("creationTime")]
     public DateTime? CreationTime { get; set; }
     
+    [JsonPropertyName("originalBody")]
+    public object? OriginalBody { get; set; }
+
+    [JsonPropertyName("originalContentType")]
+    public string? OriginalContentType { get; set; }
+
     [JsonPropertyName("lockToken")]
     public string? LockToken { get; set; }
 }
