@@ -39,7 +39,7 @@ jobs:
       - name: Build client-js
         run: |
           cd client-js
-          npm ci
+          npm ci --ignore-scripts
           npm run build
 
       - name: Setup .NET

@@ -26,7 +26,7 @@ function Build-ClientJs {
         # Check if node_modules exists
         if (-not (Test-Path "node_modules")) {
             Write-Host "📦 Installing npm dependencies..." -ForegroundColor Yellow
-            npm install
+            npm install --ignore-scripts
         }
         
         Write-Host "🏗️  Building with Vite..." -ForegroundColor Yellow

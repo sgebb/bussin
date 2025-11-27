@@ -22,7 +22,7 @@ build_client_js() {
     # Check if node_modules exists
     if [ ! -d "node_modules" ]; then
         echo -e "${YELLOW}📦 Installing npm dependencies...${NC}"
-        npm install
+        npm install --ignore-scripts
     fi
     
     echo -e "${YELLOW}🏗️  Building with Vite...${NC}"
