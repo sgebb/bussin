@@ -220,34 +220,31 @@ a:hover, .btn-link:hover {
     border-color: var(--primary-color);
 }
 
-/* Favorites Button (Explorer) - Transform pill to Star Icon */
-.explorer-header .btn-warning,
-.explorer-header .btn-outline-warning {
-    background: transparent !important;
-    border: none !important;
-    color: #F59E0B !important; /* Amber-500 */
+/* Custom Favorites Toggle Button (Explorer) */
+.favorite-toggle-btn {
+    background: none;
+    border: none;
+    color: #F59E0B; /* Amber */
+    font-size: 1.75rem; /* Match the visual weight of H1 */
+    line-height: 1;
     padding: 0.25rem 0.5rem;
+    cursor: pointer;
     transition: transform 0.2s ease;
 }
 
-.explorer-header .btn-warning:hover,
-.explorer-header .btn-outline-warning:hover {
+.favorite-toggle-btn:hover {
     transform: scale(1.2);
-    color: #D97706 !important; /* Amber-600 */
-    background: transparent !important;
-    box-shadow: none !important;
+    color: #D97706; /* Amber-600 */
 }
 
-/* Edit Name Button (Explorer) - Minimalist */
-.explorer-header .btn-outline-secondary {
-    border: 1px solid transparent !important;
-    background: transparent !important;
-    color: var(--text-muted) !important;
+.favorite-toggle-btn.not-favorited {
+    color: var(--text-muted); /* Gray when not favorite */
+    opacity: 0.5;
 }
 
-.explorer-header .btn-outline-secondary:hover {
-    color: var(--primary-color) !important;
-    background: var(--hover-bg) !important;
+.favorite-toggle-btn.not-favorited:hover {
+    color: #F59E0B;
+    opacity: 1;
 }
 
 /* Namespace Cards (Home) */
@@ -303,10 +300,6 @@ a:hover, .btn-link:hover {
 
 .modal-header, .modal-footer {
     border-color: var(--border-color) !important;
-}
-
-.btn-close {
-    filter: var(--text-color) == #F9FAFB ? invert(1) : none;
 }
 
 [data-theme='dark'] .btn-close {

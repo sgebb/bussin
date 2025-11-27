@@ -18,18 +18,11 @@
     <div class="explorer-header">
         <div class="d-flex align-items-center gap-2">
             <h1 class="explorer-namespace-title mb-0">@displayName</h1>
-            <button class="btn @(NavState.IsFavorite(NamespaceParam ?? "") ? "btn-warning" : "btn-outline-warning")" 
+            <button class="favorite-toggle-btn @(NavState.IsFavorite(NamespaceParam ?? "") ? "favorited" : "not-favorited")" 
                     @onclick="() => ToggleFavorite()" 
-                    title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Remove from favorites" : "Add to favorites")"
-                    style="font-size: 1.5rem; line-height: 1;">
-                <i class="bi bi-star@(NavState.IsFavorite(NamespaceParam ?? "") ? "-fill" : "")"></i>
+                    title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Remove from favorites" : "Add to favorites")">
+                @(NavState.IsFavorite(NamespaceParam ?? "") ? "★" : "☆")
             </button>
-            @if (NavState.IsFavorite(NamespaceParam ?? ""))
-            {
-                <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleEditMode" title="Edit name">
-                    <i class="bi bi-pencil"></i>
-                </button>
-            }
             @if (isLoadingEntities)
             {
                 <div class="spinner-border spinner-border-sm text-muted" role="status">
@@ -38,16 +31,6 @@
             }
         </div>
         <small class="text-muted d-block mt-1">@NamespaceParam</small>
-        @if (isEditingName)
-        {
-            <div class="mt-2">
-                <div class="input-group input-group-sm" style="max-width: 400px;">
-                    <input type="text" class="form-control" @bind="displayName" @bind:event="oninput" />
-                    <button class="btn btn-success" @onclick="SaveRename" disabled="@string.IsNullOrWhiteSpace(displayName)">Save</button>
-                    <button class="btn btn-secondary" @onclick="() => isEditingName = false">Cancel</button>
-                </div>
-            </div>
-        }
     </div>
 
     <!-- Section 2: Compact Entity Selector (3 Columns) -->
@@ -325,7 +308,6 @@
     private int peekFromSequence = 0;
     private string? errorMessage;
     private string displayName = "";
-    private bool isEditingName = false;
     
     // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
     private string NamespaceNameOnly => NamespaceParam?.Split('.').FirstOrDefault() ?? "";
@@ -373,19 +355,6 @@
             
             await LoadEntitiesAsync();
         }
-    }
-
-    private async Task SaveRename()
-    {
-        if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrEmpty(NamespaceParam)) return;
-        
-        await NavState.RenameNamespaceAsync(NamespaceParam, displayName.Trim());
-        isEditingName = false;
-    }
-
-    private void ToggleEditMode()
-    {
-        isEditingName = !isEditingName;
     }
 
     private async Task ToggleFavorite()

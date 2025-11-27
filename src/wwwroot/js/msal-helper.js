@@ -56,12 +56,12 @@ window.msalHelper = {
                 extraScopesToConsent: []
             });
 
-            console.log('✓ Token acquired successfully - reloading page');
-            window.location.reload();
+            console.log('✓ Token acquired successfully');
+            return { success: true };
 
         } catch (error) {
-            console.error('Error during consent, reloading:', error);
-            window.location.reload();
+            console.error('Error during consent:', error);
+            return { success: false, error: error.toString() };
         }
     }
 };
