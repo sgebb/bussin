@@ -14,7 +14,7 @@ builder.Services.AddMsalAuthentication(options =>
     builder.Configuration.Bind("AzureAd", options.ProviderOptions.Authentication);
     
     // Request Service Bus data plane permission at login (required for send/receive/peek operations)
-    // Management API scope (for listing namespaces) is optional and requested later
+    // Management API scope (for listing namespaces) is requested later
     options.ProviderOptions.DefaultAccessTokenScopes.Add("https://servicebus.azure.net/user_impersonation");
     
     options.ProviderOptions.LoginMode = "redirect";
