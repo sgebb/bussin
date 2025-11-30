@@ -41,7 +41,7 @@ build_dotnet() {
     dotnet publish src/ServiceBusExplorer.Blazor.csproj -c "$CONFIGURATION"
     
     echo -e "${GREEN}✅ .NET build complete!${NC}"
-    echo -e "${GRAY}   Output: src/bin/$CONFIGURATION/net8.0/publish/wwwroot${NC}"
+    echo -e "${GRAY}   Output: src/bin/$CONFIGURATION/net10.0/publish/wwwroot${NC}"
 }
 
 # Main build logic

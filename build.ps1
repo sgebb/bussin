@@ -47,7 +47,7 @@ function Build-DotNet {
     dotnet publish src/ServiceBusExplorer.Blazor.csproj -c $Configuration
     
     Write-Host "✅ .NET build complete!" -ForegroundColor Green
-    Write-Host "   Output: src/bin/$Configuration/net8.0/publish/wwwroot" -ForegroundColor Gray
+    Write-Host "   Output: src/bin/$Configuration/net10.0/publish/wwwroot" -ForegroundColor Gray
 }
 
 # Main build logic
