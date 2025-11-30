@@ -54,7 +54,7 @@
                                                    @ondragstart="() => OnDragStart(ns.FullyQualifiedNamespace)"
                                                    @ondragend="OnDragEnd">
                                                     <div class="fw-semibold">@ns.DisplayName</div>
-                                                    <small class="text-muted">@ns.FullyQualifiedNamespace</small>
+                                                    <small class="text-muted text-truncate d-block" title="@ns.FullyQualifiedNamespace">@ns.FullyQualifiedNamespace</small>
                                                 </a>
                                             }
                                         </div>

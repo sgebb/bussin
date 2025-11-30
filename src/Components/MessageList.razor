@@ -21,7 +21,7 @@
                     @if (IsDLQ)
                     {
                         <button class="btn btn-success" @onclick="OnResubmitSelected" disabled="@IsProcessing">
-                            <span class="me-1">↩️</span> Resubmit & Delete (@SelectedMessages.Count)
+                            <span class="me-1">↩️</span> Resubmit (@SelectedMessages.Count)
                         </button>
                     }
                     else
