@@ -29,6 +29,33 @@
     --content-bg: #1A1A1A;
 }
 
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: #404040;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: #505050;
+}
+
 html, body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
@@ -199,10 +226,26 @@ main {
 }
 
 pre {
-    background-color: #f5f5f5;
+    background-color: #f8f9fa; /* Light mode bg */
     padding: 10px;
     border-radius: 4px;
     overflow-x: auto;
+    color: #212529; /* Light mode text */
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] pre {
+    background-color: transparent;
+    color: #e0e0e0;
+    border-color: #404040;
+}
+
+/* Fix table colors in dark mode */
+.table {
+    color: var(--text-color);
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--text-color);
+    --bs-table-border-color: var(--border-color);
 }
 
 .btn-group-sm > .btn {
@@ -434,6 +477,18 @@ textarea:focus {
 .alert {
     background-color: var(--card-bg);
     border-color: var(--border-color);
+}
+
+.alert-info {
+    background-color: #e7f5ff; /* Calmer blue */
+    border-color: #b6effb;
+    color: #004085;
+}
+
+[data-theme="dark"] .alert-info {
+    background-color: #0e2a47; /* Darker blue for dark mode */
+    border-color: #103f6b;
+    color: #b8daff;
 }
 
 .text-muted {

@@ -12,6 +12,9 @@ public class ServiceBusMessage
     
     [JsonPropertyName("contentType")]
     public string? ContentType { get; set; }
+
+    [JsonPropertyName("correlationId")]
+    public string? CorrelationId { get; set; }
     
     [JsonPropertyName("deliveryCount")]
     public int DeliveryCount { get; set; }

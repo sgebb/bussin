@@ -4,69 +4,89 @@
 @if (IsVisible && Message != null)
 {
     <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Message Details</h5>
                     <button type="button" class="btn-close" @onclick="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <!-- Message Info -->
-                    <div class="mb-3">
-                        <h6 class="border-bottom pb-2">Message Information</h6>
-                        <table class="table table-sm">
-                            <tbody>
-                                <tr>
-                                    <td class="fw-bold" style="width: 200px;">Sequence Number</td>
-                                    <td>@Message.SequenceNumber</td>
-                                </tr>
-                                @if (!string.IsNullOrEmpty(Message.MessageId))
-                                {
-                                    <tr>
-                                        <td class="fw-bold">Message ID</td>
-                                        <td>@Message.MessageId</td>
-                                    </tr>
-                                }
-                                @if (Message.EnqueuedTime.HasValue)
-                                {
-                                    <tr>
-                                        <td class="fw-bold">Enqueued Time</td>
-                                        <td>@Message.EnqueuedTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                                    </tr>
-                                }
-                                <tr>
-                                    <td class="fw-bold">Delivery Count</td>
-                                    <td>@Message.DeliveryCount</td>
-                                </tr>
-                                @if (Message.Ttl.HasValue)
-                                {
-                                    <tr>
-                                        <td class="fw-bold">Time To Live (seconds)</td>
-                                        <td>@Message.Ttl.Value</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Properties -->
-                    @if (Message.Properties != null && Message.Properties.Any())
-                    {
-                        <div class="mb-3">
-                            <h6 class="border-bottom pb-2">Properties</h6>
+                    <div class="row">
+                        <!-- Message Info -->
+                        <div class="col-md-6 mb-3">
+                            <h6 class="border-bottom pb-2">Broker Properties</h6>
                             <table class="table table-sm">
                                 <tbody>
-                                    @foreach (var prop in Message.Properties)
+                                    <tr>
+                                        <td class="fw-bold" style="width: 200px;">Sequence Number</td>
+                                        <td>@Message.SequenceNumber</td>
+                                    </tr>
+                                    @if (!string.IsNullOrEmpty(Message.MessageId))
                                     {
                                         <tr>
-                                            <td class="fw-bold" style="width: 200px;">@prop.Key</td>
-                                            <td>@prop.Value</td>
+                                            <td class="fw-bold">Message ID</td>
+                                            <td>@Message.MessageId</td>
+                                        </tr>
+                                    }
+                                    @if (Message.EnqueuedTime.HasValue)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Enqueued Time</td>
+                                            <td>@Message.EnqueuedTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                        </tr>
+                                    }
+                                    <tr>
+                                        <td class="fw-bold">Delivery Count</td>
+                                        <td>@Message.DeliveryCount</td>
+                                    </tr>
+                                    @if (Message.Ttl.HasValue)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Time To Live (seconds)</td>
+                                            <td>@Message.Ttl.Value</td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Message.ContentType))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Content Type</td>
+                                            <td>@Message.ContentType</td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Message.CorrelationId))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Correlation ID</td>
+                                            <td>@Message.CorrelationId</td>
                                         </tr>
                                     }
                                 </tbody>
                             </table>
                         </div>
-                    }
+
+                        <!-- Custom Properties -->
+                        <div class="col-md-6 mb-3">
+                            <h6 class="border-bottom pb-2">Custom Properties</h6>
+                            @if (Message.ApplicationProperties != null && Message.ApplicationProperties.Any())
+                            {
+                                <table class="table table-sm">
+                                    <tbody>
+                                        @foreach (var prop in Message.ApplicationProperties)
+                                        {
+                                            <tr>
+                                                <td class="fw-bold" style="width: 200px;">@prop.Key</td>
+                                                <td>@prop.Value</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                            else
+                            {
+                                <div class="text-muted fst-italic">No custom properties</div>
+                            }
+                        </div>
+                    </div>
 
                     <!-- Message Body -->
                     <div class="mb-3">
@@ -76,7 +96,7 @@
                                     @onclick="CopyBody">
                                 📋 Copy
                             </button>
-                            <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
+                            <pre class="p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
                         </div>
                     </div>
                 </div>

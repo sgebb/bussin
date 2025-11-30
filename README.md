@@ -92,7 +92,6 @@ You can also check `buildinfo.json` at the root of the deployed site.
 ### 🚀 Ready to Start
 
 - [ ] **General code improvements** - Refactor to be more modular, separate business logic into services, improve component structure
-- [ ] **UI: Better light/dark mode color schemes** - More consistent and polished color palette across themes
 - [ ] **UI: Introduce component framework** - Evaluate Blazorize/MudBlazor for better component consistency and easier theme management
 
 ### 🐛 Bugs & Issues
@@ -102,15 +101,13 @@ You can also check `buildinfo.json` at the root of the deployed site.
 
 ### 🔮 Future / Blocked
 
-- [ ] **Upgrade to .NET 10** - Migrate from current .NET version to .NET 10 (when released/stable)
-- [ ] **Verified publisher in Entra ID** - Complete Microsoft verification process for the app registration
 - [ ] **Consider ads/donate button** - Evaluate monetization options (depends on hosting model, may require Azure Static Web Apps, consider tax implications for foreign income in Norway)
 
 ## 🛠️ Development
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Node.js 20+](https://nodejs.org/) and npm
 
 ### Building

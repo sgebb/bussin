@@ -174,15 +174,20 @@ async function sendScheduledQueueMessage(
     queueName: string,
     token: string,
     messageBody: string | object | Uint8Array | ArrayBuffer,
-    scheduledEnqueueTime: Date,
+    scheduledEnqueueTime: Date | string,
     properties: MessageProperties = {}
 ): Promise<void> {
+    // Ensure we have a Date object (Blazor sends ISO string)
+    const enqueueTime = scheduledEnqueueTime instanceof Date 
+        ? scheduledEnqueueTime 
+        : new Date(scheduledEnqueueTime);
+
     // Add scheduled enqueue time to message annotations
     const messageProps = {
         ...properties,
         message_annotations: {
             ...properties.message_annotations,
-            'x-opt-scheduled-enqueue-time': scheduledEnqueueTime
+            'x-opt-scheduled-enqueue-time': enqueueTime.getTime() // Send as timestamp (number) to be safe
         }
     };
     return await sendMessage(namespace, queueName, token, messageBody, messageProps);

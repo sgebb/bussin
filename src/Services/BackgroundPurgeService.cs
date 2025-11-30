@@ -60,10 +60,18 @@ public sealed class BackgroundPurgeService : IDisposable
                 
                 Console.WriteLine($"[BackgroundPurge] Got token, creating callback");
                 
+                int lastNotificationBucket = 0;
                 var callback = new PurgeProgressCallback(count =>
                 {
                     operation.MessagesDeleted = count;
                     Console.WriteLine($"[BackgroundPurge] Progress: {count} messages deleted");
+                    
+                    var currentBucket = count / 1000;
+                    if (currentBucket > lastNotificationBucket)
+                    {
+                        _notificationService.NotifyInfo($"Purge progress: {count:N0} messages deleted from {namespaceName}/{entityPath}...");
+                        lastNotificationBucket = currentBucket;
+                    }
                     NotifyChanged();
                 });
                 

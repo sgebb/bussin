@@ -1,3 +1,5 @@
+@inject IMessageParsingService MessageParsingService
+
 @if (IsVisible)
 {
     <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5);">
@@ -8,6 +10,12 @@
                     <button type="button" class="btn-close" @onclick="OnClose"></button>
                 </div>
                 <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(validationError))
+                    {
+                        <div class="alert alert-danger mb-3">
+                            @validationError
+                        </div>
+                    }
                     <div class="mb-3">
                         <label class="form-label">Message Body</label>
                         <textarea class="form-control" rows="5" @bind="MessageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
@@ -77,17 +85,26 @@
     private string relativeTime = "";
     private DateTime? absoluteTime = null;
     private string? scheduleError = null;
+    private string? validationError = null;
 
     public string MessageBody
     {
         get => messageBody;
-        set => messageBody = value;
+        set 
+        {
+            messageBody = value;
+            validationError = null;
+        }
     }
 
     public string MessageProperties
     {
         get => messageProperties;
-        set => messageProperties = value;
+        set 
+        {
+            messageProperties = value;
+            validationError = null;
+        }
     }
 
     private void ToggleScheduling()
@@ -102,6 +119,15 @@
     private async Task HandleSend()
     {
         scheduleError = null;
+        validationError = null;
+
+        // Validate message content locally
+        var (body, props, error) = MessageParsingService.ParseMessageForSending(messageBody, string.IsNullOrWhiteSpace(messageProperties) ? null : messageProperties);
+        if (error != null)
+        {
+            validationError = error;
+            return;
+        }
 
         if (enableScheduling)
         {
@@ -181,6 +207,7 @@
             relativeTime = "";
             absoluteTime = null;
             scheduleError = null;
+            validationError = null;
         }
     }
 }

@@ -10,6 +10,7 @@
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
 @inject BackgroundPurgeService BackgroundPurge
+@inject INotificationService NotificationService
 
 <PageTitle>Explorer - bussin</PageTitle>
 
@@ -115,14 +116,6 @@
 
     <!-- Section 3: Messages (Takes Majority of Space) -->
     <div class="explorer-messages">
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <div class="alert alert-danger alert-dismissible alert-sm mb-2" style="max-height: 120px; overflow-y: auto;">
-                <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
-                <strong>Error:</strong> @errorMessage
-            </div>
-        }
-
         <div class="explorer-messages-header">
             <!-- Header removed - just the message list -->
         </div>
@@ -174,10 +167,10 @@
                     <button class="btn btn-sm btn-primary w-100" @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" disabled="@(isPeeking || (selectedQueueName == null && selectedSubscriptionName == null))">
                         <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
                     </button>
-                    <button class="btn btn-sm btn-success w-100" @onclick="ShowSendMessageModal" disabled="@(selectedQueueName == null && selectedTopicName == null)">
+                    <button class="btn btn-sm btn-success w-100" @onclick="ShowSendMessageModal" disabled="@(selectedQueueName == null && selectedTopicName == null || isViewingDLQ)">
                         <i class="bi bi-envelope"></i> Send
                     </button>
-                    <button class="btn btn-sm btn-info w-100" @onclick="ShowMonitorModal" disabled="@(selectedQueueName == null && selectedSubscriptionName == null)">
+                    <button class="btn btn-sm btn-info w-100" @onclick="ShowMonitorModal" disabled="@(selectedQueueName == null && selectedSubscriptionName == null || isViewingDLQ)">
                         <i class="bi bi-graph-up"></i> Monitor
                     </button>
                 </div>
@@ -194,6 +187,13 @@
                 }
             </div>
         </div>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger alert-dismissible alert-sm mt-2" style="max-height: 120px; overflow-y: auto;">
+                <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                <strong>Error:</strong> @errorMessage
+            </div>
+        }
     </div>
 </div>
 
@@ -315,7 +315,7 @@
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
-    private int peekCount = 10;
+    private int peekCount = 50;
     private int peekFromSequence = 0;
     private string? errorMessage;
     private string displayName = "";
@@ -589,6 +589,15 @@
             }
 
             Console.WriteLine($"Peeked {peekedMessages.Count} messages from sequence {peekFromSequence}");
+            
+            if (peekedMessages.Count > 0)
+            {
+                NotificationService.NotifySuccess($"Peeked {peekedMessages.Count} messages");
+            }
+            else
+            {
+                NotificationService.NotifyInfo("No messages found");
+            }
         }
         catch (Exception ex)
         {
@@ -667,10 +676,11 @@
             {
                 peekedMessages.AddRange(newMessages);
                 Console.WriteLine($"Loaded {newMessages.Count} more messages. Total: {peekedMessages.Count}");
+                NotificationService.NotifySuccess($"Peeked {newMessages.Count} more messages");
             }
             else
             {
-                errorMessage = "No more messages available.";
+                NotificationService.NotifyInfo("No more messages available.");
             }
         }
         catch (Exception ex)
@@ -776,6 +786,7 @@
             {
                 var finalCount = await JsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", purgeController);
                 Console.WriteLine($"Purged {finalCount} messages");
+                NotificationService.NotifySuccess($"Purged {finalCount} messages");
             }
 
             peekedMessages.Clear();
@@ -1098,6 +1109,7 @@
             {
                 peekFromSequence = 0;
             }
+            NotificationService.NotifySuccess($"Deleted {sequenceNumbers.Count} messages");
             await CloseConfirmModal();
         }
         catch (Exception ex)
@@ -1151,6 +1163,7 @@
             {
                 peekFromSequence = 0;
             }
+            NotificationService.NotifySuccess($"Resubmitted {sequenceNumbers.Count} messages");
             await CloseConfirmModal();
         }
         catch (Exception ex)
@@ -1199,6 +1212,7 @@
             {
                 peekFromSequence = 0;
             }
+            NotificationService.NotifySuccess($"Moved {sequenceNumbers.Count} messages to DLQ");
             await CloseConfirmModal();
         }
         catch (Exception ex)
