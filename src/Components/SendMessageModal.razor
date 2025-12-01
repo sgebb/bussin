@@ -26,36 +26,6 @@
                         <textarea class="form-control" rows="3" @bind="MessageProperties" placeholder='{"customProp": "value"}'></textarea>
                         <small class="form-text text-muted">JSON object with custom properties to add to the message.</small>
                     </div>
-
-                    <!-- Scheduling Options -->
-                    <div class="card mb-3">
-                        <div class="card-header py-1 px-2" style="cursor: pointer;" @onclick="ToggleScheduling">
-                            <small>⏰ Schedule Delivery</small>
-                            <span class="float-end">@(enableScheduling ? "▼" : "▶")</span>
-                        </div>
-                        @if (enableScheduling)
-                        {
-                            <div class="card-body p-2">
-                                <div class="mb-2">
-                                    <label class="form-label small mb-1">Relative Time</label>
-                                    <input type="text" class="form-control form-control-sm" @bind="relativeTime" placeholder="e.g., +5m, +2h, +1d" />
-                                    <small class="form-text text-muted">
-                                        Examples: +5m (5 minutes), +2h (2 hours), +1d (1 day), +30s (30 seconds)
-                                    </small>
-                                </div>
-                                <div class="mb-0">
-                                    <label class="form-label small mb-1">Or Absolute Time (UTC)</label>
-                                    <input type="datetime-local" class="form-control form-control-sm" @bind="absoluteTime" />
-                                </div>
-                                @if (!string.IsNullOrEmpty(scheduleError))
-                                {
-                                    <div class="alert alert-danger alert-sm mt-2 mb-0 p-1">
-                                        <small>@scheduleError</small>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
@@ -77,14 +47,9 @@
     [Parameter] public bool IsSending { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<(string body, string? properties)> OnSend { get; set; }
-    [Parameter] public EventCallback<(string body, string? properties, DateTime scheduledTime)> OnSendScheduled { get; set; }
 
     private string messageBody = "";
     private string messageProperties = "";
-    private bool enableScheduling = false;
-    private string relativeTime = "";
-    private DateTime? absoluteTime = null;
-    private string? scheduleError = null;
     private string? validationError = null;
 
     public string MessageBody
@@ -107,18 +72,8 @@
         }
     }
 
-    private void ToggleScheduling()
-    {
-        enableScheduling = !enableScheduling;
-        if (!enableScheduling)
-        {
-            scheduleError = null;
-        }
-    }
-
     private async Task HandleSend()
     {
-        scheduleError = null;
         validationError = null;
 
         // Validate message content locally
@@ -129,72 +84,11 @@
             return;
         }
 
-        if (enableScheduling)
-        {
-            DateTime? scheduledTime = null;
-
-            // Try relative time first
-            if (!string.IsNullOrWhiteSpace(relativeTime))
-            {
-                scheduledTime = ParseRelativeTime(relativeTime);
-                if (scheduledTime == null)
-                {
-                    scheduleError = "Invalid relative time format. Use +5m, +2h, +1d, etc.";
-                    return;
-                }
-            }
-            // Fall back to absolute time
-            else if (absoluteTime.HasValue)
-            {
-                scheduledTime = absoluteTime.Value.ToUniversalTime();
-            }
-            else
-            {
-                scheduleError = "Please specify either a relative time or absolute time for scheduling.";
-                return;
-            }
-
-            if (scheduledTime.Value <= DateTime.UtcNow)
-            {
-                scheduleError = "Scheduled time must be in the future.";
-                return;
-            }
-
-            await OnSendScheduled.InvokeAsync((messageBody, string.IsNullOrWhiteSpace(messageProperties) ? null : messageProperties, scheduledTime.Value));
-        }
-        else
-        {
-            await OnSend.InvokeAsync((messageBody, string.IsNullOrWhiteSpace(messageProperties) ? null : messageProperties));
-        }
+        await OnSend.InvokeAsync((messageBody, string.IsNullOrWhiteSpace(messageProperties) ? null : messageProperties));
 
         // Reset form
         messageBody = "";
         messageProperties = "";
-        enableScheduling = false;
-        relativeTime = "";
-        absoluteTime = null;
-    }
-
-    private DateTime? ParseRelativeTime(string input)
-    {
-        input = input.Trim();
-        if (!input.StartsWith("+"))
-            return null;
-
-        var valueStr = input.Substring(1, input.Length - 2);
-        var unit = input[input.Length - 1];
-
-        if (!int.TryParse(valueStr, out int value))
-            return null;
-
-        return unit switch
-        {
-            's' => DateTime.UtcNow.AddSeconds(value),
-            'm' => DateTime.UtcNow.AddMinutes(value),
-            'h' => DateTime.UtcNow.AddHours(value),
-            'd' => DateTime.UtcNow.AddDays(value),
-            _ => null
-        };
     }
 
     protected override void OnParametersSet()
@@ -203,10 +97,6 @@
         {
             messageBody = "";
             messageProperties = "";
-            enableScheduling = false;
-            relativeTime = "";
-            absoluteTime = null;
-            scheduleError = null;
             validationError = null;
         }
     }

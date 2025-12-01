@@ -201,8 +201,7 @@
 <SendMessageModal IsVisible="@showSendMessageModal"
                  IsSending="@isSending"
                  OnClose="@(() => showSendMessageModal = false)"
-                 OnSend="@SendMessage"
-                 OnSendScheduled="@SendScheduledMessage" />
+                 OnSend="@SendMessage" />
 
 <MessageDetailModal IsVisible="@showMessageDetailModal"
                    Message="@selectedMessage"
@@ -896,51 +895,6 @@
         }
     }
 
-    private async Task SendScheduledMessage((string body, string? properties, DateTime scheduledTime) messageData)
-    {
-        isSending = true;
-        errorMessage = null;
-
-        try
-        {
-            var (bodyToSend, propsDict, error) = MessageParsingService.ParseMessageForSending(messageData.body, messageData.properties);
-            
-            if (error != null)
-            {
-                errorMessage = error;
-                return;
-            }
-
-            var token = await AuthService.GetServiceBusTokenAsync();
-            if (string.IsNullOrEmpty(token))
-            {
-                errorMessage = "Service Bus token not available";
-                return;
-            }
-
-            if (selectedQueueName != null)
-            {
-                await JsInterop.SendScheduledQueueMessageAsync(NamespaceNameOnly, selectedQueueName, token, bodyToSend, messageData.scheduledTime, propsDict);
-            }
-            else if (selectedTopicName != null)
-            {
-                await JsInterop.SendScheduledTopicMessageAsync(NamespaceNameOnly, selectedTopicName, token, bodyToSend, messageData.scheduledTime, propsDict);
-            }
-
-            showSendMessageModal = false;
-            Console.WriteLine($"Scheduled message for {messageData.scheduledTime:u}");
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to send scheduled message: {ex.Message}";
-            Console.WriteLine($"Send scheduled error: {ex}");
-        }
-        finally
-        {
-            isSending = false;
-        }
-    }
-
     private void OnDLQToggleChanged(ChangeEventArgs e)
     {
         isViewingDLQ = e.Value is bool b && b;
@@ -1149,11 +1103,13 @@
         {
             if (selectedQueueName != null)
             {
-                await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), resubmitRemoveFromDLQ);
+                // Pass isViewingDLQ (fromDeadLetter) and resubmitRemoveFromDLQ (deleteOriginal)
+                await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
             }
             else if (selectedTopicName != null && selectedSubscriptionName != null)
             {
-                await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), resubmitRemoveFromDLQ);
+                // Pass isViewingDLQ (fromDeadLetter) and resubmitRemoveFromDLQ (deleteOriginal)
+                await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
             }
             
             // Remove resubmitted messages from the view

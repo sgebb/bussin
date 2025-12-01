@@ -247,36 +247,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task SendScheduledQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null)
-    {
-        try
-        {
-            await jsRuntime.InvokeVoidAsync(
-                "ServiceBusAPI.sendScheduledQueueMessage",
-                namespaceName, queueName, token, messageBody, scheduledEnqueueTime, properties);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error sending scheduled queue message: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task SendScheduledTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null)
-    {
-        try
-        {
-            await jsRuntime.InvokeVoidAsync(
-                "ServiceBusAPI.sendScheduledTopicMessage",
-                namespaceName, topicName, token, messageBody, scheduledEnqueueTime, properties);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error sending scheduled topic message: {ex.Message}");
-            throw;
-        }
-    }
-
     public async Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, bool fromDeadLetter = false)
     {
         try

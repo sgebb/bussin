@@ -9,6 +9,7 @@ import { ManagementClient } from './src/managementClient.js';
 import { MessageReceiver } from './src/messageReceiver.js';
 import { MessageSender } from './src/messageSender.js';
 import { parseServiceBusMessage } from './src/messageParser.js';
+import { types } from 'rhea'; // Import types for wrapping symbols
 import type { 
     ServiceBusMessage, 
     MessageProperties, 
@@ -163,57 +164,6 @@ async function sendMessage(
         connection.close();
         throw new Error(`Send failed: ${(err as Error).message}`);
     }
-}
-
-/**
- * Send a scheduled message to a queue
- * @param scheduledEnqueueTime - When the message should become visible
- */
-async function sendScheduledQueueMessage(
-    namespace: string,
-    queueName: string,
-    token: string,
-    messageBody: string | object | Uint8Array | ArrayBuffer,
-    scheduledEnqueueTime: Date | string,
-    properties: MessageProperties = {}
-): Promise<void> {
-    // Ensure we have a Date object (Blazor sends ISO string)
-    const enqueueTime = scheduledEnqueueTime instanceof Date 
-        ? scheduledEnqueueTime 
-        : new Date(scheduledEnqueueTime);
-
-    // Add scheduled enqueue time to message annotations
-    const messageProps = {
-        ...properties,
-        message_annotations: {
-            ...properties.message_annotations,
-            'x-opt-scheduled-enqueue-time': enqueueTime.getTime() // Send as timestamp (number) to be safe
-        }
-    };
-    return await sendMessage(namespace, queueName, token, messageBody, messageProps);
-}
-
-/**
- * Send a scheduled message to a topic
- * @param scheduledEnqueueTime - When the message should become visible
- */
-async function sendScheduledTopicMessage(
-    namespace: string,
-    topicName: string,
-    token: string,
-    messageBody: string | object | Uint8Array | ArrayBuffer,
-    scheduledEnqueueTime: Date,
-    properties: MessageProperties = {}
-): Promise<void> {
-    // Add scheduled enqueue time to message annotations
-    const messageProps = {
-        ...properties,
-        message_annotations: {
-            ...properties.message_annotations,
-            'x-opt-scheduled-enqueue-time': scheduledEnqueueTime
-        }
-    };
-    return await sendMessage(namespace, topicName, token, messageBody, messageProps);
 }
 
 // ============================================================================
@@ -811,8 +761,6 @@ async function startMonitoring(
     // Send operations
     sendQueueMessage,
     sendTopicMessage,
-    sendScheduledQueueMessage,
-    sendScheduledTopicMessage,
     
     // Destructive operations
     purgeQueue,
@@ -838,8 +786,6 @@ export {
     // Send operations
     sendQueueMessage,
     sendTopicMessage,
-    sendScheduledQueueMessage,
-    sendScheduledTopicMessage,
     
     // Destructive operations
     purgeQueue,

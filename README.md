@@ -33,7 +33,6 @@ This two-step consent is required because Azure AD doesn't allow requesting mult
 
 - **Peek Messages** - Non-destructive message viewing with batch loading
 - **Send Messages** - Send messages to queues and topics with custom properties
-- **Send Scheduled Messages** - Schedule messages for future delivery
 - **Delete Messages** - Lock and delete specific messages by sequence number
 - **Batch Operations** - Select and process multiple messages at once
 - **Dead Letter Queue Support** - View, resubmit, and manage DLQ messages
@@ -96,7 +95,6 @@ You can also check `buildinfo.json` at the root of the deployed site.
 
 ### 🐛 Bugs & Issues
 
-- [ ] **Message scheduling verification** - Verify scheduling actually works, add UI to show number of scheduled messages
 - [] **Faster purge** - Multiple processes running purge at the same time?
 
 ### 🔮 Future / Blocked

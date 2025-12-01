@@ -9,13 +9,11 @@ public interface IServiceBusJsInteropService
     // Queue Operations
     Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false);
     Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, MessageProperties? properties = null);
-    Task SendScheduledQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null);
     Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token, bool fromDeadLetter = false);
     
     // Topic/Subscription Operations
     Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false);
     Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, MessageProperties? properties = null);
-    Task SendScheduledTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, DateTime scheduledEnqueueTime, MessageProperties? properties = null);
     Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, bool fromDeadLetter = false);
     
     // Lock-based operations (new API)

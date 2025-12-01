@@ -130,8 +130,6 @@
         if (SelectedMessages.Any())
         {
             await OnDeleteMessages.InvokeAsync(SelectedMessages.ToList());
-            SelectedMessages.Clear();
-            allSelected = false;
         }
     }
 
@@ -140,8 +138,6 @@
         if (SelectedMessages.Any())
         {
             await OnResubmitMessages.InvokeAsync(SelectedMessages.ToList());
-            SelectedMessages.Clear();
-            allSelected = false;
         }
     }
 
@@ -150,8 +146,6 @@
         if (SelectedMessages.Any())
         {
             await OnMoveToDLQMessages.InvokeAsync(SelectedMessages.ToList());
-            SelectedMessages.Clear();
-            allSelected = false;
         }
     }
 
