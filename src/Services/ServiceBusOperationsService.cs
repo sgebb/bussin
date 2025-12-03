@@ -170,9 +170,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var result = await _jsInterop.CompleteMessagesAsync(lockTokens);
-            _notificationService.NotifySuccess($"Completed {result.SuccessCount} messages ({result.FailureCount} failed)");
-            return result;
+            return await _jsInterop.CompleteMessagesAsync(lockTokens);
         }
         catch (Exception ex)
         {
@@ -185,9 +183,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var result = await _jsInterop.AbandonMessagesAsync(lockTokens);
-            _notificationService.NotifySuccess($"Abandoned {result.SuccessCount} messages ({result.FailureCount} failed)");
-            return result;
+            return await _jsInterop.AbandonMessagesAsync(lockTokens);
         }
         catch (Exception ex)
         {
@@ -200,9 +196,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var result = await _jsInterop.DeadLetterMessagesAsync(lockTokens, options);
-            _notificationService.NotifySuccess($"Dead lettered {result.SuccessCount} messages ({result.FailureCount} failed)");
-            return result;
+            return await _jsInterop.DeadLetterMessagesAsync(lockTokens, options);
         }
         catch (Exception ex)
         {
@@ -253,36 +247,54 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    public async Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true)
+    public Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true)
+    {
+        return ResendMessagesInternalAsync(
+            sequenceNumbers,
+            fromDeadLetter,
+            deleteOriginal,
+            token => _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, 100, 0, fromDeadLetter),
+            (token, count) => _jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 5, fromDeadLetter, count),
+            (token, body, props) => _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, body, props)
+        );
+    }
+
+    public Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true)
+    {
+        return ResendMessagesInternalAsync(
+            sequenceNumbers,
+            fromDeadLetter,
+            deleteOriginal,
+            token => _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 100, 0, fromDeadLetter),
+            (token, count) => _jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 5, fromDeadLetter, count),
+            (token, body, props) => _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, body, props)
+        );
+    }
+
+    private async Task<BatchOperationResult> ResendMessagesInternalAsync(
+        long[] sequenceNumbers,
+        bool fromDeadLetter,
+        bool deleteOriginal,
+        Func<string, Task<List<ServiceBusMessage>>> peekMessages,
+        Func<string, int, Task<List<ServiceBusMessage>>> lockMessages,
+        Func<string, object, MessageProperties?, Task> sendMessage)
     {
         try
         {
             var token = await GetTokenAsync();
             
-            // First, peek the messages to get their content
-            var allMessages = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, 100, 0, fromDeadLetter);
+            var allMessages = await peekMessages(token);
             var messagesToResend = allMessages.Where(m => sequenceNumbers.Contains(m.SequenceNumber ?? -1)).ToList();
             
             if (!messagesToResend.Any())
             {
-                return new BatchOperationResult { SuccessCount = 0, FailureCount = sequenceNumbers.Length, Errors = new List<BatchOperationError>() };
+                return new BatchOperationResult { SuccessCount = 0, FailureCount = sequenceNumbers.Length, Errors = [] };
             }
             
-            // If we need to delete (complete) the original messages, we must lock them.
-            // If we are just copying (resending without delete), we can just use the peeked messages.
-            List<ServiceBusMessage> messagesToProcess;
-            if (deleteOriginal)
-            {
-                // Lock the messages (receive and lock to get lock tokens)
-                messagesToProcess = await _jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 5, fromDeadLetter, messagesToResend.Count);
-            }
-            else
-            {
-                // Just use the peeked messages
-                messagesToProcess = messagesToResend;
-            }
+            var messagesToProcess = deleteOriginal
+                ? await lockMessages(token, messagesToResend.Count)
+                : messagesToResend;
             
-            // Send them back to the main queue
             var successCount = 0;
             var failureCount = 0;
             var errors = new List<BatchOperationError>();
@@ -291,31 +303,9 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             {
                 try
                 {
-                    // Use original body and content type if available (preserves exact format)
-                    if (msg.OriginalBody != null && msg.OriginalContentType != null)
-                    {
-                        var props = new MessageProperties
-                        {
-                            MessageId = msg.MessageId,
-                            OriginalBody = msg.OriginalBody,
-                            OriginalContentType = msg.OriginalContentType,
-                            ApplicationProperties = msg.ApplicationProperties
-                        };
-
-                        await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, "", props);
-                    }
-                    else
-                    {
-                        // Fallback to preserving individual properties (original behavior)
-                        var props = new MessageProperties
-                        {
-                            MessageId = msg.MessageId,
-                            ContentType = msg.ContentType,
-                            ApplicationProperties = msg.ApplicationProperties
-                        };
-
-                        await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, msg.Body, props);
-                    }
+                    var props = CreateResendProperties(msg);
+                    var body = msg.OriginalBody != null ? "" : msg.Body;
+                    await sendMessage(token, body, props);
                     successCount++;
                 }
                 catch (Exception ex)
@@ -326,27 +316,16 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
                 }
             }
             
-            // Complete (delete) the messages if requested and successfully sent
             if (deleteOriginal && messagesToProcess.Any())
             {
-                // Only complete those that we successfully processed? 
-                // The current logic counts success/fail on SEND.
-                // If send fails, we probably shouldn't delete.
-                // But for simplicity and batching, the current implementation completes all locked messages.
-                // Ideally we should only complete the ones that succeeded.
-                // But LockTokens are on the messages.
-                
-                // Let's match previous behavior: complete all locked messages.
                 var lockTokens = messagesToProcess.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
-                if (lockTokens.Any())
+                if (lockTokens.Length > 0)
                 {
                     await _jsInterop.CompleteMessagesAsync(lockTokens);
                 }
             }
             
-            var result = new BatchOperationResult { SuccessCount = successCount, FailureCount = failureCount, Errors = errors };
-            _notificationService.NotifySuccess($"Resent {result.SuccessCount} messages ({result.FailureCount} failed)");
-            return result;
+            return new BatchOperationResult { SuccessCount = successCount, FailureCount = failureCount, Errors = errors };
         }
         catch (Exception ex)
         {
@@ -356,99 +335,25 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    public async Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true)
+    private static MessageProperties CreateResendProperties(ServiceBusMessage msg)
     {
-        try
+        if (msg.OriginalBody != null && msg.OriginalContentType != null)
         {
-            var token = await GetTokenAsync();
-            
-            // First, peek the messages to get their content
-            var allMessages = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 100, 0, fromDeadLetter);
-            var messagesToResend = allMessages.Where(m => sequenceNumbers.Contains(m.SequenceNumber ?? -1)).ToList();
-            
-            if (!messagesToResend.Any())
+            return new MessageProperties
             {
-                return new BatchOperationResult { SuccessCount = 0, FailureCount = sequenceNumbers.Length, Errors = new List<BatchOperationError>() };
-            }
-            
-            // If we need to delete (complete) the original messages, we must lock them.
-            // If we are just copying (resending without delete), we can just use the peeked messages.
-            List<ServiceBusMessage> messagesToProcess;
-            if (deleteOriginal)
-            {
-                // Lock the messages (receive and lock to get lock tokens)
-                messagesToProcess = await _jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 5, fromDeadLetter, messagesToResend.Count);
-            }
-            else
-            {
-                // Just use the peeked messages
-                messagesToProcess = messagesToResend;
-            }
-            
-            // Send them back to the topic
-            var successCount = 0;
-            var failureCount = 0;
-            var errors = new List<BatchOperationError>();
-            
-            foreach (var msg in messagesToProcess)
-            {
-                try
-                {
-                    // Use original body and content type if available (preserves exact format)
-                    if (msg.OriginalBody != null && msg.OriginalContentType != null)
-                    {
-                        var props = new MessageProperties
-                        {
-                            MessageId = msg.MessageId,
-                            OriginalBody = msg.OriginalBody,
-                            OriginalContentType = msg.OriginalContentType,
-                            ApplicationProperties = msg.ApplicationProperties
-                        };
-
-                        await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, "", props);
-                    }
-                    else
-                    {
-                        // Fallback to preserving individual properties (original behavior)
-                        var props = new MessageProperties
-                        {
-                            MessageId = msg.MessageId,
-                            ContentType = msg.ContentType,
-                            ApplicationProperties = msg.ApplicationProperties
-                        };
-
-                        await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, msg.Body, props);
-                    }
-                    successCount++;
-                }
-                catch (Exception ex)
-                {
-                    failureCount++;
-                    errors.Add(new BatchOperationError { MessageId = msg.MessageId ?? "", Error = ex.Message });
-                    Console.WriteLine($"Failed to resend message {msg.MessageId}: {ex.Message}");
-                }
-            }
-            
-            // Complete (delete) the messages if requested
-            if (deleteOriginal && messagesToProcess.Any())
-            {
-                var lockTokens = messagesToProcess.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
-                if (lockTokens.Any())
-                {
-                    await _jsInterop.CompleteMessagesAsync(lockTokens);
-                }
-            }
-            
-            var result = new BatchOperationResult { SuccessCount = successCount, FailureCount = failureCount, Errors = errors };
-            _notificationService.NotifySuccess($"Resent {result.SuccessCount} messages ({result.FailureCount} failed)");
-            return result;
+                MessageId = msg.MessageId,
+                OriginalBody = msg.OriginalBody,
+                OriginalContentType = msg.OriginalContentType,
+                ApplicationProperties = msg.ApplicationProperties
+            };
         }
-        catch (Exception ex)
+        
+        return new MessageProperties
         {
-            _notificationService.NotifyError($"Failed to resend messages: {ex.Message}");
-            Console.WriteLine($"Resend error details: {ex}");
-            throw;
-        }
+            MessageId = msg.MessageId,
+            ContentType = msg.ContentType,
+            ApplicationProperties = msg.ApplicationProperties
+        };
     }
 
     public async Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers)

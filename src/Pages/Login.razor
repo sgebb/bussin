@@ -14,48 +14,9 @@
                 <a class="btn btn-primary btn-lg" href="authentication/login" role="button">Sign In</a>
                 
                 <div class="mt-4">
-                    <div class="card">
-                        <div class="card-header" style="cursor: pointer;" @onclick="ToggleSecurityInfo">
-                            <span class="me-2">🔒</span> 
-                            <strong>About Permissions & Security</strong>
-                            <span class="float-end">@(showSecurityInfo ? "▼" : "▶")</span>
-                        </div>
-                        @if (showSecurityInfo)
-                        {
-                            <div class="card-body">
-                                <h5>What permissions are requested?</h5>
-                                <p>When you sign in, this application requests consent for two Azure permissions:</p>
-                                <ul>
-                                    <li><strong>Azure Management API</strong> - To list your Service Bus namespaces, queues, topics, and subscriptions</li>
-                                    <li><strong>Azure Service Bus</strong> - To peek, send, and manage messages in your Service Bus entities</li>
-                                </ul>
-                                
-                                <h5 class="mt-3">Is this safe?</h5>
-                                <p>Yes! This application is completely safe:</p>
-                                <ul>
-                                    <li><strong>Zero backend</strong> - All operations run directly in your browser</li>
-                                    <li><strong>Your credentials never leave your device</strong> - Authentication is handled by Microsoft's secure login</li>
-                                    <li><strong>No data storage</strong> - Nothing is saved to any server</li>
-                                    <li><strong>Open source</strong> - You can review the code yourself</li>
-                                    <li><strong>Uses your existing permissions</strong> - You can only access resources you already have access to</li>
-                                </ul>
-                                
-                                <h5 class="mt-3">Can I revoke access?</h5>
-                                <p>Yes, you can revoke these permissions at any time through your <a href="https://myapplications.microsoft.com/" target="_blank">Microsoft account settings</a>.</p>
-                            </div>
-                        }
-                    </div>
+                    <SecurityInfoCard />
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-@code {
-    private bool showSecurityInfo = false;
-
-    private void ToggleSecurityInfo()
-    {
-        showSecurityInfo = !showSecurityInfo;
-    }
-}

@@ -2,59 +2,104 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject IPreferencesService PreferencesService
 @inject NavigationStateService NavState
-@inject IAuthenticationService AuthService
+@inject AuthenticationStateProvider AuthStateProvider
 
-<AuthorizeView>
-    <Authorized>
-        <div class="page" data-theme="@(isDarkMode ? "dark" : "light")">
-            <div class="sidebar">
-                <NavMenu IsDarkMode="@isDarkMode" OnToggleDarkMode="@ToggleDarkMode" />
+<CascadingValue Value="@_isInitialized" Name="LayoutInitialized">
+    <AuthorizeView>
+        <Authorized>
+            @if (_isInitialized)
+            {
+                <div class="page" data-theme="@(_isDarkMode ? "dark" : "light")">
+                    <div class="sidebar">
+                        <NavMenu IsDarkMode="@_isDarkMode" OnToggleDarkMode="@ToggleDarkMode" />
+                    </div>
+
+                    <main>
+                        <article class="content">
+                            @Body
+                        </article>
+                    </main>
+                </div>
+
+                <ToastNotification />
+                <BuildInfo />
+            }
+            else
+            {
+                <div class="d-flex justify-content-center align-items-center" style="height: 100vh;">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+        </Authorized>
+        <Authorizing>
+            <div class="d-flex justify-content-center align-items-center" style="height: 100vh;">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Authenticating...</span>
+                </div>
             </div>
-
-            <main>
-                <article class="content">
-                    @Body
-                </article>
-            </main>
-        </div>
-
-        <ToastNotification />
-        <BuildInfo />
-    </Authorized>
-    <NotAuthorized>
-        @Body
-    </NotAuthorized>
-</AuthorizeView>
+        </Authorizing>
+        <NotAuthorized>
+            @Body
+        </NotAuthorized>
+    </AuthorizeView>
+</CascadingValue>
 
 @code {
-    private bool isDarkMode = false;
+    private bool _isDarkMode;
+    private bool _isInitialized;
 
     protected override async Task OnInitializedAsync()
     {
-        // Load dark mode preference
-        var prefs = await PreferencesService.LoadPreferencesAsync();
-        isDarkMode = prefs.DarkMode;
+        // Subscribe to auth state changes to handle post-login initialization
+        AuthStateProvider.AuthenticationStateChanged += OnAuthStateChanged;
         
-        // Initialize NavState for all authenticated pages
-        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
-        if (isAuthenticated)
+        await InitializeIfAuthenticatedAsync();
+    }
+
+    private async void OnAuthStateChanged(Task<AuthenticationState> task)
+    {
+        // Re-initialize when auth state changes (e.g., after login redirect)
+        await InitializeIfAuthenticatedAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task InitializeIfAuthenticatedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
         {
+            // Load preferences and initialize nav state
+            var prefs = await PreferencesService.LoadPreferencesAsync();
+            _isDarkMode = prefs.DarkMode;
+            
             await NavState.InitializeAsync();
+            _isInitialized = true;
+        }
+        else
+        {
+            // For non-authenticated users, just load preferences
+            var prefs = await PreferencesService.LoadPreferencesAsync();
+            _isDarkMode = prefs.DarkMode;
+            _isInitialized = true;
         }
     }
 
     private async Task ToggleDarkMode()
     {
-        isDarkMode = !isDarkMode;
+        _isDarkMode = !_isDarkMode;
         
-        // Save preference
         var prefs = await PreferencesService.LoadPreferencesAsync();
-        prefs.DarkMode = isDarkMode;
+        prefs.DarkMode = _isDarkMode;
         await PreferencesService.SavePreferencesAsync(prefs);
-        
-        StateHasChanged();
     }
 
+    public void Dispose()
+    {
+        AuthStateProvider.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
 }

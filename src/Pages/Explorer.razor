@@ -31,7 +31,6 @@
                 </div>
             }
         </div>
-        <small class="text-muted d-block mt-1">@NamespaceParam</small>
     </div>
 
     <!-- Section 2: Compact Entity Selector (3 Columns) -->
@@ -124,7 +123,8 @@
             <div class="explorer-messages-list">
                 @if (peekedMessages.Count > 0)
                 {
-                    <MessageList Messages="@peekedMessages"
+                    <MessageList @ref="_messageListRef"
+                                Messages="@peekedMessages"
                                 IsDLQ="@isViewingDLQ"
                                 IsProcessing="@isProcessingBatch"
                                 OnMessageSelected="@ShowMessageDetail"
@@ -136,9 +136,6 @@
                 {
                     <div class="text-center text-muted p-4">
                         <p>@(hasPeeked ? "No messages found" : "Click 'Peek' to load messages")</p>
-                        <button class="btn btn-primary" @onclick="PeekMessages" disabled="@isPeeking">
-                            <i class="bi bi-search"></i> Peek Messages
-                        </button>
                     </div>
                 }
                 else
@@ -150,38 +147,47 @@
             </div>
 
             <div class="explorer-actions-sidebar">
-                <!-- DLQ Toggle -->
-                @if (selectedQueueName != null || selectedSubscriptionName != null)
+                @if (HasQueueOrSubscriptionSelected)
                 {
+                    <!-- DLQ Toggle -->
                     <div class="action-btn-group dlq-toggle-group">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="dlqSwitch" checked="@isViewingDLQ" @onchange="OnDLQToggleChanged">
-                            <label class="form-check-label" for="dlqSwitch">Dead Letter Queue</label>
+                            <label class="form-check-label" for="dlqSwitch">DLQ</label>
                         </div>
                     </div>
-                }
 
-                <!-- Permanent Actions -->
-                <div class="action-btn-group">
-                    <div class="action-btn-group-title">Actions</div>
-                    <button class="btn btn-sm btn-primary w-100" @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" disabled="@(isPeeking || (selectedQueueName == null && selectedSubscriptionName == null))">
-                        <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
-                    </button>
-                    <button class="btn btn-sm btn-success w-100" @onclick="ShowSendMessageModal" disabled="@(selectedQueueName == null && selectedTopicName == null || isViewingDLQ)">
-                        <i class="bi bi-envelope"></i> Send
-                    </button>
-                    <button class="btn btn-sm btn-info w-100" @onclick="ShowMonitorModal" disabled="@(selectedQueueName == null && selectedSubscriptionName == null || isViewingDLQ)">
-                        <i class="bi bi-graph-up"></i> Monitor
-                    </button>
-                </div>
+                    <!-- Actions -->
+                    <div class="action-btn-group">
+                        <div class="action-btn-group-title">Actions</div>
+                        <button class="btn btn-action btn-success w-100 @(isViewingDLQ ? "disabled-grey" : "")" 
+                                @onclick="ShowSendMessageModal" 
+                                disabled="@isViewingDLQ">
+                            <i class="bi bi-envelope"></i> Send
+                        </button>
+                        <button class="btn btn-action btn-primary w-100" @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" disabled="@isPeeking">
+                            <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
+                        </button>
+                        <button class="btn btn-action btn-info w-100" @onclick="ShowMonitorModal">
+                            <i class="bi bi-graph-up"></i> Monitor
+                        </button>
+                    </div>
 
-                <!-- Contextual Actions -->
-                @if (selectedQueueName != null || selectedSubscriptionName != null)
-                {
+                    <!-- Dangerous Actions -->
                     <div class="action-btn-group">
                         <div class="action-btn-group-title">Dangerous</div>
-                        <button class="btn btn-sm btn-danger w-100" @onclick="() => PurgeMessages()" disabled="@isPurging">
+                        <button class="btn btn-action btn-danger w-100" @onclick="() => PurgeMessages()" disabled="@isPurging">
                             <i class="bi bi-trash"></i> Purge All
+                        </button>
+                    </div>
+                }
+                else if (HasEntitySelected)
+                {
+                    <!-- Topic only selected - just Send -->
+                    <div class="action-btn-group">
+                        <div class="action-btn-group-title">Actions</div>
+                        <button class="btn btn-action btn-success w-100" @onclick="ShowSendMessageModal">
+                            <i class="bi bi-envelope"></i> Send
                         </button>
                     </div>
                 }
@@ -230,16 +236,16 @@
                     OnClose="@(() => showReceiveAndLockModal = false)"
                     OnLockMessages="@LockMessagesForModal" />
 
-            <ConfirmModal IsVisible="@showConfirmModal"
-             Title="@confirmModalTitle"
-             Message="@confirmModalMessage"
-             DetailMessage="@confirmModalDetail"
-             ConfirmButtonText="@confirmModalButtonText"
-             ConfirmButtonClass="@confirmModalButtonClass"
-             AlternativeConfirmButtonText="@confirmModalAlternativeButtonText"
-             AlternativeConfirmButtonClass="@confirmModalAlternativeButtonClass"
-             IsProcessing="@isConfirmProcessing"
-             ProgressCount="@purgeProgressCount"
+            <ConfirmModal IsVisible="@_confirmModal.IsVisible"
+             Title="@_confirmModal.Title"
+             Message="@_confirmModal.Message"
+             DetailMessage="@_confirmModal.DetailMessage"
+             ConfirmButtonText="@_confirmModal.ConfirmButtonText"
+             ConfirmButtonClass="@_confirmModal.ConfirmButtonClass"
+             AlternativeConfirmButtonText="@_confirmModal.AlternativeButtonText"
+             AlternativeConfirmButtonClass="@_confirmModal.AlternativeButtonClass"
+             IsProcessing="@_confirmModal.IsProcessing"
+             ProgressCount="@_confirmModal.ProgressCount"
              OnConfirm="@OnConfirmModalConfirm"
              OnAlternativeConfirm="@OnConfirmModalAlternativeConfirm"
              OnCancel="@OnConfirmModalCancel">
@@ -297,20 +303,10 @@
     private bool showMonitorModal = false;
     private bool showReceiveAndLockModal = false;
     private bool isProcessingBatch = false;
-    private bool showConfirmModal = false;
-    private string confirmModalTitle = "";
-    private string confirmModalMessage = "";
-    private string? confirmModalDetail = null;
-    private string confirmModalButtonText = "Confirm";
-    private string confirmModalButtonClass = "btn-primary";
-    private string confirmModalAlternativeButtonText = "";
-    private string confirmModalAlternativeButtonClass = "btn-secondary";
-    private bool isConfirmProcessing = false;
-    private int? purgeProgressCount = null;
-    private IJSObjectReference? purgeController = null;
-    private DotNetObjectReference<PurgeProgressCallback>? purgeCallbackRef = null;
-    private Func<Task>? confirmModalAction = null;
-    private Func<Task>? confirmModalAlternativeAction = null;
+    private readonly ConfirmModalState _confirmModal = new();
+    private IJSObjectReference? _purgeController;
+    private DotNetObjectReference<PurgeProgressCallback>? _purgeCallbackRef;
+    private MessageList? _messageListRef;
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
@@ -321,6 +317,10 @@
     
     // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
     private string NamespaceNameOnly => NamespaceParam?.Split('.').FirstOrDefault() ?? "";
+
+    // Helper properties for UI visibility
+    private bool HasEntitySelected => selectedQueueName != null || selectedTopicName != null;
+    private bool HasQueueOrSubscriptionSelected => selectedQueueName != null || selectedSubscriptionName != null;
 
     private string? _lastNamespace;
 
@@ -461,9 +461,7 @@
         selectedQueueName = queueName;
         selectedTopicName = null;
         selectedSubscriptionName = null;
-        peekedMessages.Clear();
-        hasPeeked = false;
-        peekFromSequence = 0;
+        ResetMessageState();
     }
 
     private async Task SelectTopic(string topicName)
@@ -471,9 +469,7 @@
         selectedQueueName = null;
         selectedTopicName = topicName;
         selectedSubscriptionName = null;
-        peekedMessages.Clear();
-        hasPeeked = false;
-        peekFromSequence = 0;
+        ResetMessageState();
         
         // Only clear subscriptions if switching to a different topic
         if (_loadedSubscriptionsForTopic != topicName)
@@ -556,9 +552,16 @@
     {
         selectedSubscriptionName = subName;
         selectedQueueName = null;
+        ResetMessageState();
+    }
+
+    private void ResetMessageState()
+    {
         peekedMessages.Clear();
         hasPeeked = false;
         peekFromSequence = 0;
+        isViewingDLQ = false;
+        _messageListRef?.ClearSelection();
     }
 
     private async Task PeekMessages()
@@ -715,7 +718,7 @@
     
     private async Task ExecuteBackgroundPurge()
     {
-        isConfirmProcessing = true;
+        _confirmModal.IsProcessing = true;
         errorMessage = null;
         
         try
@@ -743,14 +746,14 @@
         }
         finally
         {
-            isConfirmProcessing = false;
+            _confirmModal.IsProcessing = false;
         }
     }
 
     private async Task ExecutePurgeMessages()
     {
-        isConfirmProcessing = true;
-        purgeProgressCount = 0;
+        _confirmModal.IsProcessing = true;
+        _confirmModal.ProgressCount = 0;
         errorMessage = null;
 
         try
@@ -765,25 +768,25 @@
             // Create progress callback
             var callback = new PurgeProgressCallback(count =>
             {
-                purgeProgressCount = count;
+                _confirmModal.ProgressCount = count;
                 InvokeAsync(StateHasChanged);
             });
-            purgeCallbackRef = DotNetObjectReference.Create(callback);
+            _purgeCallbackRef = DotNetObjectReference.Create(callback);
 
             // Start purge with progress tracking
             if (selectedQueueName != null)
             {
-                purgeController = await JsInterop.StartPurgeQueueAsync(NamespaceNameOnly, selectedQueueName, token, purgeCallbackRef, isViewingDLQ);
+                _purgeController = await JsInterop.StartPurgeQueueAsync(NamespaceNameOnly, selectedQueueName, token, _purgeCallbackRef, isViewingDLQ);
             }
             else if (selectedSubscriptionName != null && selectedTopicName != null)
             {
-                purgeController = await JsInterop.StartPurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, purgeCallbackRef, isViewingDLQ);
+                _purgeController = await JsInterop.StartPurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, _purgeCallbackRef, isViewingDLQ);
             }
 
             // Wait for completion
-            if (purgeController != null)
+            if (_purgeController != null)
             {
-                var finalCount = await JsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", purgeController);
+                var finalCount = await JsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", _purgeController);
                 Console.WriteLine($"Purged {finalCount} messages");
                 NotificationService.NotifySuccess($"Purged {finalCount} messages");
             }
@@ -814,11 +817,11 @@
         }
         finally
         {
-            isConfirmProcessing = false;
-            purgeProgressCount = null;
-            purgeCallbackRef?.Dispose();
-            purgeCallbackRef = null;
-            purgeController = null;
+            _confirmModal.IsProcessing = false;
+            _confirmModal.ProgressCount = null;
+            _purgeCallbackRef?.Dispose();
+            _purgeCallbackRef = null;
+            _purgeController = null;
         }
     }
 
@@ -905,41 +908,24 @@
 
     private void ShowConfirmModal(string title, string message, string? detail, string confirmText, string confirmClass, Func<Task> onConfirm)
     {
-        confirmModalTitle = title;
-        confirmModalMessage = message;
-        confirmModalDetail = detail;
-        confirmModalButtonText = confirmText;
-        confirmModalButtonClass = confirmClass;
-        confirmModalAction = onConfirm;
-        confirmModalAlternativeAction = null;
-        confirmModalAlternativeButtonText = "";
-        showConfirmModal = true;
+        _confirmModal.Show(title, message, detail, confirmText, confirmClass, onConfirm);
         isResubmitModal = false;
     }
     
     private void ShowConfirmModalWithAlternative(string title, string message, string? detail, string confirmText, string confirmClass, string alternativeText, string alternativeClass, Func<Task> onConfirm, Func<Task> onAlternativeConfirm)
     {
-        confirmModalTitle = title;
-        confirmModalMessage = message;
-        confirmModalDetail = detail;
-        confirmModalButtonText = confirmText;
-        confirmModalButtonClass = confirmClass;
-        confirmModalAlternativeButtonText = alternativeText;
-        confirmModalAlternativeButtonClass = alternativeClass;
-        confirmModalAction = onConfirm;
-        confirmModalAlternativeAction = onAlternativeConfirm;
-        showConfirmModal = true;
+        _confirmModal.ShowWithAlternative(title, message, detail, confirmText, confirmClass, alternativeText, alternativeClass, onConfirm, onAlternativeConfirm);
         isResubmitModal = false;
     }
 
     private async Task CloseConfirmModal()
     {
         // If purging, stop it
-        if (purgeController != null)
+        if (_purgeController != null)
         {
             try
             {
-                await purgeController.InvokeVoidAsync("stop");
+                await _purgeController.InvokeVoidAsync("stop");
             }
             catch (Exception ex)
             {
@@ -947,28 +933,25 @@
             }
         }
         
-        showConfirmModal = false;
-        confirmModalAction = null;
-        isConfirmProcessing = false;
-        purgeProgressCount = null;
-        purgeCallbackRef?.Dispose();
-        purgeCallbackRef = null;
-        purgeController = null;
+        _confirmModal.Close();
+        _purgeCallbackRef?.Dispose();
+        _purgeCallbackRef = null;
+        _purgeController = null;
     }
 
     private async Task OnConfirmModalConfirm()
     {
-        if (confirmModalAction != null)
+        if (_confirmModal.OnConfirm != null)
         {
-            await confirmModalAction();
+            await _confirmModal.OnConfirm();
         }
     }
     
     private async Task OnConfirmModalAlternativeConfirm()
     {
-        if (confirmModalAlternativeAction != null)
+        if (_confirmModal.OnAlternativeConfirm != null)
         {
-            await confirmModalAlternativeAction();
+            await _confirmModal.OnAlternativeConfirm();
         }
     }
 
@@ -1041,8 +1024,7 @@
 
     private async Task ExecuteDeleteMessages(List<long> sequenceNumbers)
     {
-
-        isConfirmProcessing = true;
+        _confirmModal.IsProcessing = true;
         errorMessage = null;
 
         try
@@ -1056,9 +1038,9 @@
                 await OperationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), isViewingDLQ);
             }
             
-            // Remove deleted messages from the view
+            // Remove deleted messages from the view and clear selection
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
-            // Reset peek sequence if all messages are cleared
+            _messageListRef?.ClearSelection();
             if (peekedMessages.Count == 0)
             {
                 peekFromSequence = 0;
@@ -1073,7 +1055,7 @@
         }
         finally
         {
-            isConfirmProcessing = false;
+            _confirmModal.IsProcessing = false;
         }
     }
 
@@ -1095,8 +1077,7 @@
 
     private async Task ExecuteResubmitMessages(List<long> sequenceNumbers)
     {
-
-        isConfirmProcessing = true;
+        _confirmModal.IsProcessing = true;
         errorMessage = null;
 
         try
@@ -1112,9 +1093,9 @@
                 await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
             }
             
-            // Remove resubmitted messages from the view
+            // Remove resubmitted messages from the view and clear selection
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
-            // Reset peek sequence if all messages are cleared
+            _messageListRef?.ClearSelection();
             if (peekedMessages.Count == 0)
             {
                 peekFromSequence = 0;
@@ -1128,7 +1109,7 @@
         }
         finally
         {
-            isConfirmProcessing = false;
+            _confirmModal.IsProcessing = false;
         }
     }
 
@@ -1146,8 +1127,7 @@
 
     private async Task ExecuteMoveToDLQMessages(List<long> sequenceNumbers)
     {
-
-        isConfirmProcessing = true;
+        _confirmModal.IsProcessing = true;
         errorMessage = null;
 
         try
@@ -1161,9 +1141,9 @@
                 await OperationsService.MoveToDLQSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
             }
             
-            // Remove moved messages from the view
+            // Remove moved messages from the view and clear selection
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
-            // Reset peek sequence if all messages are cleared
+            _messageListRef?.ClearSelection();
             if (peekedMessages.Count == 0)
             {
                 peekFromSequence = 0;
@@ -1178,7 +1158,7 @@
         }
         finally
         {
-            isConfirmProcessing = false;
+            _confirmModal.IsProcessing = false;
         }
     }
 

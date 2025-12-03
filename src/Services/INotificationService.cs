@@ -2,12 +2,18 @@ namespace ServiceBusExplorer.Blazor.Services;
 
 public interface INotificationService
 {
-    event Action<string, NotificationType>? OnNotification;
-    void NotifySuccess(string message);
-    void NotifyError(string message);
-    void NotifyInfo(string message);
-    void NotifyWarning(string message);
+    event Action<NotificationEventArgs>? OnNotification;
+    void NotifySuccess(string message, string? id = null);
+    void NotifyError(string message, string? id = null);
+    void NotifyInfo(string message, string? id = null);
+    void NotifyWarning(string message, string? id = null);
 }
+
+public record NotificationEventArgs(
+    string Message, 
+    NotificationType Type, 
+    string? Id = null
+);
 
 public enum NotificationType
 {

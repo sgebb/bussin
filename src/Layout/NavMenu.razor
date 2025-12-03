@@ -249,18 +249,6 @@
         CancelDeleteFolder();
     }
 
-    private async Task HandleFolderNameKeyUp(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newFolderName))
-        {
-            await CreateFolder();
-        }
-        else if (e.Key == "Escape")
-        {
-            CancelCreateFolder();
-        }
-    }
-
     // Drag and drop handlers
     private void OnDragStart(string fullyQualifiedNamespace)
     {

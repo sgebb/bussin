@@ -47,6 +47,7 @@ public sealed class BackgroundPurgeService : IDisposable
             using var scope = _scopeFactory.CreateScope();
             var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
             var jsInterop = scope.ServiceProvider.GetRequiredService<IServiceBusJsInteropService>();
+            var notificationId = $"purge-{operationId}";
             
             try
             {
@@ -59,18 +60,15 @@ public sealed class BackgroundPurgeService : IDisposable
                 }
                 
                 Console.WriteLine($"[BackgroundPurge] Got token, creating callback");
-                
-                int lastNotificationBucket = 0;
                 var callback = new PurgeProgressCallback(count =>
                 {
                     operation.MessagesDeleted = count;
                     Console.WriteLine($"[BackgroundPurge] Progress: {count} messages deleted");
                     
-                    var currentBucket = count / 1000;
-                    if (currentBucket > lastNotificationBucket)
+                    // Update the same notification with progress (every 100 messages to avoid too many updates)
+                    if (count % 100 == 0 || count < 100)
                     {
-                        _notificationService.NotifyInfo($"Purge progress: {count:N0} messages deleted from {namespaceName}/{entityPath}...");
-                        lastNotificationBucket = currentBucket;
+                        _notificationService.NotifyInfo($"Purging {entityPath}: {count:N0} messages deleted...", notificationId);
                     }
                     NotifyChanged();
                 });
@@ -133,8 +131,8 @@ public sealed class BackgroundPurgeService : IDisposable
                     operation.Status = PurgeStatus.Completed;
                     operation.EndTime = DateTime.Now;
                     
-                    // Show success notification
-                    _notificationService.NotifySuccess($"Purge complete: {finalCount:N0} messages deleted from {entityPath}");
+                    // Show success notification (updates the progress notification)
+                    _notificationService.NotifySuccess($"Purge complete: {finalCount:N0} messages deleted from {entityPath}", notificationId);
                 }
                 else
                 {
@@ -150,8 +148,8 @@ public sealed class BackgroundPurgeService : IDisposable
                 operation.ErrorMessage = ex.Message;
                 operation.EndTime = DateTime.Now;
                 
-                // Show error notification
-                _notificationService.NotifyError($"Purge failed for {entityPath}: {ex.Message}");
+                // Show error notification (updates the progress notification)
+                _notificationService.NotifyError($"Purge failed for {entityPath}: {ex.Message}", notificationId);
             }
             finally
             {
