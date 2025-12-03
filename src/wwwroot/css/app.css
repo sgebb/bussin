@@ -144,6 +144,34 @@ main {
     }
 }
 
+/* Main content scrollbar - match entity-list-scroll visibility */
+main::-webkit-scrollbar {
+    width: 10px;
+}
+
+main::-webkit-scrollbar-track {
+    background: var(--hover-bg);
+    border-radius: 4px;
+}
+
+main::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+    border: 2px solid var(--hover-bg);
+}
+
+main::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+[data-theme="dark"] main::-webkit-scrollbar-thumb {
+    background: #666;
+}
+
+[data-theme="dark"] main::-webkit-scrollbar-thumb:hover {
+    background: #888;
+}
+
 .validation-message {
     color: #e50000;
 }
@@ -441,6 +469,10 @@ pre {
     color: #0D022C;
 }
 
+[data-theme="dark"] .message-list .form-check-label {
+    color: var(--text-color);
+}
+
 /* Apply theme variables to components */
 .card {
     background-color: var(--card-bg);
@@ -660,6 +692,34 @@ pre, code {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     background-color: var(--card-bg);
+}
+
+/* Message list scrollbar - match entity-list-scroll visibility */
+.explorer-messages-list::-webkit-scrollbar {
+    width: 10px;
+}
+
+.explorer-messages-list::-webkit-scrollbar-track {
+    background: var(--hover-bg);
+    border-radius: 4px;
+}
+
+.explorer-messages-list::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+    border: 2px solid var(--hover-bg);
+}
+
+.explorer-messages-list::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+[data-theme="dark"] .explorer-messages-list::-webkit-scrollbar-thumb {
+    background: #666;
+}
+
+[data-theme="dark"] .explorer-messages-list::-webkit-scrollbar-thumb:hover {
+    background: #888;
 }
 
 .explorer-actions-sidebar {
