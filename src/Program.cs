@@ -29,6 +29,7 @@ builder.Services.AddScoped<IServiceBusOperationsService, ServiceBusOperationsSer
 builder.Services.AddScoped<IPreferencesService, PreferencesService>();
 builder.Services.AddScoped<IMessageParsingService, MessageParsingService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
+builder.Services.AddScoped<IConfirmModalService, ConfirmModalService>();
 builder.Services.AddScoped<NavigationStateService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddSingleton<BackgroundPurgeService>();

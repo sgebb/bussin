@@ -11,6 +11,8 @@
 @inject NavigationStateService NavState
 @inject BackgroundPurgeService BackgroundPurge
 @inject INotificationService NotificationService
+@inject IConfirmModalService ConfirmModal
+@implements IDisposable
 
 <PageTitle>Explorer - bussin</PageTitle>
 
@@ -236,27 +238,27 @@
                     OnClose="@(() => showReceiveAndLockModal = false)"
                     OnLockMessages="@LockMessagesForModal" />
 
-            <ConfirmModal IsVisible="@_confirmModal.IsVisible"
-             Title="@_confirmModal.Title"
-             Message="@_confirmModal.Message"
-             DetailMessage="@_confirmModal.DetailMessage"
-             ConfirmButtonText="@_confirmModal.ConfirmButtonText"
-             ConfirmButtonClass="@_confirmModal.ConfirmButtonClass"
-             AlternativeConfirmButtonText="@_confirmModal.AlternativeButtonText"
-             AlternativeConfirmButtonClass="@_confirmModal.AlternativeButtonClass"
-             IsProcessing="@_confirmModal.IsProcessing"
-             ProgressCount="@_confirmModal.ProgressCount"
+<ConfirmModal IsVisible="@ConfirmModal.IsVisible"
+             Title="@ConfirmModal.Title"
+             Message="@ConfirmModal.Message"
+             DetailMessage="@ConfirmModal.DetailMessage"
+             ConfirmButtonText="@ConfirmModal.ConfirmButtonText"
+             ConfirmButtonClass="@ConfirmModal.ConfirmButtonClass"
+             AlternativeConfirmButtonText="@ConfirmModal.AlternativeButtonText"
+             AlternativeConfirmButtonClass="@ConfirmModal.AlternativeButtonClass"
+             IsProcessing="@ConfirmModal.IsProcessing"
+             ProgressCount="@ConfirmModal.ProgressCount"
              OnConfirm="@OnConfirmModalConfirm"
              OnAlternativeConfirm="@OnConfirmModalAlternativeConfirm"
              OnCancel="@OnConfirmModalCancel">
-        @if (isResubmitModal)
-        {
-            <div class="form-check mt-3">
-                <input class="form-check-input" type="checkbox" id="removeFromDlq" @bind="resubmitRemoveFromDLQ">
-                <label class="form-check-label" for="removeFromDlq">Remove from Dead Letter Queue</label>
-            </div>
-        }
-    </ConfirmModal>
+    @if (isResubmitModal)
+    {
+        <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="removeFromDlq" @bind="resubmitRemoveFromDLQ">
+            <label class="form-check-label" for="removeFromDlq">Remove from Dead Letter Queue</label>
+        </div>
+    }
+</ConfirmModal>
 
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
@@ -271,8 +273,8 @@
     [SupplyParameterFromQuery(Name = "name")]
     public string? NameParam { get; set; }
 
-    private ServiceBusNamespaceInfo? _currentNamespace;
-
+    // Entity state
+    private readonly ExplorerState _state = new();
     private Dictionary<string, ServiceBusQueueInfo> queueDict = new();
     private Dictionary<string, ServiceBusTopicInfo> topicDict = new();
     private Dictionary<string, ServiceBusSubscriptionInfo> subscriptionDict = new();
@@ -281,48 +283,68 @@
     private List<ServiceBusTopicInfo> topics => topicDict.Values.OrderBy(t => t.Name).ToList();
     private List<ServiceBusSubscriptionInfo> subscriptions => subscriptionDict.Values.OrderBy(s => s.Name).ToList();
     
-    private string? selectedQueueName;
-    private string? selectedTopicName;
-    private string? selectedSubscriptionName;
-    private string? _loadedSubscriptionsForTopic; // Track which topic the current subscriptions belong to
+    // Convenience accessors for state
+    private string? selectedQueueName => _state.SelectedQueueName;
+    private string? selectedTopicName => _state.SelectedTopicName;
+    private string? selectedSubscriptionName => _state.SelectedSubscriptionName;
+    private bool isViewingDLQ { get => _state.IsViewingDLQ; set => _state.IsViewingDLQ = value; }
+    private string? _loadedSubscriptionsForTopic;
     
+    // Message state
     private List<ServiceBusMessage> peekedMessages = new();
     private bool hasPeeked = false;
+    private int peekCount = 50;
+    private int peekFromSequence = 0;
+    
+    // Modal state
     private bool resubmitRemoveFromDLQ = true;
     private bool isResubmitModal = false;
-    private bool isLoadingEntities = false;
-    private bool isLoadingSubscriptions = false;
-    private bool isPeeking = false;
-    private bool isPurging = false;
-    private CancellationTokenSource? _loadCts;
-    private bool isSending = false;
-    private bool isViewingDLQ = false;
     private bool showSendMessageModal = false;
     private bool showMessageDetailModal = false;
     private bool showPeekLockModal = false;
     private bool showMonitorModal = false;
     private bool showReceiveAndLockModal = false;
-    private bool isProcessingBatch = false;
-    private readonly ConfirmModalState _confirmModal = new();
-    private IJSObjectReference? _purgeController;
-    private DotNetObjectReference<PurgeProgressCallback>? _purgeCallbackRef;
-    private MessageList? _messageListRef;
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
-    private int peekCount = 50;
-    private int peekFromSequence = 0;
+    
+    // Loading/processing state
+    private bool isLoadingEntities = false;
+    private bool isLoadingSubscriptions = false;
+    private bool isPeeking = false;
+    private bool isPurging = false;
+    private bool isSending = false;
+    private bool isProcessingBatch = false;
+    private CancellationTokenSource? _loadCts;
+    
+    // Purge state
+    private IJSObjectReference? _purgeController;
+    private DotNetObjectReference<PurgeProgressCallback>? _purgeCallbackRef;
+    
+    // UI refs
+    private MessageList? _messageListRef;
     private string? errorMessage;
     private string displayName = "";
     
-    // Extract just the namespace name (e.g., "snorre" from "snorre.servicebus.windows.net")
-    private string NamespaceNameOnly => NamespaceParam?.Split('.').FirstOrDefault() ?? "";
-
-    // Helper properties for UI visibility
-    private bool HasEntitySelected => selectedQueueName != null || selectedTopicName != null;
-    private bool HasQueueOrSubscriptionSelected => selectedQueueName != null || selectedSubscriptionName != null;
+    // Computed properties
+    private string NamespaceNameOnly => _state.NamespaceNameOnly;
+    private bool HasEntitySelected => _state.HasEntitySelected;
+    private bool HasQueueOrSubscriptionSelected => _state.HasQueueOrSubscriptionSelected;
 
     private string? _lastNamespace;
+    
+    protected override void OnInitialized()
+    {
+        ConfirmModal.OnChange += StateHasChanged;
+    }
+    
+    public void Dispose()
+    {
+        ConfirmModal.OnChange -= StateHasChanged;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _purgeCallbackRef?.Dispose();
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -331,19 +353,17 @@
         {
             _lastNamespace = NamespaceParam;
             
-            _currentNamespace = new ServiceBusNamespaceInfo
+            _state.SetNamespace(new ServiceBusNamespaceInfo
             {
-                Name = NamespaceNameOnly,
+                Name = NamespaceParam?.Split('.').FirstOrDefault() ?? "",
                 FullyQualifiedNamespace = NamespaceParam ?? "",
                 ResourceGroup = ResourceGroupParam ?? "",
                 SubscriptionId = SubscriptionIdParam ?? ""
-            };
+            });
             
-            selectedQueueName = null;
-            selectedTopicName = null;
-            selectedSubscriptionName = null;
             peekedMessages.Clear();
             hasPeeked = false;
+            peekFromSequence = 0;
             
             // Clear all entity dictionaries when switching namespaces
             queueDict.Clear();
@@ -390,7 +410,7 @@
 
     private async Task LoadEntitiesAsync()
     {
-        if (_currentNamespace == null) return;
+        if (_state.CurrentNamespace == null) return;
         
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
@@ -409,8 +429,8 @@
             }
 
             await Task.WhenAll(
-                LoadQueuesAsync(credential, _currentNamespace),
-                LoadTopicsAsync(credential, _currentNamespace)
+                LoadQueuesAsync(credential, _state.CurrentNamespace),
+                LoadTopicsAsync(credential, _state.CurrentNamespace)
             );
         }
         catch (Exception ex)
@@ -458,17 +478,13 @@
 
     private void SelectQueue(string queueName)
     {
-        selectedQueueName = queueName;
-        selectedTopicName = null;
-        selectedSubscriptionName = null;
+        _state.SelectQueue(queueName);
         ResetMessageState();
     }
 
     private async Task SelectTopic(string topicName)
     {
-        selectedQueueName = null;
-        selectedTopicName = topicName;
-        selectedSubscriptionName = null;
+        _state.SelectTopic(topicName);
         ResetMessageState();
         
         // Only clear subscriptions if switching to a different topic
@@ -483,7 +499,7 @@
 
     private async Task LoadSubscriptionsAsync(string topicName)
     {
-        if (_currentNamespace == null) return;
+        if (_state.CurrentNamespace == null) return;
         
         // Cancel any previous subscription loading
         _loadCts?.Cancel();
@@ -509,7 +525,7 @@
             }
 
             var firstItem = true;
-            await foreach (var sub in ResourceService.ListSubscriptionsAsync(credential, _currentNamespace, topicName, ct))
+            await foreach (var sub in ResourceService.ListSubscriptionsAsync(credential, _state.CurrentNamespace, topicName, ct))
             {
                 if (ct.IsCancellationRequested) break;
                 
@@ -550,8 +566,7 @@
 
     private void SelectSubscription(string subName)
     {
-        selectedSubscriptionName = subName;
-        selectedQueueName = null;
+        _state.SelectSubscription(subName);
         ResetMessageState();
     }
 
@@ -564,13 +579,30 @@
         _messageListRef?.ClearSelection();
     }
 
-    private async Task PeekMessages()
+    private Task PeekMessages() => PeekMessagesAsync(append: false);
+    private Task PeekNext() => PeekMessagesAsync(append: true);
+
+    private async Task PeekMessagesAsync(bool append)
     {
+        if (append && peekedMessages.Count >= 1000)
+        {
+            errorMessage = "Maximum of 1000 messages loaded. Use filters or start from a different sequence number.";
+            return;
+        }
+
         isPeeking = true;
-        hasPeeked = true;
-        peekedMessages.Clear();
-        peekFromSequence = 0;
         errorMessage = null;
+        
+        if (!append)
+        {
+            hasPeeked = true;
+            peekedMessages.Clear();
+            peekFromSequence = 0;
+        }
+        else if (peekedMessages.Any())
+        {
+            peekFromSequence = (int)(peekedMessages.Max(m => m.SequenceNumber ?? 0) + 1);
+        }
 
         try
         {
@@ -581,48 +613,30 @@
                 return;
             }
 
-            if (selectedQueueName != null)
-            {
-                peekedMessages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, peekCount, peekFromSequence, isViewingDLQ);
-            }
-            else if (selectedSubscriptionName != null && selectedTopicName != null)
-            {
-                peekedMessages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, peekCount, peekFromSequence, isViewingDLQ);
-            }
-
-            Console.WriteLine($"Peeked {peekedMessages.Count} messages from sequence {peekFromSequence}");
+            var messages = await PeekEntityMessagesAsync(token);
             
-            if (peekedMessages.Count > 0)
+            if (append)
             {
-                NotificationService.NotifySuccess($"Peeked {peekedMessages.Count} messages");
+                peekedMessages.AddRange(messages);
             }
             else
             {
-                NotificationService.NotifyInfo("No messages found");
+                peekedMessages = messages;
+            }
+
+            if (messages.Count > 0)
+            {
+                var suffix = append ? " more" : "";
+                NotificationService.NotifySuccess($"Peeked {messages.Count}{suffix} messages");
+            }
+            else
+            {
+                NotificationService.NotifyInfo(append ? "No more messages available." : "No messages found");
             }
         }
         catch (Exception ex)
         {
-            var errorMsg = ex.Message;
-            
-            // Clean up nested error messages
-            if (errorMsg.StartsWith("Peek failed: Peek failed:"))
-            {
-                errorMsg = errorMsg.Replace("Peek failed: Peek failed:", "Peek failed:");
-            }
-            
-            if (errorMsg.Contains("WebSocket") || errorMsg.Contains("websocket"))
-            {
-                errorMessage = $"WebSocket connection failed. This could be due to token expiration (try refreshing) or network issues. Details: {errorMsg}";
-            }
-            else if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
-            {
-                errorMessage = $"Permission denied: {errorMsg}";
-            }
-            else
-            {
-                errorMessage = errorMsg;
-            }
+            errorMessage = FormatPeekError(ex.Message);
             Console.WriteLine($"Peek error: {ex}");
         }
         finally
@@ -631,77 +645,40 @@
         }
     }
 
-    private async Task PeekNext()
+    private async Task<List<ServiceBusMessage>> PeekEntityMessagesAsync(string token)
     {
-        // Check if we've hit the limit
-        if (peekedMessages.Count >= 1000)
+        if (selectedQueueName != null)
         {
-            errorMessage = "Maximum of 1000 messages loaded. Use filters or start from a different sequence number.";
-            return;
+            return await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, peekCount, peekFromSequence, isViewingDLQ);
         }
-
-        isPeeking = true;
-        errorMessage = null;
-
-        try
+        if (selectedTopicName != null && selectedSubscriptionName != null)
         {
-            var token = await AuthService.GetServiceBusTokenAsync();
-            if (string.IsNullOrEmpty(token))
-            {
-                errorMessage = "Service Bus token not available";
-                return;
-            }
-
-            // Set fromSequence to the last message's sequence number + 1
-            if (peekedMessages.Any())
-            {
-                var lastSeq = peekedMessages.Max(m => m.SequenceNumber ?? 0);
-                peekFromSequence = (int)(lastSeq + 1);
-            }
-
-            List<ServiceBusMessage> newMessages;
-            if (selectedQueueName != null)
-            {
-                newMessages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, peekCount, peekFromSequence, isViewingDLQ);
-            }
-            else if (selectedTopicName != null && selectedSubscriptionName != null)
-            {
-                newMessages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, peekCount, peekFromSequence, isViewingDLQ);
-            }
-            else
-            {
-                return;
-            }
-
-            // Append new messages to existing list
-            if (newMessages.Any())
-            {
-                peekedMessages.AddRange(newMessages);
-                Console.WriteLine($"Loaded {newMessages.Count} more messages. Total: {peekedMessages.Count}");
-                NotificationService.NotifySuccess($"Peeked {newMessages.Count} more messages");
-            }
-            else
-            {
-                NotificationService.NotifyInfo("No more messages available.");
-            }
+            return await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, peekCount, peekFromSequence, isViewingDLQ);
         }
-        catch (Exception ex)
+        return new List<ServiceBusMessage>();
+    }
+
+    private static string FormatPeekError(string errorMsg)
+    {
+        errorMsg = errorMsg.Replace("Peek failed: Peek failed:", "Peek failed:");
+        
+        if (errorMsg.Contains("WebSocket") || errorMsg.Contains("websocket"))
         {
-            errorMessage = $"Failed to peek next messages: {ex.Message}";
-            Console.WriteLine($"Peek next error: {ex}");
+            return $"WebSocket connection failed. This could be due to token expiration (try refreshing) or network issues. Details: {errorMsg}";
         }
-        finally
+        if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
         {
-            isPeeking = false;
+            return $"Permission denied: {errorMsg}";
         }
+        return errorMsg;
     }
 
     private void PurgeMessages()
     {
-        var entityName = selectedQueueName ?? $"{selectedTopicName}/{selectedSubscriptionName}";
+        var entityName = _state.GetEntityPath();
         var dlqSuffix = isViewingDLQ ? " (Dead Letter Queue)" : "";
         
-        ShowConfirmModalWithAlternative(
+        ConfirmModal.ShowWithAlternative(
             title: "Confirm Purge",
             message: $"Are you sure you want to purge all messages from {entityName}{dlqSuffix}?",
             detail: "This action cannot be undone. All messages will be permanently deleted.\n\n" +
@@ -718,13 +695,13 @@
     
     private async Task ExecuteBackgroundPurge()
     {
-        _confirmModal.IsProcessing = true;
+        ConfirmModal.IsProcessing = true;
         errorMessage = null;
         
         try
         {
-            var entityType = selectedQueueName != null ? "queue" : "subscription";
-            var entityPath = selectedQueueName ?? $"{selectedTopicName}/{selectedSubscriptionName}";
+            var entityType = _state.IsQueueSelected ? "queue" : "subscription";
+            var entityPath = _state.GetEntityPath();
             
             await BackgroundPurge.StartPurgeAsync(
                 NamespaceNameOnly,
@@ -735,9 +712,7 @@
             
             peekedMessages.Clear();
             peekFromSequence = 0;
-            await CloseConfirmModal();
-            
-            // Note: Toast notification will appear when purge completes (handled by background service)
+            CloseConfirmModal();
         }
         catch (Exception ex)
         {
@@ -746,14 +721,14 @@
         }
         finally
         {
-            _confirmModal.IsProcessing = false;
+            ConfirmModal.IsProcessing = false;
         }
     }
 
     private async Task ExecutePurgeMessages()
     {
-        _confirmModal.IsProcessing = true;
-        _confirmModal.ProgressCount = 0;
+        ConfirmModal.IsProcessing = true;
+        ConfirmModal.ProgressCount = 0;
         errorMessage = null;
 
         try
@@ -768,61 +743,62 @@
             // Create progress callback
             var callback = new PurgeProgressCallback(count =>
             {
-                _confirmModal.ProgressCount = count;
+                ConfirmModal.ProgressCount = count;
                 InvokeAsync(StateHasChanged);
             });
             _purgeCallbackRef = DotNetObjectReference.Create(callback);
 
             // Start purge with progress tracking
-            if (selectedQueueName != null)
-            {
-                _purgeController = await JsInterop.StartPurgeQueueAsync(NamespaceNameOnly, selectedQueueName, token, _purgeCallbackRef, isViewingDLQ);
-            }
-            else if (selectedSubscriptionName != null && selectedTopicName != null)
-            {
-                _purgeController = await JsInterop.StartPurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, _purgeCallbackRef, isViewingDLQ);
-            }
+            _purgeController = await StartPurgeAsync(token);
 
             // Wait for completion
             if (_purgeController != null)
             {
                 var finalCount = await JsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", _purgeController);
-                Console.WriteLine($"Purged {finalCount} messages");
                 NotificationService.NotifySuccess($"Purged {finalCount} messages");
             }
 
             peekedMessages.Clear();
             peekFromSequence = 0;
-            await CloseConfirmModal();
+            CloseConfirmModal();
         }
         catch (Exception ex)
         {
-            var errorMsg = ex.Message;
-            
-            // Clean up nested error messages
-            if (errorMsg.Contains("Purge failed: Purge failed:"))
-            {
-                errorMsg = errorMsg.Replace("Purge failed: Purge failed:", "Purge failed:");
-            }
-            
-            if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
-            {
-                errorMessage = $"Permission denied: You don't have the required permissions to purge messages from this entity.";
-            }
-            else
-            {
-                errorMessage = errorMsg;
-            }
+            errorMessage = FormatPurgeError(ex.Message);
             Console.WriteLine($"Purge error: {ex}");
         }
         finally
         {
-            _confirmModal.IsProcessing = false;
-            _confirmModal.ProgressCount = null;
+            ConfirmModal.IsProcessing = false;
+            ConfirmModal.ProgressCount = null;
             _purgeCallbackRef?.Dispose();
             _purgeCallbackRef = null;
             _purgeController = null;
         }
+    }
+
+    private async Task<IJSObjectReference?> StartPurgeAsync(string token)
+    {
+        if (selectedQueueName != null)
+        {
+            return await JsInterop.StartPurgeQueueAsync(NamespaceNameOnly, selectedQueueName, token, _purgeCallbackRef!, isViewingDLQ);
+        }
+        if (selectedTopicName != null && selectedSubscriptionName != null)
+        {
+            return await JsInterop.StartPurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, _purgeCallbackRef!, isViewingDLQ);
+        }
+        return null;
+    }
+
+    private static string FormatPurgeError(string errorMsg)
+    {
+        errorMsg = errorMsg.Replace("Purge failed: Purge failed:", "Purge failed:");
+        
+        if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
+        {
+            return "Permission denied: You don't have the required permissions to purge messages from this entity.";
+        }
+        return errorMsg;
     }
 
     private void ShowSendMessageModal()
@@ -906,26 +882,14 @@
         hasPeeked = false;
     }
 
-    private void ShowConfirmModal(string title, string message, string? detail, string confirmText, string confirmClass, Func<Task> onConfirm)
-    {
-        _confirmModal.Show(title, message, detail, confirmText, confirmClass, onConfirm);
-        isResubmitModal = false;
-    }
-    
-    private void ShowConfirmModalWithAlternative(string title, string message, string? detail, string confirmText, string confirmClass, string alternativeText, string alternativeClass, Func<Task> onConfirm, Func<Task> onAlternativeConfirm)
-    {
-        _confirmModal.ShowWithAlternative(title, message, detail, confirmText, confirmClass, alternativeText, alternativeClass, onConfirm, onAlternativeConfirm);
-        isResubmitModal = false;
-    }
-
-    private async Task CloseConfirmModal()
+    private void CloseConfirmModal()
     {
         // If purging, stop it
         if (_purgeController != null)
         {
             try
             {
-                await _purgeController.InvokeVoidAsync("stop");
+                _purgeController.InvokeVoidAsync("stop");
             }
             catch (Exception ex)
             {
@@ -933,32 +897,15 @@
             }
         }
         
-        _confirmModal.Close();
+        ConfirmModal.Close();
         _purgeCallbackRef?.Dispose();
         _purgeCallbackRef = null;
         _purgeController = null;
     }
 
-    private async Task OnConfirmModalConfirm()
-    {
-        if (_confirmModal.OnConfirm != null)
-        {
-            await _confirmModal.OnConfirm();
-        }
-    }
-    
-    private async Task OnConfirmModalAlternativeConfirm()
-    {
-        if (_confirmModal.OnAlternativeConfirm != null)
-        {
-            await _confirmModal.OnAlternativeConfirm();
-        }
-    }
-
-    private async Task OnConfirmModalCancel()
-    {
-        await CloseConfirmModal();
-    }
+    private async Task OnConfirmModalConfirm() => await ConfirmModal.ConfirmAsync();
+    private async Task OnConfirmModalAlternativeConfirm() => await ConfirmModal.AlternativeConfirmAsync();
+    private async Task OnConfirmModalCancel() => await ConfirmModal.CancelAsync();
 
     private void GoBack()
     {
@@ -1009,156 +956,110 @@
         selectedMessage = null;
     }
 
-    // Batch operations
+    // Batch operations - consolidated with helper method
     private void DeleteMessages(List<long> sequenceNumbers)
     {
-        ShowConfirmModal(
+        ConfirmModal.Show(
             title: "Confirm Delete",
             message: $"Are you sure you want to delete {sequenceNumbers.Count} message(s)?",
             detail: "This action cannot be undone.",
             confirmText: "Delete Messages",
             confirmClass: "btn-danger",
-            onConfirm: async () => await ExecuteDeleteMessages(sequenceNumbers)
+            onConfirm: () => ExecuteBatchOperationAsync(
+                sequenceNumbers,
+                "delete",
+                async (seqNums) =>
+                {
+                    if (_state.IsQueueSelected)
+                        await OperationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, selectedQueueName!, seqNums.ToArray(), isViewingDLQ);
+                    else if (_state.IsSubscriptionSelected)
+                        await OperationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName!, selectedSubscriptionName!, seqNums.ToArray(), isViewingDLQ);
+                })
         );
-    }
-
-    private async Task ExecuteDeleteMessages(List<long> sequenceNumbers)
-    {
-        _confirmModal.IsProcessing = true;
-        errorMessage = null;
-
-        try
-        {
-            if (selectedQueueName != null)
-            {
-                await OperationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), isViewingDLQ);
-            }
-            else if (selectedTopicName != null && selectedSubscriptionName != null)
-            {
-                await OperationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), isViewingDLQ);
-            }
-            
-            // Remove deleted messages from the view and clear selection
-            peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
-            _messageListRef?.ClearSelection();
-            if (peekedMessages.Count == 0)
-            {
-                peekFromSequence = 0;
-            }
-            NotificationService.NotifySuccess($"Deleted {sequenceNumbers.Count} messages");
-            await CloseConfirmModal();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to delete messages: {ex.Message}";
-            Console.WriteLine($"Delete error details: {ex}");
-        }
-        finally
-        {
-            _confirmModal.IsProcessing = false;
-        }
+        isResubmitModal = false;
     }
 
     private void ResubmitMessages(List<long> sequenceNumbers)
     {
         resubmitRemoveFromDLQ = true;
         isResubmitModal = true;
-        ShowConfirmModal(
+        ConfirmModal.Show(
             title: "Confirm Resubmit",
             message: $"Resubmit {sequenceNumbers.Count} message(s) from Dead Letter Queue?",
             detail: "Messages will be sent back to the main queue/subscription.",
             confirmText: "Resubmit",
             confirmClass: "btn-primary",
-            onConfirm: async () => await ExecuteResubmitMessages(sequenceNumbers)
+            onConfirm: () => ExecuteBatchOperationAsync(
+                sequenceNumbers,
+                "resubmit",
+                async (seqNums) =>
+                {
+                    if (_state.IsQueueSelected)
+                        await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName!, seqNums.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
+                    else if (_state.IsSubscriptionSelected)
+                        await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName!, selectedSubscriptionName!, seqNums.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
+                })
         );
-        // Override isResubmitModal set to false by ShowConfirmModal
-        isResubmitModal = true;
-    }
-
-    private async Task ExecuteResubmitMessages(List<long> sequenceNumbers)
-    {
-        _confirmModal.IsProcessing = true;
-        errorMessage = null;
-
-        try
-        {
-            if (selectedQueueName != null)
-            {
-                // Pass isViewingDLQ (fromDeadLetter) and resubmitRemoveFromDLQ (deleteOriginal)
-                await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
-            }
-            else if (selectedTopicName != null && selectedSubscriptionName != null)
-            {
-                // Pass isViewingDLQ (fromDeadLetter) and resubmitRemoveFromDLQ (deleteOriginal)
-                await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
-            }
-            
-            // Remove resubmitted messages from the view and clear selection
-            peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
-            _messageListRef?.ClearSelection();
-            if (peekedMessages.Count == 0)
-            {
-                peekFromSequence = 0;
-            }
-            NotificationService.NotifySuccess($"Resubmitted {sequenceNumbers.Count} messages");
-            await CloseConfirmModal();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to resubmit messages: {ex.Message}";
-        }
-        finally
-        {
-            _confirmModal.IsProcessing = false;
-        }
     }
 
     private void MoveToDLQMessages(List<long> sequenceNumbers)
     {
-        ShowConfirmModal(
-            title: "Confirm Move to DLQ",
+        ConfirmModal.Show(
+            title: "Confirm Move to Dead Letter Queue",
             message: $"Move {sequenceNumbers.Count} message(s) to Dead Letter Queue?",
-            detail: "Messages will be moved to the DLQ and marked as dead-lettered.",
-            confirmText: "Move to DLQ",
+            detail: "Messages will be moved to the Dead Letter Queue and marked as dead-lettered.",
+            confirmText: "Move to Dead Letter Queue",
             confirmClass: "btn-warning",
-            onConfirm: async () => await ExecuteMoveToDLQMessages(sequenceNumbers)
+            onConfirm: () => ExecuteBatchOperationAsync(
+                sequenceNumbers,
+                "move to Dead Letter Queue",
+                async (seqNums) =>
+                {
+                    if (_state.IsQueueSelected)
+                        await OperationsService.MoveToDLQQueueMessagesAsync(NamespaceNameOnly, selectedQueueName!, seqNums.ToArray());
+                    else if (_state.IsSubscriptionSelected)
+                        await OperationsService.MoveToDLQSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName!, selectedSubscriptionName!, seqNums.ToArray());
+                })
         );
+        isResubmitModal = false;
     }
 
-    private async Task ExecuteMoveToDLQMessages(List<long> sequenceNumbers)
+    private async Task ExecuteBatchOperationAsync(List<long> sequenceNumbers, string operationName, Func<List<long>, Task> operation)
     {
-        _confirmModal.IsProcessing = true;
+        ConfirmModal.IsProcessing = true;
         errorMessage = null;
 
         try
         {
-            if (selectedQueueName != null)
-            {
-                await OperationsService.MoveToDLQQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, sequenceNumbers.ToArray());
-            }
-            else if (selectedTopicName != null && selectedSubscriptionName != null)
-            {
-                await OperationsService.MoveToDLQSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, sequenceNumbers.ToArray());
-            }
+            await operation(sequenceNumbers);
             
-            // Remove moved messages from the view and clear selection
+            // Remove processed messages from the view and clear selection
             peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
             _messageListRef?.ClearSelection();
             if (peekedMessages.Count == 0)
             {
                 peekFromSequence = 0;
             }
-            NotificationService.NotifySuccess($"Moved {sequenceNumbers.Count} messages to DLQ");
-            await CloseConfirmModal();
+            
+            var pastTense = operationName switch
+            {
+                "delete" => "Deleted",
+                "resubmit" => "Resubmitted",
+                "move to Dead Letter Queue" => "Moved",
+                _ => operationName
+            };
+            var suffix = operationName == "move to Dead Letter Queue" ? " to Dead Letter Queue" : "";
+            NotificationService.NotifySuccess($"{pastTense} {sequenceNumbers.Count} messages{suffix}");
+            CloseConfirmModal();
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to move messages to DLQ: {ex.Message}";
-            Console.WriteLine($"Move to DLQ error details: {ex}");
+            errorMessage = $"Failed to {operationName} messages: {ex.Message}";
+            Console.WriteLine($"{operationName} error details: {ex}");
         }
         finally
         {
-            _confirmModal.IsProcessing = false;
+            ConfirmModal.IsProcessing = false;
         }
     }
 

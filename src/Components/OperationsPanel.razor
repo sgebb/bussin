@@ -15,7 +15,7 @@
                 <div class="form-check form-switch mb-0">
                     <input class="form-check-input" type="checkbox" id="dlqToggle" @bind="isDLQ" @bind:after="HandleDLQToggleChanged">
                     <label class="form-check-label" for="dlqToggle">
-                        <small>@(isDLQ ? "DLQ" : "View DLQ")</small>
+                        <small>@(isDLQ ? "Dead Letter Queue" : "View Dead Letter Queue")</small>
                     </label>
                 </div>
             </div>
@@ -76,7 +76,7 @@
                     }
                     else
                     {
-                        <span>💡 Select messages to Delete or Move to DLQ</span>
+                        <span>💡 Select messages to Delete or Move to Dead Letter Queue</span>
                     }
                 </small>
             </div>
