@@ -283,6 +283,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         {
             var token = await GetTokenAsync();
             
+            // Peek to get the message content we want to resend
             var allMessages = await peekMessages(token);
             var messagesToResend = allMessages.Where(m => sequenceNumbers.Contains(m.SequenceNumber ?? -1)).ToList();
             
@@ -291,21 +292,28 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
                 return new BatchOperationResult { SuccessCount = 0, FailureCount = sequenceNumbers.Length, Errors = [] };
             }
             
-            var messagesToProcess = deleteOriginal
-                ? await lockMessages(token, messagesToResend.Count)
-                : messagesToResend;
+            // If we need to delete originals, lock the messages to get lock tokens
+            // But we use the PEEKED messages for content (locked messages are matched by sequence number)
+            List<ServiceBusMessage>? lockedMessages = null;
+            if (deleteOriginal)
+            {
+                lockedMessages = await lockMessages(token, messagesToResend.Count);
+            }
             
             var successCount = 0;
             var failureCount = 0;
             var errors = new List<BatchOperationError>();
             
-            foreach (var msg in messagesToProcess)
+            // Use peeked messages for content - they have the correct body
+            foreach (var msg in messagesToResend)
             {
                 try
                 {
                     var props = CreateResendProperties(msg);
+                    // When OriginalBody exists, it's passed via props and body should be empty
+                    // Otherwise use the regular Body
                     var body = msg.OriginalBody != null ? "" : msg.Body;
-                    await sendMessage(token, body, props);
+                    await sendMessage(token, body ?? "", props);
                     successCount++;
                 }
                 catch (Exception ex)
@@ -316,9 +324,10 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
                 }
             }
             
-            if (deleteOriginal && messagesToProcess.Any())
+            // Complete the locked messages to remove them from the queue
+            if (deleteOriginal && lockedMessages != null && lockedMessages.Any())
             {
-                var lockTokens = messagesToProcess.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
+                var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
                 if (lockTokens.Length > 0)
                 {
                     await _jsInterop.CompleteMessagesAsync(lockTokens);
