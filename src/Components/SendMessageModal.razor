@@ -2,9 +2,9 @@
 
 @if (IsVisible)
 {
-    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5);">
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnBackdropClick">
         <div class="modal-dialog">
-            <div class="modal-content">
+            <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
                     <h5 class="modal-title">Send Message</h5>
                     <button type="button" class="btn-close" @onclick="OnClose"></button>
@@ -98,6 +98,14 @@
             messageBody = "";
             messageProperties = "";
             validationError = null;
+        }
+    }
+
+    private async Task OnBackdropClick()
+    {
+        if (!IsSending)
+        {
+            await OnClose.InvokeAsync();
         }
     }
 }

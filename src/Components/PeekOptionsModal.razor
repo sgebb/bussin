@@ -1,8 +1,8 @@
 @if (IsVisible)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="Close">
         <div class="modal-dialog">
-            <div class="modal-content">
+            <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-gear"></i> Peek with Options
