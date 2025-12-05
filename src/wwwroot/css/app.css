@@ -817,6 +817,10 @@ pre, code {
     color: white;
 }
 
+.dlq-toggle-btn.active:hover:not(:disabled) {
+    background-color: #bb2d3b;
+}
+
 .dlq-toggle-btn.active > i:first-child {
     color: white;
 }
@@ -853,18 +857,37 @@ pre, code {
     background-color: #dc3545;
 }
 
-/* Peek Options Button - square shape */
-.peek-options-btn {
+[data-theme="dark"] .dlq-toggle-btn.active:hover:not(:disabled) {
+    background-color: #bb2d3b;
+}
+
+/* Peek Options Button - square shape, matches Peek button styling */
+.btn-action.peek-options-btn {
     padding: 0.6rem 0.85rem !important;
     flex-shrink: 0;
     min-width: 44px;
+}
+
+.btn-action.peek-options-btn,
+.btn-action.btn-outline-primary.peek-options-btn {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--primary-fg) !important;
+}
+
+.btn-action.peek-options-btn:hover:not(:disabled),
+.btn-action.btn-outline-primary.peek-options-btn:hover:not(:disabled) {
+    background-color: var(--sage-light) !important;
+    border-color: var(--sage-light) !important;
+    color: var(--purple-main) !important;
 }
 
 .peek-options-btn i {
     font-size: 1.1rem;
 }
 
-.peek-options-btn.disabled-grey {
+.peek-options-btn.disabled-grey,
+.btn-action.peek-options-btn.disabled-grey {
     background-color: #6c757d !important;
     border-color: #6c757d !important;
     color: #adb5bd !important;
@@ -876,16 +899,22 @@ pre, code {
     background: none;
     border: none;
     color: var(--muted-text);
-    font-size: 1.25rem;
-    padding: 0.25rem 0.5rem;
+    font-size: 1.75rem;
+    padding: 0;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease;
     border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    vertical-align: middle;
+    height: 1.75rem;
+    width: 1.75rem;
 }
 
 .refresh-btn:hover {
     color: var(--link-color);
-    background-color: var(--hover-bg);
 }
 
 .refresh-btn:active {
@@ -927,4 +956,27 @@ pre, code {
 
 .dark-mode-icon-btn i {
     display: block;
+}
+
+/* Message List Sticky Header */
+.message-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.message-list-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--surface-color);
+    padding: 0.75rem 0;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.message-list .list-group {
+    flex: 1;
+    overflow-y: auto;
 }

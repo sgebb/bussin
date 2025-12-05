@@ -291,6 +291,19 @@ a:hover, .btn-link:hover {
     color: var(--sage-light) !important;
 }
 
+/* Alert success/warning in dark mode - ensure text is readable */
+[data-theme='dark'] .alert-success {
+    background-color: rgba(25, 135, 84, 0.2) !important;
+    border-color: #198754 !important;
+    color: #75d9a3 !important;
+}
+
+[data-theme='dark'] .alert-warning {
+    background-color: rgba(255, 193, 7, 0.15) !important;
+    border-color: #ffc107 !important;
+    color: #ffda6a !important;
+}
+
 /* Modal Fixes */
 .modal-content {
     background-color: var(--surface-color) !important;
