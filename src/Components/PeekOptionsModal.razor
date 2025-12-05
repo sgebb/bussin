@@ -1,0 +1,66 @@
+@if (IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-gear"></i> Peek with Options
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="maxCount" class="form-label">Max Messages</label>
+                        <input type="number" class="form-control" id="maxCount" @bind="maxCount" min="1" max="1000">
+                        <div class="form-text">Maximum number of messages to peek (1-1000)</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="fromSequence" class="form-label">From Sequence Number</label>
+                        <input type="number" class="form-control" id="fromSequence" @bind="fromSequenceNumber" min="0">
+                        <div class="form-text">Start peeking from this sequence number (0 = beginning)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="ExecutePeek">
+                        <i class="bi bi-search"></i> Peek
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(int maxCount, long fromSequenceNumber)> OnPeek { get; set; }
+
+    private int maxCount = 50;
+    private long fromSequenceNumber = 0;
+
+    protected override void OnParametersSet()
+    {
+        // Reset to defaults when modal opens
+        if (IsVisible)
+        {
+            maxCount = 50;
+            fromSequenceNumber = 0;
+        }
+    }
+
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task ExecutePeek()
+    {
+        // Clamp values
+        maxCount = Math.Clamp(maxCount, 1, 1000);
+        fromSequenceNumber = Math.Max(0, fromSequenceNumber);
+        
+        await OnPeek.InvokeAsync((maxCount, fromSequenceNumber));
+    }
+}

@@ -209,6 +209,7 @@
     private async Task Close()
     {
         await StopMonitoring();
+        ClearMessages(); // Clear messages when closing the modal
         await OnClose.InvokeAsync();
     }
 

@@ -149,50 +149,64 @@
             </div>
 
             <div class="explorer-actions-sidebar">
-                @if (HasQueueOrSubscriptionSelected)
-                {
-                    <!-- DLQ Toggle -->
-                    <div class="action-btn-group dlq-toggle-group">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="dlqSwitch" checked="@isViewingDLQ" @onchange="OnDLQToggleChanged">
-                            <label class="form-check-label" for="dlqSwitch">DLQ</label>
-                        </div>
-                    </div>
+                <!-- DLQ Toggle - always visible -->
+                <div class="action-btn-group dlq-toggle-group @(isViewingDLQ ? "dlq-active" : "")">
+                    <button class="dlq-toggle-btn @(isViewingDLQ ? "active" : "") @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")" 
+                            @onclick="ToggleDLQ"
+                            disabled="@(!HasQueueOrSubscriptionSelected)"
+                            title="@(HasQueueOrSubscriptionSelected ? (isViewingDLQ ? "Viewing Dead Letter Queue" : "Switch to Dead Letter Queue") : "Select a queue or subscription first")">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <span>Dead Letter Queue</span>
+                        <span class="dlq-checkbox @(isViewingDLQ ? "checked" : "")">
+                            @if (isViewingDLQ)
+                            {
+                                <i class="bi bi-check-square-fill"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-square"></i>
+                            }
+                        </span>
+                    </button>
+                </div>
 
-                    <!-- Actions -->
-                    <div class="action-btn-group">
-                        <div class="action-btn-group-title">Actions</div>
-                        <button class="btn btn-action btn-success w-100 @(isViewingDLQ ? "disabled-grey" : "")" 
-                                @onclick="ShowSendMessageModal" 
-                                disabled="@isViewingDLQ">
-                            <i class="bi bi-envelope"></i> Send
-                        </button>
-                        <button class="btn btn-action btn-primary w-100" @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" disabled="@isPeeking">
+                <!-- Actions - always visible -->
+                <div class="action-btn-group">
+                    <div class="action-btn-group-title">Actions</div>
+                    <button class="btn btn-action btn-success w-100 @(!CanSend ? "disabled-grey" : "")" 
+                            @onclick="ShowSendMessageModal" 
+                            disabled="@(!CanSend)">
+                        <i class="bi bi-envelope"></i> Send
+                    </button>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-action btn-primary flex-grow-1 @(!HasQueueOrSubscriptionSelected || isPeeking ? "disabled-grey" : "")" 
+                                @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" 
+                                disabled="@(!HasQueueOrSubscriptionSelected || isPeeking)">
                             <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
                         </button>
-                        <button class="btn btn-action btn-info w-100" @onclick="ShowMonitorModal">
-                            <i class="bi bi-graph-up"></i> Monitor
+                        <button class="btn btn-action btn-outline-primary peek-options-btn @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")" 
+                                @onclick="ShowPeekOptionsModal"
+                                disabled="@(!HasQueueOrSubscriptionSelected)"
+                                title="Peek with options">
+                            <i class="bi bi-gear-fill"></i>
                         </button>
                     </div>
+                    <button class="btn btn-action btn-info w-100 @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")" 
+                            @onclick="ShowMonitorModal"
+                            disabled="@(!HasQueueOrSubscriptionSelected)">
+                        <i class="bi bi-graph-up"></i> Monitor
+                    </button>
+                </div>
 
-                    <!-- Dangerous Actions -->
-                    <div class="action-btn-group">
-                        <div class="action-btn-group-title">Dangerous</div>
-                        <button class="btn btn-action btn-danger w-100" @onclick="() => PurgeMessages()" disabled="@isPurging">
-                            <i class="bi bi-trash"></i> Purge All
-                        </button>
-                    </div>
-                }
-                else if (HasEntitySelected)
-                {
-                    <!-- Topic only selected - just Send -->
-                    <div class="action-btn-group">
-                        <div class="action-btn-group-title">Actions</div>
-                        <button class="btn btn-action btn-success w-100" @onclick="ShowSendMessageModal">
-                            <i class="bi bi-envelope"></i> Send
-                        </button>
-                    </div>
-                }
+                <!-- Dangerous Actions - always visible -->
+                <div class="action-btn-group">
+                    <div class="action-btn-group-title">Dangerous</div>
+                    <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || isPurging ? "disabled-grey" : "")" 
+                            @onclick="() => PurgeMessages()" 
+                            disabled="@(!HasQueueOrSubscriptionSelected || isPurging)">
+                        <i class="bi bi-trash"></i> Purge All
+                    </button>
+                </div>
             </div>
         </div>
         @if (!string.IsNullOrEmpty(errorMessage))
@@ -226,6 +240,10 @@
               InitialDuration="@peekLockDuration"
               OnClose="@(() => showPeekLockModal = false)"
               OnPeekLock="@PeekLockMessagesWithSettings" />
+
+<PeekOptionsModal IsVisible="@showPeekOptionsModal"
+                  OnClose="@(() => showPeekOptionsModal = false)"
+                  OnPeek="@PeekWithOptions" />
 
 <MessageMonitorModal IsVisible="@showMonitorModal"
                     NamespaceName="@NamespaceNameOnly"
@@ -304,6 +322,7 @@
     private bool showPeekLockModal = false;
     private bool showMonitorModal = false;
     private bool showReceiveAndLockModal = false;
+    private bool showPeekOptionsModal = false;
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
@@ -330,6 +349,7 @@
     private string NamespaceNameOnly => _state.NamespaceNameOnly;
     private bool HasEntitySelected => _state.HasEntitySelected;
     private bool HasQueueOrSubscriptionSelected => _state.HasQueueOrSubscriptionSelected;
+    private bool CanSend => HasEntitySelected && !isViewingDLQ;
 
     private string? _lastNamespace;
     
@@ -487,6 +507,9 @@
         _state.SelectTopic(topicName);
         ResetMessageState();
         
+        // Reset DLQ when switching to topic (since topics don't have DLQ, only subscriptions do)
+        isViewingDLQ = false;
+        
         // Only clear subscriptions if switching to a different topic
         if (_loadedSubscriptionsForTopic != topicName)
         {
@@ -575,7 +598,7 @@
         peekedMessages.Clear();
         hasPeeked = false;
         peekFromSequence = 0;
-        isViewingDLQ = false;
+        // Don't reset isViewingDLQ - user preference should persist across entity switches
         _messageListRef?.ClearSelection();
     }
 
@@ -874,12 +897,71 @@
         }
     }
 
-    private void OnDLQToggleChanged(ChangeEventArgs e)
+    private void ToggleDLQ()
     {
-        isViewingDLQ = e.Value is bool b && b;
+        isViewingDLQ = !isViewingDLQ;
         peekedMessages.Clear();
         peekFromSequence = 0;
         hasPeeked = false;
+    }
+
+    private void ShowPeekOptionsModal()
+    {
+        showPeekOptionsModal = true;
+    }
+
+    private async Task PeekWithOptions((int maxCount, long fromSequenceNumber) options)
+    {
+        showPeekOptionsModal = false;
+        isPeeking = true;
+        errorMessage = null;
+        hasPeeked = true;
+        peekedMessages.Clear();
+
+        try
+        {
+            var token = await AuthService.GetServiceBusTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Service Bus token not available";
+                return;
+            }
+
+            List<ServiceBusMessage> messages;
+            if (selectedQueueName != null)
+            {
+                messages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, options.maxCount, (int)options.fromSequenceNumber, isViewingDLQ);
+            }
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            {
+                messages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, options.maxCount, (int)options.fromSequenceNumber, isViewingDLQ);
+            }
+            else
+            {
+                messages = new List<ServiceBusMessage>();
+            }
+
+            peekedMessages = messages;
+            peekFromSequence = messages.Any() ? (int)(messages.Max(m => m.SequenceNumber ?? 0) + 1) : 0;
+
+            if (messages.Count > 0)
+            {
+                NotificationService.NotifySuccess($"Peeked {messages.Count} messages");
+            }
+            else
+            {
+                NotificationService.NotifyInfo("No messages found");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = FormatPeekError(ex.Message);
+            Console.WriteLine($"Peek error: {ex}");
+        }
+        finally
+        {
+            isPeeking = false;
+        }
     }
 
     private void CloseConfirmModal()

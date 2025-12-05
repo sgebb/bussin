@@ -767,34 +767,106 @@ pre, code {
     margin-bottom: 0.25rem;
 }
 
+/* DLQ Toggle Button */
 .dlq-toggle-group {
+    background-color: var(--hover-bg);
+    padding: 0 !important;
+}
+
+.dlq-toggle-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.dlq-toggle-btn:hover:not(:disabled) {
     background-color: var(--hover-bg);
 }
 
-.dlq-toggle-group .form-check-label {
-    font-weight: 500;
-    color: var(--text-color);
+.dlq-toggle-btn:disabled {
+    cursor: not-allowed;
 }
 
-.dlq-toggle-group .form-check-input {
-    border: 2px solid var(--border-color);
+.dlq-toggle-btn.disabled-grey {
+    background-color: #6c757d !important;
+    color: #adb5bd !important;
+    opacity: 0.65;
 }
 
-.dlq-toggle-group .form-check-input:checked {
-    background-color: var(--link-color);
-    border-color: var(--link-color);
+.dlq-toggle-btn.disabled-grey i {
+    color: #adb5bd !important;
 }
 
-[data-theme="dark"] .dlq-toggle-group {
-    border-color: #505050;
+.dlq-toggle-btn > i:first-child {
+    font-size: 1.1rem;
+    color: var(--muted-text);
 }
 
-[data-theme="dark"] .dlq-toggle-group .form-check-input {
-    background-color: #3A3A3A;
-    border: 2px solid #606060;
+.dlq-toggle-btn.active {
+    background-color: #dc3545;
+    color: white;
 }
 
-[data-theme="dark"] .dlq-toggle-group .form-check-input:checked {
-    background-color: #BECF91;
-    border-color: #BECF91;
+.dlq-toggle-btn.active > i:first-child {
+    color: white;
+}
+
+.dlq-toggle-group.dlq-active {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+/* DLQ Checkbox on right side */
+.dlq-checkbox {
+    margin-left: auto;
+    font-size: 1.25rem;
+    color: var(--muted-text);
+}
+
+.dlq-checkbox.checked {
+    color: white;
+}
+
+.dlq-toggle-btn.disabled-grey .dlq-checkbox {
+    color: #adb5bd;
+}
+
+[data-theme="dark"] .dlq-toggle-btn {
+    background-color: var(--card-bg);
+}
+
+[data-theme="dark"] .dlq-toggle-btn:hover:not(:disabled) {
+    background-color: var(--hover-bg);
+}
+
+[data-theme="dark"] .dlq-toggle-btn.active {
+    background-color: #dc3545;
+}
+
+/* Peek Options Button - square shape */
+.peek-options-btn {
+    padding: 0.6rem 0.85rem !important;
+    flex-shrink: 0;
+    min-width: 44px;
+}
+
+.peek-options-btn i {
+    font-size: 1.1rem;
+}
+
+.peek-options-btn.disabled-grey {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    color: #adb5bd !important;
+    opacity: 0.65;
 }
