@@ -30,7 +30,7 @@
                 <!-- Delete Folder Confirmation Modal (rendered outside .page for proper z-index) -->
                 @if (NavState.ShowDeleteFolderModal)
                 {
-                    <div class="modal show d-block" tabindex="-1" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 9999;" @onclick="NavState.HideDeleteFolderModal">
+                    <div class="modal show d-block" tabindex="-1" data-theme="@(_isDarkMode ? "dark" : "light")" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 9999;" @onclick="NavState.HideDeleteFolderModal">
                         <div class="modal-dialog modal-dialog-centered">
                             <div class="modal-content" @onclick:stopPropagation="true">
                                 <div class="modal-header">

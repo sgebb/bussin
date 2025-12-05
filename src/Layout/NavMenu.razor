@@ -1,7 +1,6 @@
 @inject NavigationStateService NavState
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <div class="nav-menu">
@@ -74,8 +73,7 @@
                                     <input type="text" class="form-control form-control-sm mb-2" placeholder="Folder name" 
                                            @bind="newFolderName" 
                                            @bind:event="oninput"
-                                           @onkeydown="HandleFolderNameKeyDown" 
-                                           @ref="folderNameInput" />
+                                           @onkeydown="HandleFolderNameKeyDown" />
                                     <div class="d-flex gap-2">
                                         <button class="btn btn-sm btn-primary flex-fill" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(newFolderName)">Create</button>
                                         <button class="btn btn-sm btn-secondary flex-fill" @onclick="CancelCreateFolder">Cancel</button>
@@ -109,7 +107,6 @@
 
     private bool isCreatingFolder = false;
     private string newFolderName = "";
-    private ElementReference folderNameInput;
     private string userName = "User";
     
     // Drag and drop state
@@ -145,17 +142,10 @@
         await NavState.ToggleFolderExpandedAsync(folderId);
     }
 
-    private async Task ShowCreateFolder()
+    private void ShowCreateFolder()
     {
         isCreatingFolder = true;
         newFolderName = "";
-        StateHasChanged();
-        await Task.Delay(100); // Small delay to ensure DOM is updated
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("eval", $"document.querySelector('input[placeholder=\"Folder name\"]')?.focus()");
-        }
-        catch { }
     }
 
     private void CancelCreateFolder()

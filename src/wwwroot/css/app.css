@@ -383,8 +383,6 @@ pre {
 
 .namespace-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-    border-color: #0071e3;
 }
 
 .favorite-btn {
@@ -552,16 +550,6 @@ textarea:focus {
 pre, code {
     background-color: var(--card-bg);
     color: var(--text-color);
-}
-
-.namespace-card:hover {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    border-color: #BECF91;
-}
-
-[data-theme="dark"] .namespace-card:hover {
-    box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1);
-    border-color: #BECF91;
 }
 
 /* Explorer Page - 3 Section Layout */
