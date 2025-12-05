@@ -32,6 +32,12 @@
                     <span class="visually-hidden">Loading...</span>
                 </div>
             }
+            else
+            {
+                <button class="refresh-btn" @onclick="RefreshEntities" title="Refresh queues and topics">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            }
         </div>
     </div>
 
@@ -462,6 +468,25 @@
             isLoadingEntities = false;
             StateHasChanged();
         }
+    }
+
+    private async Task RefreshEntities()
+    {
+        // Clear existing data and reload
+        queueDict.Clear();
+        topicDict.Clear();
+        subscriptionDict.Clear();
+        _loadedSubscriptionsForTopic = null;
+        
+        await LoadEntitiesAsync();
+        
+        // Reload subscriptions if a topic is selected
+        if (selectedTopicName != null)
+        {
+            await LoadSubscriptionsAsync(selectedTopicName);
+        }
+        
+        NotificationService.NotifySuccess("Refreshed queues and topics");
     }
 
     private async Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)

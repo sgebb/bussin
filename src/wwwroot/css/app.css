@@ -870,3 +870,61 @@ pre, code {
     color: #adb5bd !important;
     opacity: 0.65;
 }
+
+/* Refresh Button in Explorer Header */
+.refresh-btn {
+    background: none;
+    border: none;
+    color: var(--muted-text);
+    font-size: 1.25rem;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+}
+
+.refresh-btn:hover {
+    color: var(--link-color);
+    background-color: var(--hover-bg);
+}
+
+.refresh-btn:active {
+    transform: rotate(180deg);
+}
+
+/* User Section Row - single line with dark mode toggle */
+.user-section-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.user-section-row .user-section {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+/* Dark Mode Icon Button */
+.dark-mode-icon-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 1.5rem;
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dark-mode-icon-btn:hover {
+    background-color: var(--hover-bg);
+    color: var(--link-color);
+}
+
+.dark-mode-icon-btn i {
+    display: block;
+}

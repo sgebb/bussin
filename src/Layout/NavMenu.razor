@@ -91,18 +91,14 @@
 
     <!-- Fixed Bottom Section -->
     <div class="nav-footer">
-        <div class="user-section" @onclick="@(() => Navigation.NavigateTo("/user"))" style="cursor: pointer;">
-            <i class="bi bi-person-circle"></i>
-            <span class="ms-2">@userName</span>
-        </div>
-        <div class="dark-mode-toggle">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="darkModeToggle" 
-                       checked="@IsDarkMode" @onchange="OnDarkModeToggle">
-                <label class="form-check-label" for="darkModeToggle">
-                    @(IsDarkMode ? "🌙" : "☀️")
-                </label>
+        <div class="user-section-row">
+            <div class="user-section" @onclick="@(() => Navigation.NavigateTo("/user"))" style="cursor: pointer;">
+                <i class="bi bi-person-circle"></i>
+                <span class="ms-2">@userName</span>
             </div>
+            <button class="dark-mode-icon-btn" @onclick="OnDarkModeToggle" title="@(IsDarkMode ? "Switch to light mode" : "Switch to dark mode")">
+                <i class="bi @(IsDarkMode ? "bi-moon-fill" : "bi-sun-fill")"></i>
+            </button>
         </div>
     </div>
 </div>
