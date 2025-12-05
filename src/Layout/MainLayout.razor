@@ -26,6 +26,34 @@
 
                 <ToastNotification />
                 <BuildInfo />
+
+                <!-- Delete Folder Confirmation Modal (rendered outside .page for proper z-index) -->
+                @if (NavState.ShowDeleteFolderModal)
+                {
+                    <div class="modal show d-block" tabindex="-1" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 9999;" @onclick="NavState.HideDeleteFolderModal">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content" @onclick:stopPropagation="true">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Delete Folder</h5>
+                                    <button type="button" class="btn-close" @onclick="NavState.HideDeleteFolderModal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p>Are you sure you want to delete the folder <strong>@NavState.FolderNameToDelete</strong>?</p>
+                                    @if (NavState.FolderNamespaceCount > 0)
+                                    {
+                                        <div class="alert alert-warning">
+                                            <i class="bi bi-exclamation-triangle"></i> This folder contains <strong>@NavState.FolderNamespaceCount</strong> namespace(s). They will be moved to the default "Namespaces" folder.
+                                        </div>
+                                    }
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" @onclick="NavState.HideDeleteFolderModal">Cancel</button>
+                                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteFolder">Delete Folder</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
             }
             else
             {
@@ -57,8 +85,19 @@
     {
         // Subscribe to auth state changes to handle post-login initialization
         AuthStateProvider.AuthenticationStateChanged += OnAuthStateChanged;
+        NavState.OnDeleteModalChange += OnDeleteModalChange;
         
         await InitializeIfAuthenticatedAsync();
+    }
+
+    private void OnDeleteModalChange()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ConfirmDeleteFolder()
+    {
+        await NavState.ConfirmDeleteFolderAsync();
     }
 
     private async void OnAuthStateChanged(Task<AuthenticationState> task)
@@ -101,5 +140,6 @@
     public void Dispose()
     {
         AuthStateProvider.AuthenticationStateChanged -= OnAuthStateChanged;
+        NavState.OnDeleteModalChange -= OnDeleteModalChange;
     }
 }

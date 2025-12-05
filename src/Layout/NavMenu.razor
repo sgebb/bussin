@@ -35,7 +35,7 @@
                                         @if (folder.Name != "Favorites")
                                         {
                                             <button class="btn btn-sm btn-danger" 
-                                                    @onclick="() => ShowDeleteFolderConfirmation(folder.Id, folder.Name)" 
+                                                    @onclick="() => NavState.ShowDeleteFolderConfirmation(folder.Id, folder.Name)" 
                                                     @onclick:stopPropagation="true" 
                                                     title="Delete folder"
                                                     style="padding: 0.125rem 0.375rem;">
@@ -103,34 +103,6 @@
     </div>
 </div>
 
-<!-- Delete Folder Confirmation Modal -->
-@if (showDeleteConfirmation)
-{
-    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="CancelDeleteFolder">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" @onclick:stopPropagation="true">
-                <div class="modal-header">
-                    <h5 class="modal-title">Delete Folder</h5>
-                    <button type="button" class="btn-close" @onclick="CancelDeleteFolder"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to delete the folder <strong>@folderToDelete</strong>?</p>
-                    @if (folderToDeleteCount > 0)
-                    {
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i> This folder contains <strong>@folderToDeleteCount</strong> namespace(s). They will be moved to the default "Namespaces" folder.
-                        </div>
-                    }
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CancelDeleteFolder">Cancel</button>
-                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteFolder">Delete Folder</button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
-
 @code {
     [Parameter] public bool IsDarkMode { get; set; }
     [Parameter] public EventCallback OnToggleDarkMode { get; set; }
@@ -139,10 +111,6 @@
     private string newFolderName = "";
     private ElementReference folderNameInput;
     private string userName = "User";
-    private bool showDeleteConfirmation = false;
-    private string folderIdToDelete = "";
-    private string folderToDelete = "";
-    private int folderToDeleteCount = 0;
     
     // Drag and drop state
     private string? draggedNamespace = null;
@@ -215,34 +183,6 @@
         {
             CancelCreateFolder();
         }
-    }
-
-    private void ShowDeleteFolderConfirmation(string folderId, string folderName)
-    {
-        var folder = NavState.Folders.FirstOrDefault(f => f.Id == folderId);
-        if (folder == null) return;
-
-        folderIdToDelete = folderId;
-        folderToDelete = folderName;
-        folderToDeleteCount = folder.Namespaces.Count;
-        showDeleteConfirmation = true;
-    }
-
-    private void CancelDeleteFolder()
-    {
-        showDeleteConfirmation = false;
-        folderIdToDelete = "";
-        folderToDelete = "";
-        folderToDeleteCount = 0;
-    }
-
-    private async Task ConfirmDeleteFolder()
-    {
-        if (!string.IsNullOrEmpty(folderIdToDelete))
-        {
-            await NavState.DeleteFolderAsync(folderIdToDelete);
-        }
-        CancelDeleteFolder();
     }
 
     // Drag and drop handlers

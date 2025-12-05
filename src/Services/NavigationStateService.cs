@@ -9,10 +9,23 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     private AppPreferences _preferences = new();
     private bool _isInitialized = false;
 
+    // Delete folder modal state
+    private bool _showDeleteFolderModal = false;
+    private string _folderIdToDelete = "";
+    private string _folderNameToDelete = "";
+    private int _folderNamespaceCount = 0;
+
     public event Action? OnChange;
+    public event Action? OnDeleteModalChange;
 
     public IReadOnlyList<Folder> Folders => _preferences?.Folders?.AsReadOnly() ?? new List<Folder>().AsReadOnly();
     public bool IsInitialized => _isInitialized;
+
+    // Delete folder modal properties
+    public bool ShowDeleteFolderModal => _showDeleteFolderModal;
+    public string FolderIdToDelete => _folderIdToDelete;
+    public string FolderNameToDelete => _folderNameToDelete;
+    public int FolderNamespaceCount => _folderNamespaceCount;
 
     public async Task InitializeAsync()
     {
@@ -238,4 +251,35 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     }
 
     private void NotifyStateChanged() => OnChange?.Invoke();
+
+    // Delete folder modal methods
+    public void ShowDeleteFolderConfirmation(string folderId, string folderName)
+    {
+        var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
+        if (folder == null) return;
+
+        _folderIdToDelete = folderId;
+        _folderNameToDelete = folderName;
+        _folderNamespaceCount = folder.Namespaces.Count;
+        _showDeleteFolderModal = true;
+        OnDeleteModalChange?.Invoke();
+    }
+
+    public void HideDeleteFolderModal()
+    {
+        _showDeleteFolderModal = false;
+        _folderIdToDelete = "";
+        _folderNameToDelete = "";
+        _folderNamespaceCount = 0;
+        OnDeleteModalChange?.Invoke();
+    }
+
+    public async Task ConfirmDeleteFolderAsync()
+    {
+        if (!string.IsNullOrEmpty(_folderIdToDelete))
+        {
+            await DeleteFolderAsync(_folderIdToDelete);
+        }
+        HideDeleteFolderModal();
+    }
 }
