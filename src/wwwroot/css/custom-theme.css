@@ -304,6 +304,12 @@ a:hover, .btn-link:hover {
     color: #ffda6a !important;
 }
 
+[data-theme='dark'] .alert-danger {
+    background-color: rgba(220, 53, 69, 0.2) !important;
+    border-color: #dc3545 !important;
+    color: #f8a9b0 !important;
+}
+
 /* Modal Fixes */
 .modal-content {
     background-color: var(--surface-color) !important;
@@ -317,4 +323,33 @@ a:hover, .btn-link:hover {
 
 [data-theme='dark'] .btn-close {
     filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Accordion styling for dark mode */
+.accordion-item {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+.accordion-button {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: var(--hover-bg) !important;
+    color: var(--text-color) !important;
+}
+
+.accordion-button::after {
+    filter: var(--bs-accordion-btn-icon-filter, none);
+}
+
+[data-theme='dark'] .accordion-button::after {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.accordion-body {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
 }

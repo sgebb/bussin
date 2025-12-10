@@ -3,7 +3,7 @@
 @if (IsVisible)
 {
     <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnBackdropClick">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
                     <h5 class="modal-title">Send Message</h5>
@@ -16,20 +16,137 @@
                             @validationError
                         </div>
                     }
+
+                    @if (RequiresSession && string.IsNullOrWhiteSpace(sessionId))
+                    {
+                        <div class="alert alert-warning mb-3 py-2">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>Session ID required.</strong> This entity requires a Session ID to send messages.
+                        </div>
+                    }
+
                     <div class="mb-3">
                         <label class="form-label">Message Body</label>
-                        <textarea class="form-control" rows="5" @bind="MessageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
+                        <textarea class="form-control" rows="4" @bind="MessageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
                         <small class="form-text text-muted">Enter plain text or valid JSON. Content type will be set automatically.</small>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Additional Properties (Optional)</label>
-                        <textarea class="form-control" rows="3" @bind="MessageProperties" placeholder='{"customProp": "value"}'></textarea>
-                        <small class="form-text text-muted">JSON object with custom properties to add to the message.</small>
+
+                    <!-- Broker Properties Accordion -->
+                    <div class="accordion mb-3" id="sendMessageAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button @(showBrokerProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showBrokerProperties = !showBrokerProperties">
+                                    <small>Broker Properties</small>
+                                </button>
+                            </h2>
+                            @if (showBrokerProperties)
+                            {
+                                <div class="accordion-body py-2">
+                                    <div class="row g-2">
+                                        @if (RequiresSession)
+                                        {
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Session ID <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Required for session-enabled entities" />
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Session ID</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Optional" />
+                                            </div>
+                                        }
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Message ID</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="messageId" placeholder="Auto-generated if empty" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Correlation ID</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="correlationId" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Subject / Label</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="subject" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Reply To</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="replyTo" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">To</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="to" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Time to Live (seconds)</label>
+                                            <input type="number" class="form-control form-control-sm" @bind="ttlSeconds" min="0" placeholder="Default: entity setting" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Content Type</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="contentType" placeholder="Auto-detected" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Scheduled Enqueue (UTC)</label>
+                                            <input type="datetime-local" class="form-control form-control-sm" @bind="scheduledEnqueueTime" />
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button @(showCustomProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showCustomProperties = !showCustomProperties">
+                                    <small>Custom Properties (@customProperties.Count)</small>
+                                </button>
+                            </h2>
+                            @if (showCustomProperties)
+                            {
+                                <div class="accordion-body py-2">
+                                    @foreach (var prop in customProperties)
+                                    {
+                                        <div class="row g-2 mb-2 align-items-end">
+                                            <div class="col-4">
+                                                <input type="text" class="form-control form-control-sm" @bind="prop.Key" placeholder="Key" />
+                                            </div>
+                                            <div class="col-3">
+                                                <select class="form-select form-select-sm" @bind="prop.Type">
+                                                    <option value="string">String</option>
+                                                    <option value="number">Number</option>
+                                                    <option value="boolean">Boolean</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-4">
+                                                @if (prop.Type == "boolean")
+                                                {
+                                                    <select class="form-select form-select-sm" @bind="prop.Value">
+                                                        <option value="true">true</option>
+                                                        <option value="false">false</option>
+                                                    </select>
+                                                }
+                                                else
+                                                {
+                                                    <input type="@(prop.Type == "number" ? "number" : "text")" class="form-control form-control-sm" @bind="prop.Value" placeholder="Value" />
+                                                }
+                                            </div>
+                                            <div class="col-1">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCustomProperty(prop)">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddCustomProperty">
+                                        <i class="bi bi-plus"></i> Add Property
+                                    </button>
+                                </div>
+                            }
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
-                    <button type="button" class="btn btn-primary" @onclick="HandleSend" disabled="@IsSending">
+                    <button type="button" class="btn btn-primary" @onclick="HandleSend" disabled="@(IsSending || (RequiresSession && string.IsNullOrWhiteSpace(sessionId)))">
                         @if (IsSending)
                         {
                             <span class="spinner-border spinner-border-sm me-2"></span>
@@ -45,12 +162,30 @@
 @code {
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public bool IsSending { get; set; }
+    [Parameter] public bool RequiresSession { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
-    [Parameter] public EventCallback<(string body, string? properties)> OnSend { get; set; }
+    [Parameter] public EventCallback<SendMessageRequest> OnSend { get; set; }
 
     private string messageBody = "";
-    private string messageProperties = "";
     private string? validationError = null;
+    
+    // Broker properties
+    private string sessionId = "";
+    private string messageId = "";
+    private string correlationId = "";
+    private string subject = "";
+    private string replyTo = "";
+    private string to = "";
+    private int? ttlSeconds = null;
+    private string contentType = "";
+    private DateTime? scheduledEnqueueTime = null;
+    
+    // Custom properties
+    private List<CustomProperty> customProperties = new();
+    
+    // Accordion state
+    private bool showBrokerProperties = false;
+    private bool showCustomProperties = false;
 
     public string MessageBody
     {
@@ -62,43 +197,103 @@
         }
     }
 
-    public string MessageProperties
+    protected override void OnParametersSet()
     {
-        get => messageProperties;
-        set 
+        if (IsVisible && RequiresSession && !showBrokerProperties)
         {
-            messageProperties = value;
-            validationError = null;
+            // Auto-expand broker properties if session is required
+            showBrokerProperties = true;
         }
+        
+        if (!IsVisible)
+        {
+            ResetForm();
+        }
+    }
+
+    private void ResetForm()
+    {
+        messageBody = "";
+        validationError = null;
+        sessionId = "";
+        messageId = "";
+        correlationId = "";
+        subject = "";
+        replyTo = "";
+        to = "";
+        ttlSeconds = null;
+        contentType = "";
+        scheduledEnqueueTime = null;
+        customProperties.Clear();
+        showBrokerProperties = false;
+        showCustomProperties = false;
     }
 
     private async Task HandleSend()
     {
         validationError = null;
 
+        if (RequiresSession && string.IsNullOrWhiteSpace(sessionId))
+        {
+            validationError = "Session ID is required for session-enabled entities.";
+            return;
+        }
+
         // Validate message content locally
-        var (body, props, error) = MessageParsingService.ParseMessageForSending(messageBody, string.IsNullOrWhiteSpace(messageProperties) ? null : messageProperties);
+        var (body, props, error) = MessageParsingService.ParseMessageForSending(messageBody, null);
         if (error != null)
         {
             validationError = error;
             return;
         }
 
-        await OnSend.InvokeAsync((messageBody, string.IsNullOrWhiteSpace(messageProperties) ? null : messageProperties));
+        // Build the request
+        var request = new SendMessageRequest
+        {
+            Body = messageBody,
+            SessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId,
+            MessageId = string.IsNullOrWhiteSpace(messageId) ? null : messageId,
+            CorrelationId = string.IsNullOrWhiteSpace(correlationId) ? null : correlationId,
+            Subject = string.IsNullOrWhiteSpace(subject) ? null : subject,
+            ReplyTo = string.IsNullOrWhiteSpace(replyTo) ? null : replyTo,
+            To = string.IsNullOrWhiteSpace(to) ? null : to,
+            TimeToLiveSeconds = ttlSeconds,
+            ContentType = string.IsNullOrWhiteSpace(contentType) ? null : contentType,
+            ScheduledEnqueueTimeUtc = scheduledEnqueueTime,
+            CustomProperties = BuildCustomProperties()
+        };
 
-        // Reset form
-        messageBody = "";
-        messageProperties = "";
+        await OnSend.InvokeAsync(request);
+        ResetForm();
     }
 
-    protected override void OnParametersSet()
+    private Dictionary<string, object>? BuildCustomProperties()
     {
-        if (!IsVisible)
+        var validProps = customProperties.Where(p => !string.IsNullOrWhiteSpace(p.Key)).ToList();
+        if (!validProps.Any()) return null;
+
+        var dict = new Dictionary<string, object>();
+        foreach (var prop in validProps)
         {
-            messageBody = "";
-            messageProperties = "";
-            validationError = null;
+            object value = prop.Type switch
+            {
+                "number" => double.TryParse(prop.Value, out var num) ? (object)num : prop.Value ?? "",
+                "boolean" => prop.Value?.ToLower() == "true",
+                _ => prop.Value ?? ""
+            };
+            dict[prop.Key!] = value;
         }
+        return dict;
+    }
+
+    private void AddCustomProperty()
+    {
+        customProperties.Add(new CustomProperty { Type = "string" });
+    }
+
+    private void RemoveCustomProperty(CustomProperty prop)
+    {
+        customProperties.Remove(prop);
     }
 
     private async Task OnBackdropClick()
@@ -107,5 +302,27 @@
         {
             await OnClose.InvokeAsync();
         }
+    }
+
+    public class CustomProperty
+    {
+        public string Key { get; set; } = "";
+        public string Type { get; set; } = "string";
+        public string Value { get; set; } = "";
+    }
+
+    public class SendMessageRequest
+    {
+        public string Body { get; set; } = "";
+        public string? SessionId { get; set; }
+        public string? MessageId { get; set; }
+        public string? CorrelationId { get; set; }
+        public string? Subject { get; set; }
+        public string? ReplyTo { get; set; }
+        public string? To { get; set; }
+        public int? TimeToLiveSeconds { get; set; }
+        public string? ContentType { get; set; }
+        public DateTime? ScheduledEnqueueTimeUtc { get; set; }
+        public Dictionary<string, object>? CustomProperties { get; set; }
     }
 }

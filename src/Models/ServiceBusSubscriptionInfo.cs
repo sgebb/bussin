@@ -1,12 +1,18 @@
 namespace ServiceBusExplorer.Blazor.Models;
 
-public class ServiceBusSubscriptionInfo
+public record ServiceBusSubscriptionInfo
 {
-    public string Name { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
-    public long ActiveMessageCount { get; set; }
-    public long DeadLetterMessageCount { get; set; }
-    public long TransferMessageCount { get; set; }
-    public long TransferDeadLetterMessageCount { get; set; }
+    public required string Name { get; init; }
+    public required string Status { get; init; }
+    public long ActiveMessageCount { get; init; }
+    public long DeadLetterMessageCount { get; init; }
+    public long TransferMessageCount { get; init; }
+    public long TransferDeadLetterMessageCount { get; init; }
     public long TotalMessageCount => ActiveMessageCount + DeadLetterMessageCount + TransferMessageCount + TransferDeadLetterMessageCount;
+    
+    // Entity properties
+    public bool RequiresSession { get; init; }
+    public bool DeadLetteringOnMessageExpiration { get; init; }
+    public string? ForwardTo { get; init; }
+    public string? ForwardDeadLetteredMessagesTo { get; init; }
 }

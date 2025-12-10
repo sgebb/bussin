@@ -73,6 +73,45 @@ export class MessageSender {
             ...properties
         };
 
+        // Map session_id to AMQP group_id
+        if (properties.session_id) {
+            message.group_id = properties.session_id;
+        }
+
+        // Map other broker properties
+        if (properties.correlation_id) {
+            message.correlation_id = properties.correlation_id;
+        }
+        if (properties.subject) {
+            message.subject = properties.subject;
+        }
+        if (properties.reply_to) {
+            message.reply_to = properties.reply_to;
+        }
+        if (properties.to) {
+            message.to = properties.to;
+        }
+        if (properties.time_to_live) {
+            message.ttl = properties.time_to_live;
+        }
+
+        // Handle message_annotations - convert scheduled enqueue time to Date
+        if (properties.message_annotations) {
+            const annotations: Record<string, any> = { ...properties.message_annotations };
+            const scheduledTime = annotations['x-opt-scheduled-enqueue-time'];
+            if (scheduledTime) {
+                // Convert to Date object if it's a string or already a Date-like value
+                if (typeof scheduledTime === 'string') {
+                    annotations['x-opt-scheduled-enqueue-time'] = new Date(scheduledTime);
+                } else if (typeof scheduledTime === 'number') {
+                    // If it's already a timestamp in ms, convert to Date
+                    annotations['x-opt-scheduled-enqueue-time'] = new Date(scheduledTime);
+                }
+            }
+            message.message_annotations = annotations;
+        }
+
+        // Clean up camelCase duplicates
         delete message.contentType;
         delete message.messageId;
 

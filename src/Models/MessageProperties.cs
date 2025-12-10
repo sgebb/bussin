@@ -35,8 +35,17 @@ public class MessageProperties
     [JsonPropertyName("partition_key")]
     public string? PartitionKey { get; set; }
     
+    /// <summary>
+    /// Time to live as TimeSpan - will be serialized as milliseconds
+    /// </summary>
+    [JsonIgnore]
+    public TimeSpan? TimeToLive { get; set; }
+    
+    /// <summary>
+    /// Time to live in milliseconds for JSON serialization
+    /// </summary>
     [JsonPropertyName("time_to_live")]
-    public int? TimeToLive { get; set; }
+    public long? TimeToLiveMs => TimeToLive.HasValue ? (long)TimeToLive.Value.TotalMilliseconds : null;
     
     /// <summary>
     /// Message annotations - used for scheduled messages and other advanced scenarios

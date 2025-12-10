@@ -17,7 +17,8 @@
                 @if (SelectedMessages.Any())
                 {
                     <div class="btn-group btn-group-sm">
-                        <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@IsProcessing">
+                        <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@(IsProcessing || RequiresSession)" 
+                                title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete selected messages")">
                             <span class="me-1">🗑️</span> Delete (@SelectedMessages.Count)
                         </button>
                         @if (IsDLQ)
@@ -28,7 +29,8 @@
                         }
                         else
                         {
-                            <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@IsProcessing">
+                            <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@(IsProcessing || RequiresSession)"
+                                    title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
                                 <span class="me-1">⚠️</span> Move to DLQ (@SelectedMessages.Count)
                             </button>
                         }
@@ -84,6 +86,7 @@
     [Parameter] public List<ServiceBusMessage> Messages { get; set; } = new();
     [Parameter] public bool IsDLQ { get; set; }
     [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public bool RequiresSession { get; set; }
     [Parameter] public EventCallback<ServiceBusMessage> OnMessageSelected { get; set; }
     [Parameter] public EventCallback<List<long>> OnDeleteMessages { get; set; }
     [Parameter] public EventCallback<List<long>> OnResubmitMessages { get; set; }

@@ -35,6 +35,13 @@
                                             <td>@Message.EnqueuedTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
                                         </tr>
                                     }
+                                    @if (Message.ScheduledEnqueueTime.HasValue)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Scheduled Enqueue (UTC)</td>
+                                            <td>@FormatUnixTime(Message.ScheduledEnqueueTime.Value)</td>
+                                        </tr>
+                                    }
                                     <tr>
                                         <td class="fw-bold">Delivery Count</td>
                                         <td>@Message.DeliveryCount</td>
@@ -42,8 +49,8 @@
                                     @if (Message.Ttl.HasValue)
                                     {
                                         <tr>
-                                            <td class="fw-bold">Time To Live (seconds)</td>
-                                            <td>@Message.Ttl.Value</td>
+                                            <td class="fw-bold">Time To Live</td>
+                                            <td>@FormatTtl(Message.Ttl.Value)</td>
                                         </tr>
                                     }
                                     @if (!string.IsNullOrEmpty(Message.ContentType))
@@ -58,6 +65,48 @@
                                         <tr>
                                             <td class="fw-bold">Correlation ID</td>
                                             <td>@Message.CorrelationId</td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Message.SessionId))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Session ID</td>
+                                            <td>@Message.SessionId</td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Message.Subject))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Subject / Label</td>
+                                            <td>@Message.Subject</td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Message.ReplyTo))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Reply To</td>
+                                            <td>@Message.ReplyTo</td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Message.To))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">To</td>
+                                            <td>@Message.To</td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Message.PartitionKey))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Partition Key</td>
+                                            <td>@Message.PartitionKey</td>
+                                        </tr>
+                                    }
+                                    @if (Message.ExpiryTime.HasValue)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">Expires At (UTC)</td>
+                                            <td>@Message.ExpiryTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
                                         </tr>
                                     }
                                 </tbody>
@@ -102,7 +151,8 @@
                 </div>
                 <div class="modal-footer">
                     <div class="btn-group me-auto">
-                        <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@IsProcessing">
+                        <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession)"
+                                title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete message")">
                             @if (IsProcessing)
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
@@ -121,7 +171,8 @@
                         }
                         else
                         {
-                            <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@IsProcessing">
+                            <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession)"
+                                    title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
                                 @if (IsProcessing)
                                 {
                                     <span class="spinner-border spinner-border-sm me-2"></span>
@@ -142,6 +193,7 @@
     [Parameter] public ServiceBusMessage? Message { get; set; }
     [Parameter] public bool IsDLQ { get; set; }
     [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public bool RequiresSession { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<long> OnDelete { get; set; }
     [Parameter] public EventCallback<long> OnResubmit { get; set; }
@@ -172,6 +224,24 @@
                 return bodyStr;
             }
         }
+    }
+
+    private static string FormatTtl(long ttlMs)
+    {
+        var ts = TimeSpan.FromMilliseconds(ttlMs);
+        if (ts.TotalDays >= 1)
+            return $"{ts.TotalDays:F1} days";
+        if (ts.TotalHours >= 1)
+            return $"{ts.TotalHours:F1} hours";
+        if (ts.TotalMinutes >= 1)
+            return $"{ts.TotalMinutes:F1} minutes";
+        return $"{ts.TotalSeconds:F1} seconds";
+    }
+
+    private static string FormatUnixTime(long unixMs)
+    {
+        var dt = DateTimeOffset.FromUnixTimeMilliseconds(unixMs).UtcDateTime;
+        return dt.ToString("yyyy-MM-dd HH:mm:ss") + " UTC";
     }
 
     private async Task Close()

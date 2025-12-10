@@ -9,6 +9,11 @@ interface AMQPMessage {
     message_id?: string;
     body: any;
     content_type?: string;
+    correlation_id?: string;
+    group_id?: string;  // AMQP session ID
+    subject?: string;
+    reply_to?: string;
+    to?: string;
     delivery_count?: number;
     message_annotations?: Record<string, any>;
     application_properties?: Record<string, any>;
@@ -24,28 +29,57 @@ interface AMQPMessage {
 export function parseServiceBusMessage(amqpMessage: any): ServiceBusMessage {
     const decodedBody = decodeMessageBody(amqpMessage.body);
     
+    // AMQP properties can be at top level or in a 'properties' section
+    const props = amqpMessage.properties || {};
+    
     // Safely parse TTL - ensure it's a valid number and within range
     let ttl: number | undefined = undefined;
-    if (amqpMessage.ttl !== undefined && amqpMessage.ttl !== null) {
-        const ttlValue = Number(amqpMessage.ttl);
+    const ttlSource = amqpMessage.ttl ?? amqpMessage.header?.ttl;
+    if (ttlSource !== undefined && ttlSource !== null) {
+        const ttlValue = Number(ttlSource);
         if (!isNaN(ttlValue) && isFinite(ttlValue)) {
             ttl = ttlValue;
         }
     }
     
+    // Get message annotations
+    const annotations = amqpMessage.message_annotations || {};
+    
+    // Extract enqueued time - could be Date or timestamp
+    let enqueuedTime = annotations['x-opt-enqueued-time'];
+    if (enqueuedTime && typeof enqueuedTime === 'number') {
+        enqueuedTime = new Date(enqueuedTime);
+    }
+    
+    // Extract scheduled enqueue time
+    let scheduledEnqueueTime = annotations['x-opt-scheduled-enqueue-time'];
+    if (scheduledEnqueueTime instanceof Date) {
+        scheduledEnqueueTime = scheduledEnqueueTime.getTime();
+    }
+    
+    // Extract partition key
+    const partitionKey = annotations['x-opt-partition-key'] ?? amqpMessage.group_id ?? props.group_id;
+    
     return {
-        messageId: amqpMessage.message_id,
+        messageId: amqpMessage.message_id ?? props.message_id,
         body: decodedBody,
-        contentType: amqpMessage.content_type,
-        deliveryCount: amqpMessage.delivery_count || 0,
-        enqueuedTime: amqpMessage.message_annotations?.['x-opt-enqueued-time'],
-        sequenceNumber: amqpMessage.message_annotations?.['x-opt-sequence-number'],
-        lockedUntil: amqpMessage.message_annotations?.['x-opt-locked-until'],
+        contentType: amqpMessage.content_type ?? props.content_type,
+        correlationId: amqpMessage.correlation_id ?? props.correlation_id,
+        sessionId: amqpMessage.group_id ?? props.group_id,  // AMQP group_id maps to Service Bus session ID
+        subject: amqpMessage.subject ?? props.subject,
+        replyTo: amqpMessage.reply_to ?? props.reply_to,
+        to: amqpMessage.to ?? props.to,
+        deliveryCount: amqpMessage.delivery_count ?? amqpMessage.header?.delivery_count ?? 0,
+        enqueuedTime: enqueuedTime,
+        sequenceNumber: annotations['x-opt-sequence-number'],
+        lockedUntil: annotations['x-opt-locked-until'],
+        scheduledEnqueueTime: scheduledEnqueueTime,
+        partitionKey: partitionKey,
         applicationProperties: amqpMessage.application_properties || {},
-        properties: amqpMessage.properties || {},
+        properties: props,
         ttl: ttl,
-        expiryTime: amqpMessage.absolute_expiry_time,
-        creationTime: amqpMessage.creation_time
+        expiryTime: amqpMessage.absolute_expiry_time ?? props.absolute_expiry_time,
+        creationTime: amqpMessage.creation_time ?? props.creation_time
     };
 }
 

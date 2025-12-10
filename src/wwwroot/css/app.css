@@ -300,6 +300,22 @@ pre {
     padding: 1rem;
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+}
+
+.nav-brand {
+    font-size: 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.nav-brand:hover {
+    color: var(--link-color);
+    transform: scale(1.05);
 }
 
 .nav-favorites-scroll {
@@ -313,6 +329,69 @@ pre {
     padding: 1rem;
     border-top: 1px solid var(--border-color);
     flex-shrink: 0;
+}
+
+.support-section {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+}
+
+.support-heart-btn {
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 1rem;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.support-heart-btn:hover {
+    color: #db61a2;
+    background-color: var(--hover-bg);
+}
+
+.support-popover {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 0.5rem;
+    z-index: 1000;
+}
+
+.support-popover-header {
+    top: 100%;
+    bottom: auto;
+    right: 0;
+    left: auto;
+    transform: none;
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+}
+
+.support-popover-content {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    min-width: 220px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-sponsor {
+    background-color: #db61a2;
+    border-color: #db61a2;
+    color: white;
+}
+
+.btn-sponsor:hover {
+    background-color: #c44d8e;
+    border-color: #c44d8e;
+    color: white;
 }
 
 .user-section {
@@ -666,6 +745,34 @@ pre, code {
     border-bottom: none;
 }
 
+.entity-item.entity-disabled {
+    opacity: 0.6;
+}
+
+.entity-name-with-icons {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.entity-icons {
+    display: inline-flex;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.entity-icons i {
+    cursor: help;
+}
+
+.entity-item.active .entity-icons {
+    opacity: 0.9;
+}
+
 .explorer-messages {
     flex: 1;
     display: flex;
@@ -685,6 +792,34 @@ pre, code {
     display: flex;
     gap: 1rem;
     min-height: 0;
+}
+
+.explorer-messages-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.explorer-messages-main > .explorer-messages-list {
+    flex: 1;
+}
+
+.session-warning-banner {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    background-color: rgba(255, 193, 7, 0.1);
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    color: var(--text-color);
+}
+
+[data-theme='dark'] .session-warning-banner {
+    background-color: rgba(255, 193, 7, 0.1);
+    color: #ffda6a;
 }
 
 .explorer-messages-list {

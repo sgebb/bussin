@@ -143,7 +143,13 @@ public sealed class AzureResourceService : IAzureResourceService
                 TransferMessageCount = queue.Data.CountDetails?.TransferMessageCount ?? 0,
                 TransferDeadLetterMessageCount = queue.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0,
                 MaxSizeInMegabytes = queue.Data.MaxSizeInMegabytes ?? 0,
-                SizeInBytes = queue.Data.SizeInBytes ?? 0
+                SizeInBytes = queue.Data.SizeInBytes ?? 0,
+                RequiresSession = queue.Data.RequiresSession ?? false,
+                EnablePartitioning = queue.Data.EnablePartitioning ?? false,
+                RequiresDuplicateDetection = queue.Data.RequiresDuplicateDetection ?? false,
+                DeadLetteringOnMessageExpiration = queue.Data.DeadLetteringOnMessageExpiration ?? false,
+                ForwardTo = queue.Data.ForwardTo,
+                ForwardDeadLetteredMessagesTo = queue.Data.ForwardDeadLetteredMessagesTo
             };
         }
     }
@@ -226,7 +232,11 @@ public sealed class AzureResourceService : IAzureResourceService
                 ActiveMessageCount = sub.Data.CountDetails?.ActiveMessageCount ?? 0,
                 DeadLetterMessageCount = sub.Data.CountDetails?.DeadLetterMessageCount ?? 0,
                 TransferMessageCount = sub.Data.CountDetails?.TransferMessageCount ?? 0,
-                TransferDeadLetterMessageCount = sub.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0
+                TransferDeadLetterMessageCount = sub.Data.CountDetails?.TransferDeadLetterMessageCount ?? 0,
+                RequiresSession = sub.Data.RequiresSession ?? false,
+                DeadLetteringOnMessageExpiration = sub.Data.DeadLetteringOnMessageExpiration ?? false,
+                ForwardTo = sub.Data.ForwardTo,
+                ForwardDeadLetteredMessagesTo = sub.Data.ForwardDeadLetteredMessagesTo
             };
         }
     }

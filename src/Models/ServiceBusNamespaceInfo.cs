@@ -1,12 +1,12 @@
 namespace ServiceBusExplorer.Blazor.Models;
 
-public sealed class ServiceBusNamespaceInfo
+public sealed record ServiceBusNamespaceInfo
 {
-    public required string Name { get; set; }
-    public required string FullyQualifiedNamespace { get; set; }
-    public required string ResourceGroup { get; set; }
-    public required string SubscriptionId { get; set; }
-    public string? SubscriptionName { get; set; }
-    public string? TenantId { get; set; }
-    public string? Location { get; set; }
+    public required string Name { get; init; }
+    public required string FullyQualifiedNamespace { get; init; }
+    public required string ResourceGroup { get; init; }
+    public required string SubscriptionId { get; init; }
+    public string? SubscriptionName { get; init; }
+    public string? TenantId { get; init; }
+    public string? Location { get; init; }
 }

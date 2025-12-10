@@ -11,10 +11,17 @@ export interface ServiceBusMessage {
     messageId: string | undefined;
     body: string;
     contentType: string | undefined;
+    correlationId: string | undefined;
+    sessionId: string | undefined;
+    subject: string | undefined;
+    replyTo: string | undefined;
+    to: string | undefined;
     deliveryCount: number;
     enqueuedTime: Date | undefined;
     sequenceNumber: number | undefined;
     lockedUntil: Date | undefined;
+    scheduledEnqueueTime: Date | number | undefined;
+    partitionKey: string | undefined;
     applicationProperties: Record<string, any>;
     properties: Record<string, any>;
     ttl: number | undefined;

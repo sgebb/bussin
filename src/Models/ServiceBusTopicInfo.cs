@@ -1,11 +1,11 @@
 namespace ServiceBusExplorer.Blazor.Models;
 
-public class ServiceBusTopicInfo
+public record ServiceBusTopicInfo
 {
-    public string Name { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
-    public long ScheduledMessageCount { get; set; }
-    public long MaxSizeInMegabytes { get; set; }
-    public long SizeInBytes { get; set; }
-    public int SubscriptionCount { get; set; }
+    public required string Name { get; init; }
+    public required string Status { get; init; }
+    public long ScheduledMessageCount { get; init; }
+    public long MaxSizeInMegabytes { get; init; }
+    public long SizeInBytes { get; init; }
+    public int SubscriptionCount { get; init; }
 }

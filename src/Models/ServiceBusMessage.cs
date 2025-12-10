@@ -16,6 +16,18 @@ public class ServiceBusMessage
     [JsonPropertyName("correlationId")]
     public string? CorrelationId { get; set; }
     
+    [JsonPropertyName("sessionId")]
+    public string? SessionId { get; set; }
+    
+    [JsonPropertyName("subject")]
+    public string? Subject { get; set; }
+    
+    [JsonPropertyName("replyTo")]
+    public string? ReplyTo { get; set; }
+    
+    [JsonPropertyName("to")]
+    public string? To { get; set; }
+    
     [JsonPropertyName("deliveryCount")]
     public int DeliveryCount { get; set; }
     
@@ -27,6 +39,12 @@ public class ServiceBusMessage
     
     [JsonPropertyName("lockedUntil")]
     public DateTime? LockedUntil { get; set; }
+    
+    [JsonPropertyName("scheduledEnqueueTime")]
+    public long? ScheduledEnqueueTime { get; set; }
+    
+    [JsonPropertyName("partitionKey")]
+    public string? PartitionKey { get; set; }
     
     [JsonPropertyName("applicationProperties")]
     public Dictionary<string, object>? ApplicationProperties { get; set; }

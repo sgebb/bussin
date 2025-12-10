@@ -54,9 +54,33 @@
                     <div class="entity-list-scroll">
                         @foreach (var queue in queues)
                         {
-                            <div class="entity-item @(selectedQueueName == queue.Name ? "active" : "")" @onclick="() => SelectQueue(queue.Name)">
+                            <div class="entity-item @(selectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectQueue(queue.Name)">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <span>@queue.Name</span>
+                                    <span class="entity-name-with-icons">
+                                        @queue.Name
+                                        <span class="entity-icons">
+                                            @if (queue.Status != "Active")
+                                            {
+                                                <i class="bi bi-pause-circle" title="Status: @queue.Status"></i>
+                                            }
+                                            @if (queue.RequiresSession)
+                                            {
+                                                <i class="bi bi-person-badge" title="Session-enabled"></i>
+                                            }
+                                            @if (queue.EnablePartitioning)
+                                            {
+                                                <i class="bi bi-grid-3x3" title="Partitioned"></i>
+                                            }
+                                            @if (queue.RequiresDuplicateDetection)
+                                            {
+                                                <i class="bi bi-copy" title="Duplicate detection enabled"></i>
+                                            }
+                                            @if (!string.IsNullOrEmpty(queue.ForwardTo))
+                                            {
+                                                <i class="bi bi-arrow-right-circle" title="Forwards to: @queue.ForwardTo"></i>
+                                            }
+                                        </span>
+                                    </span>
                                     @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0)
                                     {
                                         <span class="badge bg-secondary">@queue.ActiveMessageCount / @queue.DeadLetterMessageCount</span>
@@ -104,9 +128,25 @@
                         {
                             @foreach (var sub in subscriptions)
                             {
-                                <div class="entity-item @(selectedSubscriptionName == sub.Name ? "active" : "")" @onclick="() => SelectSubscription(sub.Name)">
+                                <div class="entity-item @(selectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectSubscription(sub.Name)">
                                     <div class="d-flex justify-content-between align-items-center">
-                                        <span>@sub.Name</span>
+                                        <span class="entity-name-with-icons">
+                                            @sub.Name
+                                            <span class="entity-icons">
+                                                @if (sub.Status != "Active")
+                                                {
+                                                    <i class="bi bi-pause-circle" title="Status: @sub.Status"></i>
+                                                }
+                                                @if (sub.RequiresSession)
+                                                {
+                                                    <i class="bi bi-person-badge" title="Session-enabled"></i>
+                                                }
+                                                @if (!string.IsNullOrEmpty(sub.ForwardTo))
+                                                {
+                                                    <i class="bi bi-arrow-right-circle" title="Forwards to: @sub.ForwardTo"></i>
+                                                }
+                                            </span>
+                                        </span>
                                         @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
                                         {
                                             <span class="badge bg-secondary">@sub.ActiveMessageCount / @sub.DeadLetterMessageCount</span>
@@ -128,13 +168,22 @@
         </div>
 
         <div class="explorer-messages-content">
-            <div class="explorer-messages-list">
+            <div class="explorer-messages-main">
+                @if (SelectedEntityRequiresSession)
+                {
+                    <div class="session-warning-banner">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <span><strong>Session-enabled.</strong> Send requires Session ID. Delete/Purge not supported.</span>
+                    </div>
+                }
+                <div class="explorer-messages-list">
                 @if (peekedMessages.Count > 0)
                 {
                     <MessageList @ref="_messageListRef"
                                 Messages="@peekedMessages"
                                 IsDLQ="@isViewingDLQ"
                                 IsProcessing="@isProcessingBatch"
+                                RequiresSession="@SelectedEntityRequiresSession"
                                 OnMessageSelected="@ShowMessageDetail"
                                 OnDeleteMessages="@DeleteMessages"
                                 OnResubmitMessages="@ResubmitMessages"
@@ -152,6 +201,7 @@
                         <p>Select a queue or topic subscription to view messages</p>
                     </div>
                 }
+                </div>
             </div>
 
             <div class="explorer-actions-sidebar">
@@ -207,9 +257,10 @@
                 <!-- Dangerous Actions - always visible -->
                 <div class="action-btn-group">
                     <div class="action-btn-group-title">Dangerous</div>
-                    <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || isPurging ? "disabled-grey" : "")" 
+                    <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || isPurging || SelectedEntityRequiresSession ? "disabled-grey" : "")" 
                             @onclick="() => PurgeMessages()" 
-                            disabled="@(!HasQueueOrSubscriptionSelected || isPurging)">
+                            disabled="@(!HasQueueOrSubscriptionSelected || isPurging || SelectedEntityRequiresSession)"
+                            title="@(SelectedEntityRequiresSession ? "Purge not supported for session-enabled entities" : "Purge all messages")">
                         <i class="bi bi-trash"></i> Purge All
                     </button>
                 </div>
@@ -228,6 +279,7 @@
 <!-- Modals -->
 <SendMessageModal IsVisible="@showSendMessageModal"
                  IsSending="@isSending"
+                 RequiresSession="@SelectedEntityRequiresSession"
                  OnClose="@(() => showSendMessageModal = false)"
                  OnSend="@SendMessage" />
 
@@ -235,6 +287,7 @@
                    Message="@selectedMessage"
                    IsDLQ="@isViewingDLQ"
                    IsProcessing="@isProcessingBatch"
+                   RequiresSession="@SelectedEntityRequiresSession"
                    OnClose="@CloseMessageDetail"
                    OnDelete="@DeleteSingleMessage"
                    OnResubmit="@ResubmitSingleMessage"
@@ -356,6 +409,9 @@
     private bool HasEntitySelected => _state.HasEntitySelected;
     private bool HasQueueOrSubscriptionSelected => _state.HasQueueOrSubscriptionSelected;
     private bool CanSend => HasEntitySelected && !isViewingDLQ;
+    private bool SelectedEntityRequiresSession => 
+        (selectedQueueName != null && queueDict.TryGetValue(selectedQueueName, out var q) && q.RequiresSession) ||
+        (selectedSubscriptionName != null && subscriptionDict.TryGetValue(selectedSubscriptionName, out var s) && s.RequiresSession);
 
     private string? _lastNamespace;
     
@@ -884,29 +940,37 @@
         return new List<ServiceBusMessage>();
     }
 
-    private async Task SendMessage((string body, string? properties) messageData)
+    private async Task SendMessage(SendMessageModal.SendMessageRequest request)
     {
         isSending = true;
         errorMessage = null;
 
         try
         {
-            // Use parsing service to handle all the JSON logic
-            var (bodyToSend, propsDict, error) = MessageParsingService.ParseMessageForSending(messageData.body, messageData.properties);
-            
-            if (error != null)
+            // Build MessageProperties from the request
+            var props = new MessageProperties
             {
-                errorMessage = error;
-                return;
-            }
+                MessageId = request.MessageId,
+                CorrelationId = request.CorrelationId,
+                Subject = request.Subject,
+                ReplyTo = request.ReplyTo,
+                To = request.To,
+                SessionId = request.SessionId,
+                ContentType = request.ContentType,
+                TimeToLive = request.TimeToLiveSeconds.HasValue ? TimeSpan.FromSeconds(request.TimeToLiveSeconds.Value) : null,
+                ApplicationProperties = request.CustomProperties,
+                MessageAnnotations = request.ScheduledEnqueueTimeUtc.HasValue 
+                    ? new Dictionary<string, object> { ["x-opt-scheduled-enqueue-time"] = DateTime.SpecifyKind(request.ScheduledEnqueueTimeUtc.Value, DateTimeKind.Utc) }
+                    : null
+            };
 
             if (selectedQueueName != null)
             {
-                await OperationsService.SendQueueMessageAsync(NamespaceNameOnly, selectedQueueName, bodyToSend, propsDict);
+                await OperationsService.SendQueueMessageAsync(NamespaceNameOnly, selectedQueueName, request.Body, props);
             }
             else if (selectedTopicName != null)
             {
-                await OperationsService.SendTopicMessageAsync(NamespaceNameOnly, selectedTopicName, bodyToSend, propsDict);
+                await OperationsService.SendTopicMessageAsync(NamespaceNameOnly, selectedTopicName, request.Body, props);
             }
 
             showSendMessageModal = false;
