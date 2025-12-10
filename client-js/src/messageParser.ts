@@ -22,16 +22,6 @@ interface AMQPMessage {
  * Parse Service Bus message from AMQP format
  */
 export function parseServiceBusMessage(amqpMessage: any): ServiceBusMessage {
-    // Extract the original binary body before decoding for display
-    let originalBody: any = undefined;
-    let originalContentType: string | undefined = undefined;
-
-    // Handle AMQP message body - preserve original format
-    if (amqpMessage.body) {
-        originalBody = amqpMessage.body;
-        originalContentType = amqpMessage.content_type;
-    }
-
     const decodedBody = decodeMessageBody(amqpMessage.body);
     
     // Safely parse TTL - ensure it's a valid number and within range
@@ -55,9 +45,7 @@ export function parseServiceBusMessage(amqpMessage: any): ServiceBusMessage {
         properties: amqpMessage.properties || {},
         ttl: ttl,
         expiryTime: amqpMessage.absolute_expiry_time,
-        creationTime: amqpMessage.creation_time,
-        originalBody: originalBody,
-        originalContentType: originalContentType
+        creationTime: amqpMessage.creation_time
     };
 }
 

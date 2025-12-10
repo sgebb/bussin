@@ -49,19 +49,6 @@ public class MessageProperties
     /// </summary>
     [JsonPropertyName("application_properties")]
     public Dictionary<string, object>? ApplicationProperties { get; set; }
-    
-    /// <summary>
-    /// Original binary body - when provided, this preserves the exact message format for resend operations
-    /// Takes precedence over other body properties to avoid format corruption
-    /// </summary>
-    [JsonPropertyName("original_body")]
-    public object? OriginalBody { get; set; }
-
-    /// <summary>
-    /// Original content type - used with original_body to preserve exact message format
-    /// </summary>
-    [JsonPropertyName("original_content_type")]
-    public string? OriginalContentType { get; set; }
 
     /// <summary>
     /// Additional custom properties

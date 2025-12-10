@@ -42,12 +42,6 @@ public class ServiceBusMessage
     
     [JsonPropertyName("creationTime")]
     public DateTime? CreationTime { get; set; }
-    
-    [JsonPropertyName("originalBody")]
-    public object? OriginalBody { get; set; }
-
-    [JsonPropertyName("originalContentType")]
-    public string? OriginalContentType { get; set; }
 
     [JsonPropertyName("lockToken")]
     public string? LockToken { get; set; }

@@ -19,14 +19,12 @@ public interface IServiceBusOperationsService
     Task<int> PurgeQueueAsync(string namespaceName, string queueName, bool fromDeadLetter = false);
     Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, bool fromDeadLetter = false);
     
-    // Lock-based batch operations (new workflow: lock -> settle)
-    Task<List<ServiceBusMessage>> LockQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false);
-    Task<List<ServiceBusMessage>> LockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false);
+    // Lock settlement operations (used by ReceiveAndLockModal)
     Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens);
     Task<BatchOperationResult> AbandonMessagesAsync(string[] lockTokens);
     Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null);
     
-    // High-level operations (lock + settle in one call)
+    // High-level message operations
     Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false);
     Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false);
     Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true);

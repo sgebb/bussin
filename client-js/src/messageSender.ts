@@ -61,28 +61,6 @@ export class MessageSender {
 
     private createAmqpMessage(body: string | null | undefined, properties: MessageProperties): any {
         const messageId = properties.message_id || properties.messageId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        if (properties.original_body && properties.original_content_type) {
-            const message: any = {
-                body: properties.original_body,
-                content_type: properties.original_content_type,
-                message_id: messageId,
-                creation_time: new Date(),
-                ...properties
-            };
-
-            delete message.original_body;
-            delete message.original_content_type;
-            delete message.contentType;
-            delete message.messageId;
-
-            if (!message.creation_time) {
-                message.creation_time = new Date();
-            }
-
-            return message;
-        }
-
         const textBody = this.normalizeBodyToString(body);
         const encodedBody = Buffer.from(textBody, 'utf8');
         const contentType = properties.content_type || properties.contentType || 'text/plain; charset=utf-8';
@@ -95,14 +73,8 @@ export class MessageSender {
             ...properties
         };
 
-        delete message.original_body;
-        delete message.original_content_type;
         delete message.contentType;
         delete message.messageId;
-
-        if (!message.creation_time) {
-            message.creation_time = new Date();
-        }
 
         return message;
     }

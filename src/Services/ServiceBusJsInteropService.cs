@@ -18,12 +18,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         {
             var json = elem.GetRawText();
             var message = JsonSerializer.Deserialize<ServiceBusMessage>(json);
-            if (message == null) return null;
-
-            // Preserve original body and content type for exact format preservation
-            message.OriginalBody = elem.TryGetProperty("originalBody", out var originalBody) ? originalBody : null;
-            message.OriginalContentType = elem.TryGetProperty("originalContentType", out var originalContentType) ? originalContentType.GetString() : null;
-
             return message;
         }
         catch (JsonException ex)
@@ -42,8 +36,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
                     MessageId = msgIdProp,
                     Body = bodyProp ?? "[Error parsing message]",
                     ContentType = "text/plain",
-                    OriginalBody = elem.TryGetProperty("originalBody", out var originalBody) ? originalBody : null,
-                    OriginalContentType = elem.TryGetProperty("originalContentType", out var originalContentType) ? originalContentType.GetString() : null,
                     LockToken = elem.TryGetProperty("lockToken", out var lockToken) ? lockToken.GetString() : null
                 };
             }

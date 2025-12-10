@@ -20,8 +20,6 @@ export interface ServiceBusMessage {
     ttl: number | undefined;
     expiryTime: Date | undefined;
     creationTime: Date | undefined;
-    originalBody?: any; // Preserve original binary body for resend operations
-    originalContentType?: string; // Preserve original content type
 }
 
 /**
@@ -50,8 +48,6 @@ export interface MessageProperties {
     content_type?: string;
     contentType?: string;
     message_annotations?: Record<string, any>; // For scheduled messages
-    original_body?: any; // Preserve original binary body for resend operations
-    original_content_type?: string; // Preserve original content type for resend operations
     [key: string]: any;
 }
 

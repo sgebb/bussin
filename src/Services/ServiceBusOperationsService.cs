@@ -134,9 +134,9 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    // Lock-based batch operations (new workflow: lock -> settle)
+    // Internal lock-based operations
     
-    public async Task<List<ServiceBusMessage>> LockQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false)
+    private async Task<List<ServiceBusMessage>> LockQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false)
     {
         try
         {
@@ -151,7 +151,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    public async Task<List<ServiceBusMessage>> LockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false)
+    private async Task<List<ServiceBusMessage>> LockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false)
     {
         try
         {
@@ -310,10 +310,9 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
                 try
                 {
                     var props = CreateResendProperties(msg);
-                    // When OriginalBody exists, it's passed via props and body should be empty
-                    // Otherwise use the regular Body
-                    var body = msg.OriginalBody != null ? "" : msg.Body;
-                    await sendMessage(token, body ?? "", props);
+                    // Always use the decoded Body string for resend - it's already properly decoded
+                    // The OriginalBody is a raw AMQP structure that doesn't serialize well through JSON
+                    await sendMessage(token, msg.Body ?? "", props);
                     successCount++;
                 }
                 catch (Exception ex)
@@ -346,17 +345,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
 
     private static MessageProperties CreateResendProperties(ServiceBusMessage msg)
     {
-        if (msg.OriginalBody != null && msg.OriginalContentType != null)
-        {
-            return new MessageProperties
-            {
-                MessageId = msg.MessageId,
-                OriginalBody = msg.OriginalBody,
-                OriginalContentType = msg.OriginalContentType,
-                ApplicationProperties = msg.ApplicationProperties
-            };
-        }
-        
+        // Always use the decoded body approach - don't try to preserve original binary format
+        // The OriginalBody is a raw AMQP structure (JsonElement) that doesn't serialize correctly through Blazor JS interop
         return new MessageProperties
         {
             MessageId = msg.MessageId,

@@ -134,12 +134,9 @@ async function sendMessage(
         const sender = new MessageSender(connection, entityPath);
         await sender.open();
         const messageProps: MessageProperties = { ...properties };
-        let bodyToSend: string | null | undefined = messageBody as string | null | undefined;
-        let inferredContentType: string | undefined = undefined;
+        let bodyToSend: string;
 
-        if (messageProps.original_body && messageProps.original_content_type) {
-            bodyToSend = '';
-        } else if (typeof messageBody === 'string') {
+        if (typeof messageBody === 'string') {
             bodyToSend = messageBody;
         } else if (messageBody instanceof Uint8Array) {
             bodyToSend = new TextDecoder().decode(messageBody);
@@ -147,16 +144,14 @@ async function sendMessage(
             bodyToSend = new TextDecoder().decode(new Uint8Array(messageBody));
         } else if (messageBody !== null && messageBody !== undefined) {
             bodyToSend = JSON.stringify(messageBody);
-            inferredContentType = 'application/json; charset=utf-8';
+            if (!messageProps.content_type && !messageProps.contentType) {
+                messageProps.content_type = 'application/json; charset=utf-8';
+            }
         } else {
             bodyToSend = '';
         }
 
-        if (!messageProps.content_type && !messageProps.contentType && inferredContentType) {
-            messageProps.content_type = inferredContentType;
-        }
-
-        await sender.send(bodyToSend ?? '', messageProps);
+        await sender.send(bodyToSend, messageProps);
         
         sender.close();
         connection.close();
