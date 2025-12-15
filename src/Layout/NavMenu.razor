@@ -7,25 +7,9 @@
     <!-- Clickable Header -->
     <div class="nav-header">
         <span class="nav-brand" @onclick="@(() => Navigation.NavigateTo("/"))"><span class="nav-brand-bus">bus</span><span class="nav-brand-sin">sin</span></span>
-        <button class="support-heart-btn" @onclick="ToggleSupportPopover" @onclick:stopPropagation="true" title="Support & Contribute">
+        <button class="support-heart-btn" @onclick="NavState.ShowSupportModalDialog" @onclick:stopPropagation="true" title="Support & Contribute">
             <i class="bi bi-heart-fill"></i>
         </button>
-        @if (showSupportPopover)
-        {
-            <div class="support-popover support-popover-header">
-                <div class="support-popover-content">
-                    <p class="mb-2 small">Like this tool? Consider supporting!</p>
-                    <div class="d-flex flex-column gap-2">
-                        <a href="https://github.com/sgebb/bussin" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary w-100">
-                            <i class="bi bi-github me-1"></i> GitHub
-                        </a>
-                        <a href="https://github.com/sponsors/sgebb" target="_blank" rel="noopener" class="btn btn-sm btn-sponsor w-100">
-                            <i class="bi bi-heart-fill me-1"></i> Sponsor
-                        </a>
-                    </div>
-                </div>
-            </div>
-        }
     </div>
 
     <!-- Scrollable Favorites Section -->
@@ -127,7 +111,6 @@
     private bool isCreatingFolder = false;
     private string newFolderName = "";
     private string userName = "User";
-    private bool showSupportPopover = false;
     
     // Drag and drop state
     private string? draggedNamespace = null;
@@ -145,11 +128,6 @@
     private async Task OnDarkModeToggle()
     {
         await OnToggleDarkMode.InvokeAsync();
-    }
-
-    private void ToggleSupportPopover()
-    {
-        showSupportPopover = !showSupportPopover;
     }
 
     public void Dispose()

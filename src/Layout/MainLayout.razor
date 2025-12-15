@@ -27,6 +27,32 @@
                 <ToastNotification />
                 <BuildInfo />
 
+                <!-- Support Modal (rendered outside .page for proper z-index) -->
+                @if (NavState.ShowSupportModal)
+                {
+                    <div class="modal show d-block" tabindex="-1" data-theme="@(_isDarkMode ? "dark" : "light")" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 9999;" @onclick="NavState.HideSupportModal">
+                        <div class="modal-dialog modal-dialog-centered modal-sm">
+                            <div class="modal-content" @onclick:stopPropagation="true">
+                                <div class="modal-header">
+                                    <h5 class="modal-title"><i class="bi bi-heart-fill text-danger me-2"></i>Support bussin</h5>
+                                    <button type="button" class="btn-close" @onclick="NavState.HideSupportModal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="mb-3">Enjoying bussin? Give it a star or make a Github Issue if you have a request!</p>
+                                    <div class="d-flex flex-column gap-2">
+                                        <a href="https://github.com/sgebb/bussin" target="_blank" rel="noopener" class="btn btn-outline-secondary w-100">
+                                            <i class="bi bi-github me-1"></i> GitHub
+                                        </a>
+                                        <a href="https://github.com/sponsors/sgebb" target="_blank" rel="noopener" class="btn btn-sponsor w-100">
+                                            <i class="bi bi-heart-fill me-1"></i> Sponsor
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
                 <!-- Delete Folder Confirmation Modal (rendered outside .page for proper z-index) -->
                 @if (NavState.ShowDeleteFolderModal)
                 {
@@ -86,11 +112,17 @@
         // Subscribe to auth state changes to handle post-login initialization
         AuthStateProvider.AuthenticationStateChanged += OnAuthStateChanged;
         NavState.OnDeleteModalChange += OnDeleteModalChange;
+        NavState.OnSupportModalChange += OnSupportModalChange;
         
         await InitializeIfAuthenticatedAsync();
     }
 
     private void OnDeleteModalChange()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnSupportModalChange()
     {
         InvokeAsync(StateHasChanged);
     }
@@ -141,5 +173,6 @@
     {
         AuthStateProvider.AuthenticationStateChanged -= OnAuthStateChanged;
         NavState.OnDeleteModalChange -= OnDeleteModalChange;
+        NavState.OnSupportModalChange -= OnSupportModalChange;
     }
 }

@@ -15,8 +15,12 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     private string _folderNameToDelete = "";
     private int _folderNamespaceCount = 0;
 
+    // Support modal state
+    private bool _showSupportModal = false;
+
     public event Action? OnChange;
     public event Action? OnDeleteModalChange;
+    public event Action? OnSupportModalChange;
 
     public IReadOnlyList<Folder> Folders => _preferences?.Folders?.AsReadOnly() ?? new List<Folder>().AsReadOnly();
     public bool IsInitialized => _isInitialized;
@@ -26,6 +30,9 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     public string FolderIdToDelete => _folderIdToDelete;
     public string FolderNameToDelete => _folderNameToDelete;
     public int FolderNamespaceCount => _folderNamespaceCount;
+
+    // Support modal properties
+    public bool ShowSupportModal => _showSupportModal;
 
     public async Task InitializeAsync()
     {
@@ -281,5 +288,18 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
             await DeleteFolderAsync(_folderIdToDelete);
         }
         HideDeleteFolderModal();
+    }
+
+    // Support modal methods
+    public void ShowSupportModalDialog()
+    {
+        _showSupportModal = true;
+        OnSupportModalChange?.Invoke();
+    }
+
+    public void HideSupportModal()
+    {
+        _showSupportModal = false;
+        OnSupportModalChange?.Invoke();
     }
 }
