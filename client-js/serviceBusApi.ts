@@ -161,6 +161,74 @@ async function sendMessage(
     }
 }
 
+/**
+ * Send multiple messages to a queue in batch (single connection)
+ */
+async function sendQueueMessageBatch(
+    namespace: string,
+    queueName: string,
+    token: string,
+    messages: { body: string | object | null | undefined; properties?: MessageProperties }[]
+): Promise<void> {
+    return await sendMessageBatch(namespace, queueName, token, messages);
+}
+
+/**
+ * Send multiple messages to a topic in batch (single connection)
+ */
+async function sendTopicMessageBatch(
+    namespace: string,
+    topicName: string,
+    token: string,
+    messages: { body: string | object | null | undefined; properties?: MessageProperties }[]
+): Promise<void> {
+    return await sendMessageBatch(namespace, topicName, token, messages);
+}
+
+// Internal batch send implementation
+async function sendMessageBatch(
+    namespace: string,
+    entityPath: string,
+    token: string,
+    messages: { body: string | object | null | undefined; properties?: MessageProperties }[]
+): Promise<void> {
+    const connection = new ServiceBusConnection(namespace, token);
+    
+    try {
+        await connection.connect();
+        await connection.authenticateCBS(entityPath);
+        
+        const sender = new MessageSender(connection, entityPath);
+        await sender.open();
+        
+        const preparedMessages = messages.map(msg => {
+            const messageProps: MessageProperties = { ...msg.properties };
+            let bodyToSend: string;
+
+            if (typeof msg.body === 'string') {
+                bodyToSend = msg.body;
+            } else if (msg.body !== null && msg.body !== undefined) {
+                bodyToSend = JSON.stringify(msg.body);
+                if (!messageProps.content_type && !messageProps.contentType) {
+                    messageProps.content_type = 'application/json; charset=utf-8';
+                }
+            } else {
+                bodyToSend = '';
+            }
+            
+            return { body: bodyToSend, properties: messageProps };
+        });
+        
+        await sender.sendBatch(preparedMessages);
+        
+        sender.close();
+        connection.close();
+    } catch (err) {
+        connection.close();
+        throw new Error(`Batch send failed: ${(err as Error).message}`);
+    }
+}
+
 // ============================================================================
 // PEEK-LOCK OPERATIONS
 // ============================================================================
@@ -737,6 +805,137 @@ async function startMonitoring(
 }
 
 // ============================================================================
+// DELETE BY SEQUENCE NUMBER (Management API)
+// ============================================================================
+
+/**
+ * Delete messages from a queue by sequence numbers (direct, no lock needed)
+ * @param fromDeadLetter - If true, deletes from the dead letter queue
+ */
+async function deleteQueueMessagesBySequence(
+    namespace: string,
+    queueName: string,
+    token: string,
+    sequenceNumbers: number[],
+    fromDeadLetter: boolean = false
+): Promise<void> {
+    const entityPath = fromDeadLetter ? `${queueName}/$DeadLetterQueue` : queueName;
+    return await deleteMessagesBySequence(namespace, entityPath, token, sequenceNumbers);
+}
+
+/**
+ * Delete messages from a subscription by sequence numbers (direct, no lock needed)
+ * @param fromDeadLetter - If true, deletes from the dead letter queue
+ */
+async function deleteSubscriptionMessagesBySequence(
+    namespace: string,
+    topicName: string,
+    subscriptionName: string,
+    token: string,
+    sequenceNumbers: number[],
+    fromDeadLetter: boolean = false
+): Promise<void> {
+    const subscriptionPath = `${topicName}/subscriptions/${subscriptionName}`;
+    const entityPath = fromDeadLetter ? `${subscriptionPath}/$DeadLetterQueue` : subscriptionPath;
+    return await deleteMessagesBySequence(namespace, entityPath, token, sequenceNumbers);
+}
+
+// Internal implementation
+async function deleteMessagesBySequence(
+    namespace: string,
+    entityPath: string,
+    token: string,
+    sequenceNumbers: number[]
+): Promise<void> {
+    const connection = new ServiceBusConnection(namespace, token);
+    
+    try {
+        await connection.connect();
+        await connection.authenticateCBS(entityPath);
+        
+        const managementClient = new ManagementClient(connection, entityPath);
+        await managementClient.open();
+        
+        await managementClient.receiveAndDeleteBySequenceNumbers(sequenceNumbers);
+        
+        managementClient.close();
+        connection.close();
+    } catch (err) {
+        connection.close();
+        throw new Error(`Delete by sequence failed: ${(err as Error).message}`);
+    }
+}
+
+// ============================================================================
+// DEAD LETTER BY SEQUENCE NUMBER (Management API)
+// ============================================================================
+
+/**
+ * Dead letter messages from a queue by sequence numbers (direct, no FIFO lock needed)
+ */
+async function deadLetterQueueMessagesBySequence(
+    namespace: string,
+    queueName: string,
+    token: string,
+    sequenceNumbers: number[],
+    reason: string = 'Manual dead letter',
+    description: string = 'Moved by user'
+): Promise<void> {
+    return await deadLetterMessagesBySequence(namespace, queueName, token, sequenceNumbers, reason, description);
+}
+
+/**
+ * Dead letter messages from a subscription by sequence numbers (direct, no FIFO lock needed)
+ */
+async function deadLetterSubscriptionMessagesBySequence(
+    namespace: string,
+    topicName: string,
+    subscriptionName: string,
+    token: string,
+    sequenceNumbers: number[],
+    reason: string = 'Manual dead letter',
+    description: string = 'Moved by user'
+): Promise<void> {
+    const subscriptionPath = `${topicName}/subscriptions/${subscriptionName}`;
+    return await deadLetterMessagesBySequence(namespace, subscriptionPath, token, sequenceNumbers, reason, description);
+}
+
+// Internal implementation
+async function deadLetterMessagesBySequence(
+    namespace: string,
+    entityPath: string,
+    token: string,
+    sequenceNumbers: number[],
+    reason: string,
+    description: string
+): Promise<void> {
+    const connection = new ServiceBusConnection(namespace, token);
+    
+    try {
+        await connection.connect();
+        await connection.authenticateCBS(entityPath);
+        
+        const managementClient = new ManagementClient(connection, entityPath);
+        await managementClient.open();
+        
+        // Lock by sequence number (returns lock tokens for exactly those messages)
+        const locked = await managementClient.lockBySequenceNumbers(sequenceNumbers);
+        
+        if (locked.length > 0) {
+            // Dead letter using update-disposition
+            const lockTokens = locked.map(l => l.lockToken);
+            await managementClient.updateDisposition(lockTokens, 'suspended', reason, description);
+        }
+        
+        managementClient.close();
+        connection.close();
+    } catch (err) {
+        connection.close();
+        throw new Error(`Dead letter by sequence failed: ${(err as Error).message}`);
+    }
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -756,10 +955,16 @@ async function startMonitoring(
     // Send operations
     sendQueueMessage,
     sendTopicMessage,
+    sendQueueMessageBatch,
+    sendTopicMessageBatch,
     
     // Destructive operations
     purgeQueue,
     purgeSubscription,
+    deleteQueueMessagesBySequence,
+    deleteSubscriptionMessagesBySequence,
+    deadLetterQueueMessagesBySequence,
+    deadLetterSubscriptionMessagesBySequence,
     
     // Monitor operations
     monitorQueue,
@@ -781,10 +986,16 @@ export {
     // Send operations
     sendQueueMessage,
     sendTopicMessage,
+    sendQueueMessageBatch,
+    sendTopicMessageBatch,
     
     // Destructive operations
     purgeQueue,
     purgeSubscription,
+    deleteQueueMessagesBySequence,
+    deleteSubscriptionMessagesBySequence,
+    deadLetterQueueMessagesBySequence,
+    deadLetterSubscriptionMessagesBySequence,
     
     // Monitor operations
     monitorQueue,

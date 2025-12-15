@@ -54,13 +54,9 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     {
         try
         {
-            Console.WriteLine($"Calling JS: peekQueueMessages({namespaceName}, {queueName}, token[{token.Length} chars], {count}, {fromSequence}, {fromDeadLetter})");
-            
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
                 "ServiceBusAPI.peekQueueMessages",
                 namespaceName, queueName, token, count, fromSequence, fromDeadLetter);
-            
-            Console.WriteLine($"✓ JS returned {result.Length} messages");
             
             return result.Select(SafeDeserializeMessage)
                 .OfType<ServiceBusMessage>()
@@ -68,8 +64,7 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"✗ JS Error: {ex.Message}");
-            Console.WriteLine($"Stack: {ex.StackTrace}");
+            Console.WriteLine($"Error peeking queue messages: {ex.Message}");
             throw;
         }
     }
@@ -84,7 +79,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error sending queue message: {ex.Message}");
             throw;
         }
     }
@@ -103,12 +97,10 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
                 "awaitControllerPromise",
                 controllerRef);
             
-            Console.WriteLine($"Purge completed: {count} messages deleted");
             return count;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error purging queue: {ex.Message}");
             throw;
         }
     }
@@ -129,7 +121,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error locking queue messages: {ex.Message}");
             throw;
         }
     }
@@ -148,7 +139,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error locking subscription messages: {ex.Message}");
             throw;
         }
     }
@@ -165,7 +155,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error completing messages: {ex.Message}");
             throw;
         }
     }
@@ -182,7 +171,6 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error abandoning messages: {ex.Message}");
             throw;
         }
     }
@@ -240,6 +228,38 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
+    // Batch send operations
+    
+    public async Task SendQueueMessageBatchAsync(string namespaceName, string queueName, string token, object[] messages)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.sendQueueMessageBatch",
+                namespaceName, queueName, token, messages);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending queue message batch: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task SendTopicMessageBatchAsync(string namespaceName, string topicName, string token, object[] messages)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.sendTopicMessageBatch",
+                namespaceName, topicName, token, messages);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending topic message batch: {ex.Message}");
+            throw;
+        }
+    }
+
     public async Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, bool fromDeadLetter = false)
     {
         try
@@ -254,12 +274,10 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
                 "awaitControllerPromise",
                 controllerRef);
             
-            Console.WriteLine($"Purge completed: {count} messages deleted");
             return count;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error purging subscription: {ex.Message}");
             throw;
         }
     }
@@ -356,6 +374,70 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         catch (Exception ex)
         {
             Console.WriteLine($"Error starting purge: {ex.Message}");
+            throw;
+        }
+    }
+
+    // Delete by sequence number (direct, no lock needed)
+    
+    public async Task DeleteQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.deleteQueueMessagesBySequence",
+                namespaceName, queueName, token, sequenceNumbers, fromDeadLetter);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting queue messages by sequence: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task DeleteSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.deleteSubscriptionMessagesBySequence",
+                namespaceName, topicName, subscriptionName, token, sequenceNumbers, fromDeadLetter);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting subscription messages by sequence: {ex.Message}");
+            throw;
+        }
+    }
+
+    // Dead letter by sequence number (direct, no FIFO lock needed)
+    
+    public async Task DeadLetterQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, string reason = "Manual dead letter", string description = "Moved by user")
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.deadLetterQueueMessagesBySequence",
+                namespaceName, queueName, token, sequenceNumbers, reason, description);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error dead lettering queue messages by sequence: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task DeadLetterSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, string reason = "Manual dead letter", string description = "Moved by user")
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.deadLetterSubscriptionMessagesBySequence",
+                namespaceName, topicName, subscriptionName, token, sequenceNumbers, reason, description);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error dead lettering subscription messages by sequence: {ex.Message}");
             throw;
         }
     }

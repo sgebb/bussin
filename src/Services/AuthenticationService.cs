@@ -57,7 +57,6 @@ public sealed class AuthenticationService(
 
         if (result.TryGetToken(out var token))
         {
-            Console.WriteLine($"✓ Got Service Bus token (expires: {token.Expires})");
             return token.Value;
         }
 

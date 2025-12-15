@@ -59,6 +59,20 @@ export class MessageSender {
         await this.dispatchMessage(message);
     }
 
+    /**
+     * Send multiple messages in batch (single connection, multiple sends)
+     */
+    async sendBatch(messages: { body: string | null | undefined; properties: MessageProperties }[]): Promise<void> {
+        if (!this.sender) {
+            throw new Error('Sender not opened. Call open() first.');
+        }
+
+        for (const msg of messages) {
+            const amqpMessage = this.createAmqpMessage(msg.body, msg.properties);
+            await this.dispatchMessage(amqpMessage);
+        }
+    }
+
     private createAmqpMessage(body: string | null | undefined, properties: MessageProperties): any {
         const messageId = properties.message_id || properties.messageId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const textBody = this.normalizeBodyToString(body);
