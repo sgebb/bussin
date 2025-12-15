@@ -15,7 +15,7 @@
                         📡 Live Monitor: @EntityName
                         @if (isMonitoring)
                         {
-                            <span class="badge bg-success ms-2">ACTIVE</span>
+                            <span class="badge bg-success ms-2">LISTENING</span>
                         }
                         else
                         {
@@ -25,6 +25,9 @@
                     <button type="button" class="btn-close" @onclick="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Peek messages in real-time as they arrive. Messages are not consumed or deleted.
+                    </p>
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div>
                             <strong>Messages Received:</strong> @messages.Count

@@ -247,9 +247,10 @@
                             <i class="bi bi-gear-fill"></i>
                         </button>
                     </div>
-                    <button class="btn btn-action btn-info w-100 @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")" 
+                    <button class="btn btn-action btn-info w-100 @(!HasQueueOrSubscriptionSelected || isViewingDLQ ? "disabled-grey" : "")" 
                             @onclick="ShowMonitorModal"
-                            disabled="@(!HasQueueOrSubscriptionSelected)">
+                            disabled="@(!HasQueueOrSubscriptionSelected || isViewingDLQ)"
+                            title="@(isViewingDLQ ? "Monitoring not available for Dead Letter Queue" : "Monitor incoming messages")">
                         <i class="bi bi-graph-up"></i> Monitor
                     </button>
                 </div>
@@ -1160,16 +1161,21 @@
             detail: "Messages will be sent back to the main queue/subscription.",
             confirmText: "Resubmit",
             confirmClass: "btn-primary",
-            onConfirm: () => ExecuteBatchOperationAsync(
-                sequenceNumbers,
-                "resubmit",
-                async (seqNums) =>
-                {
-                    if (_state.IsQueueSelected)
-                        await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName!, seqNums.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
-                    else if (_state.IsSubscriptionSelected)
-                        await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName!, selectedSubscriptionName!, seqNums.ToArray(), isViewingDLQ, resubmitRemoveFromDLQ);
-                })
+            onConfirm: async () => 
+            {
+                var shouldRemoveFromView = resubmitRemoveFromDLQ;
+                await ExecuteBatchOperationAsync(
+                    sequenceNumbers,
+                    "resubmit",
+                    async (seqNums) =>
+                    {
+                        if (_state.IsQueueSelected)
+                            await OperationsService.ResendQueueMessagesAsync(NamespaceNameOnly, selectedQueueName!, seqNums.ToArray(), isViewingDLQ, shouldRemoveFromView);
+                        else if (_state.IsSubscriptionSelected)
+                            await OperationsService.ResendSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName!, selectedSubscriptionName!, seqNums.ToArray(), isViewingDLQ, shouldRemoveFromView);
+                    },
+                    removeFromView: shouldRemoveFromView);
+            }
         );
     }
 
@@ -1195,7 +1201,7 @@
         isResubmitModal = false;
     }
 
-    private async Task ExecuteBatchOperationAsync(List<long> sequenceNumbers, string operationName, Func<List<long>, Task> operation)
+    private async Task ExecuteBatchOperationAsync(List<long> sequenceNumbers, string operationName, Func<List<long>, Task> operation, bool removeFromView = true)
     {
         ConfirmModal.IsProcessing = true;
         errorMessage = null;
@@ -1204,13 +1210,16 @@
         {
             await operation(sequenceNumbers);
             
-            // Remove processed messages from the view and clear selection
-            peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
-            _messageListRef?.ClearSelection();
-            if (peekedMessages.Count == 0)
+            // Remove processed messages from the view and clear selection (only if they were actually removed)
+            if (removeFromView)
             {
-                peekFromSequence = 0;
+                peekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && sequenceNumbers.Contains(m.SequenceNumber.Value));
+                if (peekedMessages.Count == 0)
+                {
+                    peekFromSequence = 0;
+                }
             }
+            _messageListRef?.ClearSelection();
             
             var pastTense = operationName switch
             {

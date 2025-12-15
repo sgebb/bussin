@@ -297,25 +297,51 @@ pre {
 }
 
 .nav-header {
-    padding: 1rem;
+    padding: 1.5rem 1rem;
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 0.5rem;
     position: relative;
 }
 
 .nav-brand {
-    font-size: 1.5rem;
+    font-size: 3rem;
     font-weight: 600;
     cursor: pointer;
-    transition: color 0.2s ease, transform 0.2s ease;
+    transition: transform 0.2s ease;
 }
 
 .nav-brand:hover {
-    color: var(--link-color);
     transform: scale(1.05);
+}
+
+.nav-brand-bus {
+    color: #0d6efd;
+    transition: color 0.2s ease;
+}
+
+.nav-brand-sin {
+    color: var(--text-muted);
+    transition: color 0.2s ease;
+}
+
+.nav-brand:hover .nav-brand-bus {
+    color: #0a58ca;
+}
+
+.nav-brand:hover .nav-brand-sin {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .nav-brand-bus {
+    color: #6ea8fe;
+}
+
+[data-theme="dark"] .nav-brand:hover .nav-brand-bus {
+    color: #9ec5fe;
 }
 
 .nav-favorites-scroll {
