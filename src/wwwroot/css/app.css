@@ -303,7 +303,6 @@ pre {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
     position: relative;
 }
 
@@ -311,36 +310,52 @@ pre {
     font-size: 3rem;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s ease;
+    position: relative;
+    display: inline-block;
 }
 
-.nav-brand:hover {
-    transform: scale(1.05);
-}
-
-.nav-brand-bus {
+.nav-brand-text {
     color: #0d6efd;
-    transition: color 0.2s ease;
+    position: relative;
+    z-index: 1;
+    transition: letter-spacing 0.3s ease;
 }
 
-.nav-brand-sin {
-    color: var(--text-muted);
-    transition: color 0.2s ease;
+.nav-brand-blur {
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: #0d6efd;
+    opacity: 0;
+    filter: blur(0);
+    transform: translateX(0);
+    transition: all 0.3s ease;
+    pointer-events: none;
 }
 
-.nav-brand:hover .nav-brand-bus {
-    color: #0a58ca;
+.nav-brand:hover .nav-brand-text {
+    letter-spacing: 0.05em;
 }
 
-.nav-brand:hover .nav-brand-sin {
-    color: var(--text-color);
+.nav-brand:hover .nav-brand-blur {
+    opacity: 0.4;
+    filter: blur(4px);
+    transform: translateX(-8px);
 }
 
-[data-theme="dark"] .nav-brand-bus {
+[data-theme="dark"] .nav-brand-text {
     color: #6ea8fe;
 }
 
-[data-theme="dark"] .nav-brand:hover .nav-brand-bus {
+[data-theme="dark"] .nav-brand-blur {
+    color: #6ea8fe;
+}
+
+[data-theme="dark"] .nav-brand:hover .nav-brand-text {
+    color: #9ec5fe;
+}
+
+[data-theme="dark"] .nav-brand:hover .nav-brand-blur {
     color: #9ec5fe;
 }
 
@@ -365,12 +380,15 @@ pre {
 }
 
 .support-heart-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
     background: none;
     border: none;
-    padding: 0.5rem;
+    padding: 0.25rem;
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 1rem;
+    font-size: 0.9rem;
     border-radius: 50%;
     transition: all 0.2s ease;
 }
@@ -406,6 +424,18 @@ pre {
     padding: 1rem;
     min-width: 220px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-github {
+    background-color: #238636;
+    border-color: #238636;
+    color: white;
+}
+
+.btn-github:hover {
+    background-color: #2ea043;
+    border-color: #2ea043;
+    color: white;
 }
 
 .btn-sponsor {
