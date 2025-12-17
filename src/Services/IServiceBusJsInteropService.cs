@@ -1,7 +1,7 @@
-using Microsoft.JSInterop;
-using ServiceBusExplorer.Blazor.Models;
+﻿using Microsoft.JSInterop;
+using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public interface IServiceBusJsInteropService
 {

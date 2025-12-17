@@ -1,7 +1,7 @@
-using Microsoft.AspNetCore.Components.Web;
+﻿using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using ServiceBusExplorer.Blazor;
-using ServiceBusExplorer.Blazor.Services;
+using Bussin;
+using Bussin.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");

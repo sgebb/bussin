@@ -1,4 +1,4 @@
-namespace ServiceBusExplorer.Blazor.Models;
+﻿namespace Bussin.Models;
 
 public enum ConnectionType
 {

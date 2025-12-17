@@ -1,4 +1,4 @@
-@using ServiceBusExplorer.Blazor.Models
+﻿@using Bussin.Models
 
 <div class="message-list">
     @if (Messages.Any())
@@ -19,19 +19,19 @@
                     <div class="btn-group btn-group-sm">
                         <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@(IsProcessing || RequiresSession)" 
                                 title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete selected messages")">
-                            <span class="me-1">🗑️</span> Delete (@SelectedMessages.Count)
+                            Delete (@SelectedMessages.Count)
                         </button>
                         @if (IsDLQ)
                         {
                             <button class="btn btn-success" @onclick="OnResubmitSelected" disabled="@IsProcessing">
-                                <span class="me-1">↩️</span> Resubmit (@SelectedMessages.Count)
+                                Resubmit (@SelectedMessages.Count)
                             </button>
                         }
                         else
                         {
                             <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@(IsProcessing || RequiresSession)"
                                     title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
-                                <span class="me-1">⚠️</span> Move to DLQ (@SelectedMessages.Count)
+                                Move to DLQ (@SelectedMessages.Count)
                             </button>
                         }
                     </div>

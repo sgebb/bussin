@@ -1,6 +1,6 @@
-using Azure.Core;
+﻿using Azure.Core;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public interface IAuthenticationService
 {

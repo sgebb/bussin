@@ -1,4 +1,4 @@
-@using ServiceBusExplorer.Blazor.Models
+﻿@using Bussin.Models
 @using System.Text.Json
 
 @if (IsVisible && Message != null)
@@ -143,7 +143,7 @@
                         <div class="position-relative">
                             <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" 
                                     @onclick="CopyBody">
-                                📋 Copy
+                                Copy
                             </button>
                             <pre class="p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
                         </div>

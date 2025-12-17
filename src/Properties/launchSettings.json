@@ -1,6 +1,6 @@
-{
+﻿{
   "profiles": {
-    "ServiceBusExplorer.Blazor": {
+    "Bussin": {
       "commandName": "Project",
       "launchBrowser": true,
       "environmentVariables": {

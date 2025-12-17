@@ -1,4 +1,4 @@
-namespace ServiceBusExplorer.Blazor.Services;
+﻿namespace Bussin.Services;
 
 /// <summary>
 /// Service for managing confirmation modal dialogs.

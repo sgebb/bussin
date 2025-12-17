@@ -1,6 +1,6 @@
-@using Microsoft.JSInterop
-@using ServiceBusExplorer.Blazor.Models
-@using ServiceBusExplorer.Blazor.Services
+﻿@using Microsoft.JSInterop
+@using Bussin.Models
+@using Bussin.Services
 @inject IServiceBusJsInteropService JsInterop
 @inject IAuthenticationService AuthService
 @implements IDisposable
@@ -12,7 +12,7 @@
             <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        📡 Live Monitor: @EntityName
+                        Live Monitor: @EntityName
                         @if (isMonitoring)
                         {
                             <span class="badge bg-success ms-2">LISTENING</span>
@@ -36,17 +36,17 @@
                             @if (!isMonitoring)
                             {
                                 <button class="btn btn-success" @onclick="StartMonitoring">
-                                    ▶️ Start Monitoring
+                                    Start Monitoring
                                 </button>
                             }
                             else
                             {
                                 <button class="btn btn-danger" @onclick="StopMonitoring">
-                                    ⏹️ Stop Monitoring
+                                    Stop Monitoring
                                 </button>
                             }
                             <button class="btn btn-outline-secondary" @onclick="ClearMessages">
-                                🗑️ Clear
+                                Clear
                             </button>
                         </div>
                     </div>

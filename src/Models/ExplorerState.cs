@@ -1,4 +1,4 @@
-namespace ServiceBusExplorer.Blazor.Models;
+﻿namespace Bussin.Models;
 
 /// <summary>
 /// Holds the current entity selection state for the Explorer page.

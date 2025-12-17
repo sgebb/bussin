@@ -1,8 +1,8 @@
-using Microsoft.JSInterop;
+﻿using Microsoft.JSInterop;
 using System.Text.Json;
-using ServiceBusExplorer.Blazor.Models;
+using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public sealed class PreferencesService(IJSRuntime jsRuntime) : IPreferencesService
 {

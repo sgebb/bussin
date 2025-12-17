@@ -1,7 +1,7 @@
-using System.Text.Json;
-using ServiceBusExplorer.Blazor.Models;
+﻿using System.Text.Json;
+using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public interface IMessageParsingService
 {

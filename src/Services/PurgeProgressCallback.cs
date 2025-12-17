@@ -1,6 +1,6 @@
-using Microsoft.JSInterop;
+﻿using Microsoft.JSInterop;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 /// <summary>
 /// Callback handler for purge progress updates

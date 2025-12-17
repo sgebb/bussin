@@ -1,9 +1,9 @@
-using Azure.Core;
+﻿using Azure.Core;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ServiceBus;
-using ServiceBusExplorer.Blazor.Models;
+using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public sealed class AzureResourceService : IAzureResourceService
 {

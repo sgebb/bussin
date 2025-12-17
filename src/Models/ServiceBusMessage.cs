@@ -1,6 +1,6 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
-namespace ServiceBusExplorer.Blazor.Models;
+namespace Bussin.Models;
 
 public class ServiceBusMessage
 {

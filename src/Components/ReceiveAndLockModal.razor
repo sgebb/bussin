@@ -1,4 +1,4 @@
-@using ServiceBusExplorer.Blazor.Models
+﻿@using Bussin.Models
 @inject IServiceBusOperationsService OperationsService
 
 @if (IsVisible)
@@ -7,7 +7,7 @@
         <div class="modal-dialog modal-xl">
             <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
-                    <h5 class="modal-title">🔒 Receive & Lock Messages</h5>
+                    <h5 class="modal-title">Receive & Lock Messages</h5>
                     <button type="button" class="btn-close" @onclick="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -30,7 +30,7 @@
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
                             }
-                            🔒 Lock Messages
+                            Lock Messages
                         </button>
                     </div>
 
@@ -42,7 +42,7 @@
                     @if (lockedMessages.Any())
                     {
                         <div class="alert alert-success">
-                            <strong>✓ Locked @lockedMessages.Count message(s)</strong>
+                            <strong>Locked @lockedMessages.Count message(s)</strong>
                             <p class="mb-0 mt-2">
                                 <small>These messages are now locked to you. Choose an action below or they will automatically unlock after the lock duration expires.</small>
                             </p>
@@ -52,13 +52,13 @@
                         <div class="mb-3">
                             <div class="btn-group" role="group">
                                 <button class="btn btn-success" @onclick="CompleteAll" disabled="@isProcessing">
-                                    ✓ Complete All (Delete)
+                                    Complete All (Delete)
                                 </button>
                                 <button class="btn btn-warning" @onclick="AbandonAll" disabled="@isProcessing">
-                                    ↩️ Abandon All (Release Lock)
+                                    Abandon All (Release Lock)
                                 </button>
                                 <button class="btn btn-danger" @onclick="DeadLetterAll" disabled="@isProcessing">
-                                    ⚠️ Dead Letter All
+                                    Dead Letter All
                                 </button>
                             </div>
                         </div>
@@ -79,7 +79,7 @@
                                             </h6>
                                             <p class="mb-1"><small>@GetMessagePreview(msg)</small></p>
                                             <small class="text-muted">
-                                                🔒 Lock Token: <code>@msg.LockToken</code>
+                                                Lock Token: <code>@msg.LockToken</code>
                                                 @if (msg.LockedUntil.HasValue)
                                                 {
                                                     <span class="ms-2">Locked until: @msg.LockedUntil.Value.ToLocalTime().ToString("HH:mm:ss")</span>
@@ -88,13 +88,13 @@
                                         </div>
                                         <div class="btn-group-vertical btn-group-sm">
                                             <button class="btn btn-outline-success" @onclick="() => CompleteSingle(msg.LockToken!)" disabled="@isProcessing">
-                                                ✓ Complete
+                                                Complete
                                             </button>
                                             <button class="btn btn-outline-warning" @onclick="() => AbandonSingle(msg.LockToken!)" disabled="@isProcessing">
-                                                ↩️ Abandon
+                                                Abandon
                                             </button>
                                             <button class="btn btn-outline-danger" @onclick="() => DeadLetterSingle(msg.LockToken!)" disabled="@isProcessing">
-                                                ⚠️ DLQ
+                                                DLQ
                                             </button>
                                         </div>
                                     </div>

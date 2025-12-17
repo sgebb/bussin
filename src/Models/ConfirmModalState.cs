@@ -1,4 +1,4 @@
-namespace ServiceBusExplorer.Blazor.Models;
+﻿namespace Bussin.Models;
 
 /// <summary>
 /// Encapsulates the state for a confirmation modal dialog.

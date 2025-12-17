@@ -1,8 +1,8 @@
-using Microsoft.JSInterop;
-using ServiceBusExplorer.Blazor.Models;
+﻿using Microsoft.JSInterop;
+using Bussin.Models;
 using System.Text.Json;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 /// <summary>
 /// Callback handler for continuous message monitoring

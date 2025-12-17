@@ -1,8 +1,8 @@
-using Azure.Core;
+﻿using Azure.Core;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public sealed class AuthenticationService(
     IAccessTokenProvider tokenProvider, 
@@ -26,14 +26,14 @@ public sealed class AuthenticationService(
 
             if (result.TryGetToken(out var token))
             {
-                Console.WriteLine($"✓ Got Management API token (expires: {token.Expires})");
+                Console.WriteLine($"OK: Got Management API token (expires: {token.Expires})");
                 return new AccessTokenCredential(token.Value, token.Expires);
             }
 
-            Console.WriteLine($"✗ Failed to get Management API token. Status: {result.Status}");
+            Console.WriteLine($"ERROR: Failed to get Management API token. Status: {result.Status}");
             if (result.Status == AccessTokenResultStatus.RequiresRedirect)
             {
-                Console.WriteLine("⚠ Requires redirect - user needs to sign in");
+                Console.WriteLine("WARN: Requires redirect - user needs to sign in");
                 // The redirect will be handled automatically by MSAL
             }
 
@@ -41,7 +41,7 @@ public sealed class AuthenticationService(
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"✗ Exception getting Management API token: {ex.Message}");
+            Console.WriteLine($"ERROR: Exception getting Management API token: {ex.Message}");
             return null;
         }
     }
@@ -60,11 +60,11 @@ public sealed class AuthenticationService(
             return token.Value;
         }
 
-        Console.WriteLine($"✗ Failed to get Service Bus token. Status: {result.Status}");
+        Console.WriteLine($"ERROR: Failed to get Service Bus token. Status: {result.Status}");
         
         if (result.Status == AccessTokenResultStatus.RequiresRedirect)
         {
-            Console.WriteLine("⚠ Service Bus scope requires consent.");
+            Console.WriteLine("WARN: Service Bus scope requires consent.");
             Console.WriteLine("   This usually means the user needs to sign out and sign in again to consent to all required scopes.");
             Console.WriteLine("   Or admin consent wasn't granted for the Service Bus API permission.");
         }

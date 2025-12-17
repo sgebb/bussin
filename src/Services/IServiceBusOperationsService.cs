@@ -1,6 +1,6 @@
-using ServiceBusExplorer.Blazor.Models;
+﻿using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 /// <summary>
 /// High-level service that combines JS interop operations with notification support

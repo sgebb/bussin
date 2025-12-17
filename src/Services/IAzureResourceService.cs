@@ -1,7 +1,7 @@
-using Azure.Core;
-using ServiceBusExplorer.Blazor.Models;
+﻿using Azure.Core;
+using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public interface IAzureResourceService
 {

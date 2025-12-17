@@ -1,6 +1,6 @@
-using ServiceBusExplorer.Blazor.Models;
+﻿using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public interface IPreferencesService
 {

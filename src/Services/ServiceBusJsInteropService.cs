@@ -1,8 +1,8 @@
-using Microsoft.JSInterop;
+﻿using Microsoft.JSInterop;
 using System.Text.Json;
-using ServiceBusExplorer.Blazor.Models;
+using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJsInteropService
 {
@@ -22,7 +22,7 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
         catch (JsonException ex)
         {
-            Console.WriteLine($"⚠️ Failed to deserialize message: {ex.Message}");
+            Console.WriteLine($"WARN: Failed to deserialize message: {ex.Message}");
             Console.WriteLine($"   Problem: {ex.Path} - {ex.InnerException?.Message}");
             
             // Try to extract at least the body and messageId for display
@@ -42,7 +42,7 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
             catch
             {
                 // If we can't even extract basic info, return null
-                Console.WriteLine($"⚠️ Could not extract any message data");
+                Console.WriteLine("WARN: Could not extract any message data");
                 return null;
             }
         }

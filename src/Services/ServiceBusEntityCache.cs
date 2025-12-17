@@ -1,7 +1,7 @@
-using ServiceBusExplorer.Blazor.Models;
+﻿using Bussin.Models;
 using System.Collections.Concurrent;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public class ServiceBusEntityCache
 {

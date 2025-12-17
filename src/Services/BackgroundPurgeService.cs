@@ -1,8 +1,8 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
-using ServiceBusExplorer.Blazor.Models;
+using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 /// <summary>
 /// Service for managing background purge operations

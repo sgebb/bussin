@@ -1,4 +1,4 @@
-namespace ServiceBusExplorer.Blazor.Services;
+﻿namespace Bussin.Services;
 
 public interface INotificationService
 {

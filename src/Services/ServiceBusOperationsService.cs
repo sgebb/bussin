@@ -1,6 +1,6 @@
-using ServiceBusExplorer.Blazor.Models;
+﻿using Bussin.Models;
 
-namespace ServiceBusExplorer.Blazor.Services;
+namespace Bussin.Services;
 
 public sealed class ServiceBusOperationsService : IServiceBusOperationsService
 {
@@ -24,7 +24,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         if (string.IsNullOrEmpty(token))
         {
             var errorMsg = "Service Bus token not available. You may need to sign out and sign in again to consent to the Service Bus scope.";
-            Console.WriteLine($"✗ {errorMsg}");
+            Console.WriteLine($"ERROR: {errorMsg}");
             throw new InvalidOperationException(errorMsg);
         }
         return token;
