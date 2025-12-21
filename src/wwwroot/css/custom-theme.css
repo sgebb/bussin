@@ -1,77 +1,136 @@
 ﻿/* Custom Color Theme
-   Primary: #BECF91 (Sage Green)
-   Secondary: #874B36 (Brown)
-   Accent: #0D022C (Dark Purple)
+   Primary: Teal/Cyan - Professional, modern, accessible
+   Secondary: Slate - Neutral, versatile
+   Accent: Indigo - For links and highlights
+   Destructive: Red - For dangerous actions
+   Success: Green - For confirmations
 */
 
 :root {
-    /* Core Palette */
-    --sage-light: #D4E3B3;
-    --sage-main: #BECF91;
-    --sage-dark: #9CAF71;
-    --sage-darker: #4A6741;
+    /* Core Palette - Light Mode */
+    --teal-50: #F0FDFA;
+    --teal-100: #CCFBF1;
+    --teal-200: #99F6E4;
+    --teal-500: #14B8A6;
+    --teal-600: #0D9488;
+    --teal-700: #0F766E;
+    --teal-800: #115E59;
     
-    --brown-light: #A35D42;
-    --brown-main: #874B36;
-    --brown-dark: #6A3B2A;
+    --slate-50: #F8FAFC;
+    --slate-100: #F1F5F9;
+    --slate-200: #E2E8F0;
+    --slate-300: #CBD5E1;
+    --slate-400: #94A3B8;
+    --slate-500: #64748B;
+    --slate-600: #475569;
+    --slate-700: #334155;
+    --slate-800: #1E293B;
+    --slate-900: #0F172A;
     
-    --purple-light: #1F0D4E;
-    --purple-main: #0D022C;
+    --indigo-500: #6366F1;
+    --indigo-600: #4F46E5;
+    --indigo-700: #4338CA;
     
-    /* Semantic Functional Colors - Light Mode Default */
-    --primary-color: var(--sage-main);
-    --primary-fg: var(--purple-main);
+    --mocha-400: #A1887F;
+    --mocha-500: #8D6E63;
+    --mocha-600: #795548;
+    --mocha-700: #6D4C41;
     
-    --action-color: var(--sage-darker);
-    --action-hover: var(--sage-dark);
+    --red-500: #EF4444;
+    --red-600: #DC2626;
+    --red-700: #B91C1C;
     
-    --link-color: var(--action-color);
+    --green-500: #22C55E;
+    --green-600: #16A34A;
+    --green-700: #15803D;
     
-    --bg-color: #F9FAFB;
+    --amber-500: #F59E0B;
+    --amber-600: #D97706;
+    
+    /* Semantic Functional Colors - Light Mode */
+    --primary-color: var(--teal-600);
+    --primary-hover: var(--teal-700);
+    --primary-light: var(--teal-100);
+    --primary-fg: #FFFFFF;
+    
+    --secondary-color: var(--mocha-500);
+    --secondary-hover: var(--mocha-600);
+    --secondary-fg: #FFFFFF;
+    
+    --destructive-color: var(--red-600);
+    --destructive-hover: var(--red-700);
+    --destructive-fg: #FFFFFF;
+    
+    --success-color: var(--green-600);
+    --success-hover: var(--green-700);
+    --success-fg: #FFFFFF;
+    
+    --warning-color: var(--amber-500);
+    --warning-hover: var(--amber-600);
+    
+    --link-color: var(--indigo-600);
+    --link-hover: var(--indigo-700);
+    
+    --bg-color: var(--slate-50);
     --surface-color: #FFFFFF;
-    --surface-border: #E5E7EB;
+    --surface-border: var(--slate-200);
     
-    --text-color: #1F2937;
-    --text-muted: #6B7280;
+    --text-color: var(--slate-800);
+    --text-muted: var(--slate-500);
     
     --sidebar-bg: #FFFFFF;
     --card-bg: #FFFFFF;
-    --border-color: #E5E7EB;
+    --border-color: var(--slate-200);
     --input-bg: #FFFFFF;
-    --input-border: #D1D5DB;
+    --input-border: var(--slate-300);
     
-    --hover-bg: #F3F4F6;
+    --hover-bg: var(--slate-100);
     
-    --header-text: #111827;
+    --header-text: var(--slate-900);
 }
 
 /* Dark Mode Overrides */
 [data-theme='dark'] {
-    /* Semantic Functional Colors - Dark Mode */
-    --primary-color: var(--sage-main);
-    --primary-fg: var(--purple-main);
+    /* Button colors stay the same in dark mode for consistency */
+    --primary-color: var(--teal-600);
+    --primary-hover: var(--teal-700);
+    --primary-light: var(--teal-800);
+    --primary-fg: #FFFFFF;
     
-    --action-color: var(--sage-light);
-    --action-hover: #FFFFFF;
+    --secondary-color: var(--mocha-500);
+    --secondary-hover: var(--mocha-600);
+    --secondary-fg: #FFFFFF;
     
-    --link-color: var(--action-color);
+    --destructive-color: var(--red-600);
+    --destructive-hover: var(--red-700);
+    --destructive-fg: #FFFFFF;
     
-    --bg-color: #111827;
-    --surface-color: #1F2937;
-    --surface-border: #374151;
+    --success-color: var(--green-600);
+    --success-hover: var(--green-700);
+    --success-fg: #FFFFFF;
     
-    --text-color: #F9FAFB;
-    --text-muted: #9CA3AF;
+    --link-color: var(--teal-200);
+    --link-hover: var(--teal-100);
     
-    --sidebar-bg: #1F2937;
-    --card-bg: #1F2937;
-    --border-color: #374151;
-    --input-bg: #111827;
-    --input-border: #4B5563;
+    --bg-color: var(--slate-900);
+    --surface-color: var(--slate-800);
+    --surface-border: var(--slate-700);
     
-    --hover-bg: #374151;
+    --text-color: var(--slate-100);
+    --text-muted: var(--slate-400);
+    
+    --sidebar-bg: var(--slate-800);
+    --card-bg: var(--slate-800);
+    --border-color: var(--slate-700);
+    --input-bg: var(--slate-900);
+    --input-border: var(--slate-600);
+    
+    --hover-bg: var(--slate-700);
     
     --header-text: #FFFFFF;
+    
+    /* Invert logo for dark mode visibility */
+    --logo-filter: invert(1);
 }
 
 /* Global Resets & Utilities */
@@ -102,52 +161,138 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Links */
 a, .btn-link {
-    color: var(--action-color);
+    color: var(--link-color);
     text-decoration: none;
     transition: color 0.2s ease;
 }
 
 a:hover, .btn-link:hover {
-    color: var(--action-hover);
+    color: var(--link-hover);
     text-decoration: underline;
 }
 
-/* Buttons - Primary */
+/* Buttons - Primary (main actions like Peek, Send) */
 .btn-primary {
     background-color: var(--primary-color) !important;
     border-color: var(--primary-color) !important;
     color: var(--primary-fg) !important;
-    font-weight: 600;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }
 
-.btn-primary:hover, .btn-primary:focus {
-    background-color: var(--sage-light) !important;
-    border-color: var(--sage-light) !important;
-    color: var(--purple-main) !important;
+.btn-primary:hover:not(:disabled), .btn-primary:focus:not(:disabled) {
+    background-color: var(--primary-hover) !important;
+    border-color: var(--primary-hover) !important;
+    color: var(--primary-fg) !important;
 }
 
 .btn-outline-primary {
-    color: var(--action-color) !important;
-    border-color: var(--action-color) !important;
+    color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
     background-color: transparent !important;
+    transition: all 0.2s ease;
 }
 
-.btn-outline-primary:hover {
+.btn-outline-primary:hover:not(:disabled) {
     background-color: var(--primary-color) !important;
     border-color: var(--primary-color) !important;
     color: var(--primary-fg) !important;
 }
 
-/* Buttons - Secondary */
-.btn-secondary, .btn-info {
-    background-color: var(--brown-main) !important;
-    border-color: var(--brown-main) !important;
-    color: #FFFFFF !important;
+/* Buttons - Secondary (cancel, back, less important actions) */
+.btn-secondary {
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    color: var(--secondary-fg) !important;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }
 
-.btn-secondary:hover, .btn-info:hover {
-    background-color: var(--brown-light) !important;
-    border-color: var(--brown-light) !important;
+.btn-secondary:hover:not(:disabled) {
+    background-color: var(--secondary-hover) !important;
+    border-color: var(--secondary-hover) !important;
+}
+
+.btn-outline-secondary {
+    color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    background-color: transparent !important;
+    transition: all 0.2s ease;
+}
+
+.btn-outline-secondary:hover:not(:disabled) {
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    color: var(--secondary-fg) !important;
+}
+
+/* Buttons - Success (Send message, confirmations) */
+.btn-success {
+    background-color: var(--success-color) !important;
+    border-color: var(--success-color) !important;
+    color: var(--success-fg) !important;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-success:hover:not(:disabled) {
+    background-color: var(--success-hover) !important;
+    border-color: var(--success-hover) !important;
+}
+
+/* Buttons - Danger/Destructive (Delete, Purge) */
+.btn-danger {
+    background-color: var(--destructive-color) !important;
+    border-color: var(--destructive-color) !important;
+    color: var(--destructive-fg) !important;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background-color: var(--destructive-hover) !important;
+    border-color: var(--destructive-hover) !important;
+}
+
+.btn-outline-danger {
+    color: var(--destructive-color) !important;
+    border-color: var(--destructive-color) !important;
+    background-color: transparent !important;
+    transition: all 0.2s ease;
+}
+
+.btn-outline-danger:hover:not(:disabled) {
+    background-color: var(--destructive-color) !important;
+    border-color: var(--destructive-color) !important;
+    color: var(--destructive-fg) !important;
+}
+
+/* Buttons - Info (Monitor, secondary features) */
+.btn-info {
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    color: var(--secondary-fg) !important;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-info:hover:not(:disabled) {
+    background-color: var(--secondary-hover) !important;
+    border-color: var(--secondary-hover) !important;
+}
+
+/* Buttons - Warning */
+.btn-warning {
+    background-color: var(--warning-color) !important;
+    border-color: var(--warning-color) !important;
+    color: var(--slate-900) !important;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background-color: var(--warning-hover) !important;
+    border-color: var(--warning-hover) !important;
 }
 
 /* Sidebar & NavMenu specific fixes */
@@ -172,12 +317,17 @@ a:hover, .btn-link:hover {
 
 .user-section {
     color: var(--text-color);
-    background-color: var(--surface-color);
-    border: 1px solid var(--border-color);
 }
 
-.user-section:hover {
-    border-color: var(--primary-color);
+/* Resubmit modal delete option - styled as destructive */
+.resubmit-delete-option {
+    background-color: rgba(220, 38, 38, 0.1);
+    border: 1px solid var(--destructive-color);
+}
+
+.resubmit-delete-option .form-check-input:checked {
+    background-color: var(--destructive-color);
+    border-color: var(--destructive-color);
 }
 
 /* Input Fields */
@@ -189,7 +339,7 @@ a:hover, .btn-link:hover {
 
 .form-control:focus, .form-select:focus {
     border-color: var(--primary-color) !important;
-    box-shadow: 0 0 0 0.25rem rgba(190, 207, 145, 0.25) !important;
+    box-shadow: 0 0 0 0.25rem rgba(13, 148, 136, 0.25) !important;
 }
 
 /* Explorer Page Specifics */
@@ -247,6 +397,29 @@ a:hover, .btn-link:hover {
     opacity: 1;
 }
 
+/* Rename Button (Explorer) */
+.rename-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.6;
+}
+
+.rename-btn:hover {
+    color: var(--primary-color);
+    opacity: 1;
+}
+
+.namespace-rename-input {
+    font-size: 1.5rem;
+    font-weight: 600;
+    max-width: 400px;
+}
+
 /* Namespace Cards (Home) */
 .namespace-card {
     background-color: var(--surface-color) !important;
@@ -281,14 +454,14 @@ a:hover, .btn-link:hover {
 
 /* Alerts */
 .alert-info {
-    background-color: rgba(190, 207, 145, 0.1) !important;
-    border-color: var(--sage-main) !important;
+    background-color: rgba(13, 148, 136, 0.1) !important;
+    border-color: var(--primary-color) !important;
     color: var(--text-color) !important;
 }
 
 [data-theme='dark'] .alert-info {
-    background-color: rgba(190, 207, 145, 0.05) !important;
-    color: var(--sage-light) !important;
+    background-color: rgba(20, 184, 166, 0.1) !important;
+    color: var(--teal-200) !important;
 }
 
 /* Alert success/warning in dark mode - ensure text is readable */
@@ -352,4 +525,21 @@ a:hover, .btn-link:hover {
 .accordion-body {
     background-color: var(--surface-color) !important;
     color: var(--text-color) !important;
+}
+
+/* Toast Notifications - use theme colors */
+.toast.bg-success {
+    background-color: var(--primary-color) !important;
+}
+
+.toast.bg-danger {
+    background-color: var(--destructive-color) !important;
+}
+
+.toast.bg-warning {
+    background-color: var(--warning-color) !important;
+}
+
+.toast.bg-info {
+    background-color: var(--primary-color) !important;
 }

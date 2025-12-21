@@ -8,7 +8,7 @@
             <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
                     <h5 class="modal-title">Message Details</h5>
-                    <button type="button" class="btn-close" @onclick="Close"></button>
+                    <button type="button" class="btn-close" @onclick="Close" title="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row">
@@ -142,46 +142,43 @@
                         <h6 class="border-bottom pb-2">Message Body</h6>
                         <div class="position-relative">
                             <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" 
-                                    @onclick="CopyBody">
-                                Copy
+                                    @onclick="CopyBody" title="Copy to clipboard">
+                                <i class="bi bi-clipboard"></i>
                             </button>
                             <pre class="p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <div class="btn-group me-auto">
-                        <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession)"
-                                title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete message")">
+                <div class="modal-footer justify-content-end">
+                    <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession)"
+                            title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete message")">
+                        @if (IsProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Delete
+                    </button>
+                    @if (IsDLQ)
+                    {
+                        <button class="btn btn-primary" @onclick="ResubmitMessage" disabled="@IsProcessing">
                             @if (IsProcessing)
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
                             }
-                            Delete
+                            Resubmit
                         </button>
-                        @if (IsDLQ)
-                        {
-                            <button class="btn btn-success" @onclick="ResubmitMessage" disabled="@IsProcessing">
-                                @if (IsProcessing)
-                                {
-                                    <span class="spinner-border spinner-border-sm me-2"></span>
-                                }
-                                Resubmit
-                            </button>
-                        }
-                        else
-                        {
-                            <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession)"
-                                    title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
-                                @if (IsProcessing)
-                                {
-                                    <span class="spinner-border spinner-border-sm me-2"></span>
-                                }
-                                Move to Dead Letter Queue
-                            </button>
-                        }
-                    </div>
-                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession)"
+                                title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
+                            @if (IsProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Move to DLQ
+                        </button>
+                    }
                 </div>
             </div>
         </div>

@@ -12,4 +12,5 @@ public sealed class Folder
     public required string Name { get; set; }
     public List<NamespaceConnection> Namespaces { get; set; } = new();
     public bool IsExpanded { get; set; } = false;
+    public string? ParentId { get; set; } = null;
 }

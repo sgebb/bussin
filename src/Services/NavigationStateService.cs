@@ -257,6 +257,85 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
             .FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
     }
 
+    public IEnumerable<Folder> GetChildFolders(string? parentId)
+    {
+        if (!_isInitialized || _preferences?.Folders == null) return Enumerable.Empty<Folder>();
+        return _preferences.Folders.Where(f => f.ParentId == parentId);
+    }
+
+    public IEnumerable<Folder> GetRootFolders()
+    {
+        return GetChildFolders(null);
+    }
+
+    public Folder? GetFolder(string folderId)
+    {
+        if (!_isInitialized || _preferences?.Folders == null) return null;
+        return _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
+    }
+
+    public async Task RenameFolderAsync(string folderId, string newName)
+    {
+        if (!_isInitialized || _preferences?.Folders == null) return;
+        if (folderId == DefaultFolderId) return;
+
+        var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
+        if (folder != null)
+        {
+            folder.Name = newName;
+            await preferencesService.SavePreferencesAsync(_preferences);
+            NotifyStateChanged();
+        }
+    }
+
+    public async Task MoveFolderAsync(string folderId, string? targetParentId)
+    {
+        if (!_isInitialized || _preferences?.Folders == null) return;
+        if (folderId == DefaultFolderId) return;
+        if (folderId == targetParentId) return;
+
+        var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
+        if (folder == null) return;
+
+        if (targetParentId != null && !_preferences.Folders.Any(f => f.Id == targetParentId))
+            return;
+
+        if (IsDescendantOf(targetParentId, folderId))
+            return;
+
+        folder.ParentId = targetParentId;
+        await preferencesService.SavePreferencesAsync(_preferences);
+        NotifyStateChanged();
+    }
+
+    private bool IsDescendantOf(string? potentialDescendantId, string ancestorId)
+    {
+        if (potentialDescendantId == null) return false;
+        
+        var current = _preferences.Folders.FirstOrDefault(f => f.Id == potentialDescendantId);
+        while (current != null)
+        {
+            if (current.ParentId == ancestorId) return true;
+            if (current.ParentId == null) return false;
+            current = _preferences.Folders.FirstOrDefault(f => f.Id == current.ParentId);
+        }
+        return false;
+    }
+
+    public int GetFolderDepth(string folderId)
+    {
+        if (!_isInitialized || _preferences?.Folders == null) return 0;
+        
+        int depth = 0;
+        var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
+        while (folder?.ParentId != null)
+        {
+            depth++;
+            folder = _preferences.Folders.FirstOrDefault(f => f.Id == folder.ParentId);
+        }
+        return depth;
+    }
+
     private void NotifyStateChanged() => OnChange?.Invoke();
 
     // Delete folder modal methods

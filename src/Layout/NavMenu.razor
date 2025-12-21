@@ -6,13 +6,10 @@
 <div class="nav-menu">
     <!-- Clickable Header -->
     <div class="nav-header">
-<span class="nav-brand" @onclick="@(() => Navigation.NavigateTo("/"))">
+        <a class="nav-brand" href="/" @onclick:preventDefault @onclick="@(() => Navigation.NavigateTo("/"))">
+            <img src="favicon.svg" alt="bussin logo" class="nav-brand-logo" />
             <span class="nav-brand-text">bussin</span>
-            <span class="nav-brand-blur">bussin</span>
-        </span>
-        <button class="support-heart-btn" @onclick="NavState.ShowSupportModalDialog" @onclick:stopPropagation="true" title="Support & Contribute">
-            <i class="bi bi-heart-fill"></i>
-        </button>
+        </a>
     </div>
 
     <!-- Scrollable Favorites Section -->
@@ -23,49 +20,7 @@
                     @if (NavState.IsInitialized && NavState.Folders.Any())
                     {
                         <div class="px-3 mt-3">
-                            @foreach (var folder in NavState.Folders)
-                            {
-                                <div class="mb-2">
-                                    <div class="folder-header d-flex align-items-center justify-content-between @(dragOverFolderId == folder.Id ? "drag-over" : "")"
-                                         @ondragover="(e) => OnDragOver(e, folder.Id)"
-                                         @ondragover:preventDefault="true"
-                                         @ondragleave="OnDragLeave"
-                                         @ondrop="(e) => OnDrop(e, folder.Id)"
-                                         @ondrop:preventDefault="true">
-                                        <div @onclick="() => ToggleFolder(folder.Id)" style="cursor: pointer; flex: 1;">
-                                            <span class="me-2">@(folder.IsExpanded ? "▼" : "▶")</span>
-                                            <strong>@folder.Name</strong>
-                                            <small class="text-muted ms-2">(@folder.Namespaces.Count)</small>
-                                        </div>
-                                        @if (folder.Name != "Favorites")
-                                        {
-                                            <button class="btn btn-sm btn-danger" 
-                                                    @onclick="() => NavState.ShowDeleteFolderConfirmation(folder.Id, folder.Name)" 
-                                                    @onclick:stopPropagation="true" 
-                                                    title="Delete folder"
-                                                    style="padding: 0.125rem 0.375rem;">
-                                                <i class="bi bi-x-lg"></i>
-                                            </button>
-                                        }
-                                    </div>
-                                    @if (folder.IsExpanded)
-                                    {
-                                        <div class="mt-2 ms-3">
-                                            @foreach (var ns in folder.Namespaces.OrderBy(n => n.DisplayName))
-                                            {
-                                                <a href="@GetExplorerUrl(ns)" 
-                                                   class="recent-namespace-tile d-block mb-2 p-2"
-                                                   draggable="true"
-                                                   @ondragstart="() => OnDragStart(ns.FullyQualifiedNamespace)"
-                                                   @ondragend="OnDragEnd">
-                                                    <div class="fw-semibold">@ns.DisplayName</div>
-                                                    <small class="text-muted text-truncate d-block" title="@ns.FullyQualifiedNamespace">@ns.FullyQualifiedNamespace</small>
-                                                </a>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                            }
+                            @RenderFavoritesSection()
                             
                             @if (!isCreatingFolder)
                             {
@@ -100,9 +55,14 @@
                 <i class="bi bi-person-circle"></i>
                 <span class="ms-2">@userName</span>
             </div>
-            <button class="dark-mode-icon-btn" @onclick="OnDarkModeToggle" title="@(IsDarkMode ? "Switch to light mode" : "Switch to dark mode")">
-                <i class="bi @(IsDarkMode ? "bi-moon-fill" : "bi-sun-fill")"></i>
-            </button>
+            <div class="footer-icons">
+                <button class="footer-icon-btn" @onclick="NavState.ShowSupportModalDialog" title="Support & Contribute">
+                    <i class="bi bi-heart-fill"></i>
+                </button>
+                <button class="footer-icon-btn" @onclick="OnDarkModeToggle" title="@(IsDarkMode ? "Switch to light mode" : "Switch to dark mode")">
+                    <i class="bi @(IsDarkMode ? "bi-moon-fill" : "bi-sun-fill")"></i>
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -117,7 +77,11 @@
     
     // Drag and drop state
     private string? draggedNamespace = null;
+    private string? draggedFolderId = null;
     private string? dragOverFolderId = null;
+    private DragItemType dragItemType = DragItemType.None;
+
+    private enum DragItemType { None, Namespace, Folder }
 
     protected override async Task OnInitializedAsync()
     {
@@ -181,22 +145,37 @@
         }
     }
 
-    // Drag and drop handlers
-    private void OnDragStart(string fullyQualifiedNamespace)
+    // Drag and drop handlers for namespaces
+    private void OnNamespaceDragStart(string fullyQualifiedNamespace)
     {
         draggedNamespace = fullyQualifiedNamespace;
+        draggedFolderId = null;
+        dragItemType = DragItemType.Namespace;
+    }
+
+    // Drag and drop handlers for folders
+    private void OnFolderDragStart(string folderId)
+    {
+        draggedFolderId = folderId;
+        draggedNamespace = null;
+        dragItemType = DragItemType.Folder;
     }
 
     private void OnDragEnd()
     {
         draggedNamespace = null;
+        draggedFolderId = null;
         dragOverFolderId = null;
+        dragItemType = DragItemType.None;
     }
 
     private void OnDragOver(DragEventArgs e, string folderId)
     {
-        if (!string.IsNullOrEmpty(draggedNamespace))
+        if (dragItemType != DragItemType.None)
         {
+            // Don't allow dropping a folder onto itself
+            if (dragItemType == DragItemType.Folder && draggedFolderId == folderId)
+                return;
             dragOverFolderId = folderId;
         }
     }
@@ -210,10 +189,154 @@
     {
         dragOverFolderId = null;
         
-        if (!string.IsNullOrEmpty(draggedNamespace))
+        if (dragItemType == DragItemType.Namespace && !string.IsNullOrEmpty(draggedNamespace))
         {
             await NavState.MoveNamespaceToFolderAsync(draggedNamespace, targetFolderId);
-            draggedNamespace = null;
         }
+        else if (dragItemType == DragItemType.Folder && !string.IsNullOrEmpty(draggedFolderId))
+        {
+            await NavState.MoveFolderAsync(draggedFolderId, targetFolderId);
+        }
+        
+        draggedNamespace = null;
+        draggedFolderId = null;
+        dragItemType = DragItemType.None;
     }
+
+    private RenderFragment RenderFavoritesSection() => __builder =>
+    {
+        // Get the default "Favorites" folder and show its namespaces directly
+        var defaultFolder = NavState.GetFolder("namespaces");
+        if (defaultFolder != null)
+        {
+            var namespaces = defaultFolder.Namespaces.OrderBy(n => n.DisplayName).ToList();
+            foreach (var ns in namespaces)
+            {
+                var nsUrl = GetExplorerUrl(ns);
+                var nsFqn = ns.FullyQualifiedNamespace;
+                
+                __builder.OpenElement(0, "a");
+                __builder.AddAttribute(1, "href", nsUrl);
+                __builder.AddAttribute(2, "class", "recent-namespace-tile d-block mb-2 p-2");
+                __builder.AddAttribute(3, "draggable", "true");
+                __builder.AddAttribute(4, "ondragstart", EventCallback.Factory.Create(this, () => OnNamespaceDragStart(nsFqn)));
+                __builder.AddAttribute(5, "ondragend", EventCallback.Factory.Create(this, OnDragEnd));
+                __builder.OpenElement(6, "div");
+                __builder.AddAttribute(7, "class", "fw-semibold");
+                __builder.AddContent(8, ns.DisplayName);
+                __builder.CloseElement();
+                __builder.OpenElement(9, "small");
+                __builder.AddAttribute(10, "class", "text-muted text-truncate d-block");
+                __builder.AddAttribute(11, "title", nsFqn);
+                __builder.AddContent(12, nsFqn);
+                __builder.CloseElement();
+                __builder.CloseElement();
+            }
+        }
+        
+        // Now render other folders (not the default one)
+        var otherFolders = NavState.GetRootFolders().Where(f => f.Id != "namespaces").ToList();
+        foreach (var folder in otherFolders)
+        {
+            __builder.AddContent(13, RenderFolder(folder, 0));
+        }
+    };
+
+    private RenderFragment RenderFolder(Folder folder, int depth) => __builder =>
+    {
+        var folderId = folder.Id;
+        var folderName = folder.Name;
+        var childFolders = NavState.GetChildFolders(folderId).ToList();
+        var totalCount = folder.Namespaces.Count + childFolders.Count;
+        var isExpanded = folder.IsExpanded;
+        var namespaces = folder.Namespaces.OrderBy(n => n.DisplayName).ToList();
+        var indentStyle = depth > 0 ? $"margin-left: {depth * 1}rem;" : "";
+        
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "mb-2");
+        __builder.AddAttribute(2, "style", indentStyle);
+        
+        // Folder header
+        __builder.OpenElement(3, "div");
+        __builder.AddAttribute(4, "class", $"folder-header d-flex align-items-center justify-content-between {(dragOverFolderId == folderId ? "drag-over" : "")}");
+        __builder.AddAttribute(5, "draggable", "true");
+        __builder.AddAttribute(6, "ondragstart", EventCallback.Factory.Create(this, () => OnFolderDragStart(folderId)));
+        __builder.AddAttribute(7, "ondragend", EventCallback.Factory.Create(this, OnDragEnd));
+        __builder.AddAttribute(8, "ondragover", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnDragOver(e, folderId)));
+        __builder.AddAttribute(9, "ondragleave", EventCallback.Factory.Create(this, OnDragLeave));
+        __builder.AddAttribute(10, "ondrop", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnDrop(e, folderId)));
+        __builder.AddEventPreventDefaultAttribute(11, "ondragover", true);
+        __builder.AddEventPreventDefaultAttribute(12, "ondrop", true);
+        
+        // Clickable folder name area
+        __builder.OpenElement(13, "div");
+        __builder.AddAttribute(14, "onclick", EventCallback.Factory.Create(this, () => ToggleFolder(folderId)));
+        __builder.AddAttribute(15, "style", "cursor: pointer; flex: 1;");
+        __builder.OpenElement(16, "span");
+        __builder.AddAttribute(17, "class", "me-2");
+        __builder.AddContent(18, isExpanded ? "▼" : "▶");
+        __builder.CloseElement();
+        __builder.OpenElement(19, "strong");
+        __builder.AddContent(20, folderName);
+        __builder.CloseElement();
+        __builder.OpenElement(21, "small");
+        __builder.AddAttribute(22, "class", "text-muted ms-2");
+        __builder.AddContent(23, $"({totalCount})");
+        __builder.CloseElement();
+        __builder.CloseElement();
+        
+        // Delete button
+        __builder.OpenElement(24, "button");
+        __builder.AddAttribute(25, "class", "btn btn-sm btn-outline-danger folder-delete-btn");
+        __builder.AddAttribute(26, "onclick", EventCallback.Factory.Create(this, () => NavState.ShowDeleteFolderConfirmation(folderId, folderName)));
+        __builder.AddEventStopPropagationAttribute(27, "onclick", true);
+        __builder.AddAttribute(28, "title", "Delete folder");
+        __builder.OpenElement(29, "i");
+        __builder.AddAttribute(30, "class", "bi bi-x-lg");
+        __builder.CloseElement();
+        __builder.CloseElement();
+        
+        __builder.CloseElement(); // folder-header
+        
+        // Expanded content
+        if (isExpanded)
+        {
+            __builder.OpenElement(31, "div");
+            __builder.AddAttribute(32, "class", "mt-2 ms-3");
+            
+            // Namespaces
+            foreach (var ns in namespaces)
+            {
+                var nsUrl = GetExplorerUrl(ns);
+                var nsFqn = ns.FullyQualifiedNamespace;
+                
+                __builder.OpenElement(33, "a");
+                __builder.AddAttribute(34, "href", nsUrl);
+                __builder.AddAttribute(35, "class", "recent-namespace-tile d-block mb-2 p-2");
+                __builder.AddAttribute(36, "draggable", "true");
+                __builder.AddAttribute(37, "ondragstart", EventCallback.Factory.Create(this, () => OnNamespaceDragStart(nsFqn)));
+                __builder.AddAttribute(38, "ondragend", EventCallback.Factory.Create(this, OnDragEnd));
+                __builder.OpenElement(39, "div");
+                __builder.AddAttribute(40, "class", "fw-semibold");
+                __builder.AddContent(41, ns.DisplayName);
+                __builder.CloseElement();
+                __builder.OpenElement(42, "small");
+                __builder.AddAttribute(43, "class", "text-muted text-truncate d-block");
+                __builder.AddAttribute(44, "title", nsFqn);
+                __builder.AddContent(45, nsFqn);
+                __builder.CloseElement();
+                __builder.CloseElement();
+            }
+            
+            // Recursive child folders
+            foreach (var childFolder in childFolders)
+            {
+                __builder.AddContent(46, RenderFolder(childFolder, depth + 1));
+            }
+            
+            __builder.CloseElement(); // expanded content div
+        }
+        
+        __builder.CloseElement(); // outer div
+    };
 }

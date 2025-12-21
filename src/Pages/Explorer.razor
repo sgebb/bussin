@@ -19,25 +19,53 @@
 <div class="explorer-layout">
     <!-- Section 1: Compact Header -->
     <div class="explorer-header">
-        <div class="d-flex align-items-center gap-2">
-            <h1 class="explorer-namespace-title mb-0">@displayName</h1>
-            <button class="favorite-toggle-btn @(NavState.IsFavorite(NamespaceParam ?? "") ? "favorited" : "not-favorited")" 
-                    @onclick="() => ToggleFavorite()" 
-                    title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Remove from favorites" : "Add to favorites")">
-                @(NavState.IsFavorite(NamespaceParam ?? "") ? "★" : "☆")
-            </button>
-            @if (isLoadingEntities)
-            {
-                <div class="spinner-border spinner-border-sm text-muted" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-            }
-            else
-            {
-                <button class="refresh-btn" @onclick="RefreshEntities" title="Refresh queues and topics">
-                    <i class="bi bi-arrow-clockwise"></i>
+        <div class="d-flex align-items-center justify-content-between w-100">
+            <div class="d-flex align-items-center gap-2">
+                @if (isEditingDisplayName)
+                {
+                    <input type="text" class="form-control form-control-lg namespace-rename-input" 
+                           @bind="editDisplayName" 
+                           @bind:event="oninput"
+                           @onkeydown="HandleRenameKeyDown"
+                           @onblur="CancelRename" />
+                    <button class="btn btn-sm btn-primary" @onclick="SaveDisplayName" disabled="@string.IsNullOrWhiteSpace(editDisplayName)">
+                        <i class="bi bi-check-lg"></i>
+                    </button>
+                    <button class="btn btn-sm btn-secondary" @onclick="CancelRename">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                }
+                else
+                {
+                    <h1 class="explorer-namespace-title mb-0">@displayName</h1>
+                    @if (NavState.IsFavorite(NamespaceParam ?? ""))
+                    {
+                        <button class="rename-btn" @onclick="StartRename" title="Rename namespace">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                    }
+                }
+                <button class="favorite-toggle-btn @(NavState.IsFavorite(NamespaceParam ?? "") ? "favorited" : "not-favorited")" 
+                        @onclick="() => ToggleFavorite()" 
+                        title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Remove from favorites" : "Add to favorites")">
+                    @(NavState.IsFavorite(NamespaceParam ?? "") ? "★" : "☆")
                 </button>
-            }
+                @if (isLoadingEntities)
+                {
+                    <div class="spinner-border spinner-border-sm text-muted" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                }
+                else
+                {
+                    <button class="refresh-btn" @onclick="RefreshEntities" title="Refresh queues and topics">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                }
+            </div>
+            <div class="namespace-fqdn text-muted" title="@NamespaceParam">
+                @NamespaceParam
+            </div>
         </div>
     </div>
 
@@ -205,14 +233,19 @@
             </div>
 
             <div class="explorer-actions-sidebar">
-                <!-- DLQ Toggle - always visible -->
-                <div class="action-btn-group dlq-toggle-group @(isViewingDLQ ? "dlq-active" : "")">
+                <!-- Send + DLQ Toggle Row -->
+                <div class="send-dlq-row">
+                    <button class="btn btn-action btn-primary send-btn @(!CanSend ? "disabled-grey" : "")" 
+                            @onclick="ShowSendMessageModal" 
+                            disabled="@(!CanSend)"
+                            title="Send a message">
+                        <i class="bi bi-envelope-fill"></i> Send
+                    </button>
                     <button class="dlq-toggle-btn @(isViewingDLQ ? "active" : "") @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")" 
                             @onclick="ToggleDLQ"
                             disabled="@(!HasQueueOrSubscriptionSelected)"
                             title="@(HasQueueOrSubscriptionSelected ? (isViewingDLQ ? "Viewing Dead Letter Queue" : "Switch to Dead Letter Queue") : "Select a queue or subscription first")">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                        <span>Dead Letter Queue</span>
+                        <span>DLQ</span>
                         <span class="dlq-checkbox @(isViewingDLQ ? "checked" : "")">
                             @if (isViewingDLQ)
                             {
@@ -226,28 +259,24 @@
                     </button>
                 </div>
 
-                <!-- Actions - always visible -->
+                <!-- Read Actions -->
                 <div class="action-btn-group">
-                    <div class="action-btn-group-title">Actions</div>
-                    <button class="btn btn-action btn-success w-100 @(!CanSend ? "disabled-grey" : "")" 
-                            @onclick="ShowSendMessageModal" 
-                            disabled="@(!CanSend)">
-                        <i class="bi bi-envelope"></i> Send
-                    </button>
-                    <div class="d-flex gap-1">
-                        <button class="btn btn-action btn-primary flex-grow-1 @(!HasQueueOrSubscriptionSelected || isPeeking ? "disabled-grey" : "")" 
+                    <div class="action-btn-group-title">Read</div>
+                    <div class="peek-btn-combined @(!HasQueueOrSubscriptionSelected || isPeeking ? "disabled" : "")">
+                        <button class="peek-btn-main" 
                                 @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" 
                                 disabled="@(!HasQueueOrSubscriptionSelected || isPeeking)">
                             <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
                         </button>
-                        <button class="btn btn-action btn-outline-primary peek-options-btn @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")" 
+                        <button class="peek-btn-options" 
                                 @onclick="ShowPeekOptionsModal"
+                                @onclick:stopPropagation="true"
                                 disabled="@(!HasQueueOrSubscriptionSelected)"
                                 title="Peek with options">
-                            <i class="bi bi-gear-fill"></i>
+                            <i class="bi bi-chevron-down"></i>
                         </button>
                     </div>
-                    <button class="btn btn-action btn-info w-100 @(!HasQueueOrSubscriptionSelected || isViewingDLQ ? "disabled-grey" : "")" 
+                    <button class="btn btn-action btn-secondary w-100 @(!HasQueueOrSubscriptionSelected || isViewingDLQ ? "disabled-grey" : "")" 
                             @onclick="ShowMonitorModal"
                             disabled="@(!HasQueueOrSubscriptionSelected || isViewingDLQ)"
                             title="@(isViewingDLQ ? "Monitoring not available for Dead Letter Queue" : "Monitor incoming messages")">
@@ -255,7 +284,7 @@
                     </button>
                 </div>
 
-                <!-- Dangerous Actions - always visible -->
+                <!-- Dangerous Actions -->
                 <div class="action-btn-group">
                     <div class="action-btn-group-title">Dangerous</div>
                     <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || isPurging || SelectedEntityRequiresSession ? "disabled-grey" : "")" 
@@ -331,9 +360,14 @@
              OnCancel="@OnConfirmModalCancel">
     @if (isResubmitModal)
     {
-        <div class="form-check mt-3">
-            <input class="form-check-input" type="checkbox" id="removeFromDlq" @bind="resubmitRemoveFromDLQ">
-            <label class="form-check-label" for="removeFromDlq">Remove from Dead Letter Queue</label>
+        <div class="resubmit-delete-option mt-3 p-3 rounded">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="removeFromDlq" @bind="resubmitRemoveFromDLQ">
+                <label class="form-check-label" for="removeFromDlq">
+                    <strong>Delete from Dead Letter Queue after resubmit</strong>
+                    <small class="d-block text-muted">This will permanently remove the message from the DLQ</small>
+                </label>
+            </div>
         </div>
     }
 </ConfirmModal>
@@ -404,6 +438,10 @@
     private MessageList? _messageListRef;
     private string? errorMessage;
     private string displayName = "";
+    
+    // Rename state
+    private bool isEditingDisplayName = false;
+    private string editDisplayName = "";
     
     // Computed properties
     private string NamespaceNameOnly => _state.NamespaceNameOnly;
@@ -488,6 +526,41 @@
             }
             
             await NavState.AddToFavoritesAsync(NamespaceParam, ResourceGroupParam, SubscriptionIdParam, displayName);
+        }
+    }
+
+    private void StartRename()
+    {
+        editDisplayName = displayName;
+        isEditingDisplayName = true;
+    }
+
+    private void CancelRename()
+    {
+        isEditingDisplayName = false;
+        editDisplayName = "";
+    }
+
+    private async Task SaveDisplayName()
+    {
+        if (string.IsNullOrWhiteSpace(editDisplayName) || string.IsNullOrEmpty(NamespaceParam)) return;
+        
+        await NavState.RenameNamespaceAsync(NamespaceParam, editDisplayName.Trim());
+        displayName = editDisplayName.Trim();
+        isEditingDisplayName = false;
+        editDisplayName = "";
+        NotificationService.NotifySuccess("Namespace renamed");
+    }
+
+    private async Task HandleRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(editDisplayName))
+        {
+            await SaveDisplayName();
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelRename();
         }
     }
 
@@ -732,11 +805,11 @@
             if (messages.Count > 0)
             {
                 var suffix = append ? " more" : "";
-                NotificationService.NotifySuccess($"Peeked {messages.Count}{suffix} messages");
+                NotificationService.NotifySuccess($"Peeked {messages.Count}{suffix} messages", "peek-result");
             }
             else
             {
-                NotificationService.NotifyInfo(append ? "No more messages available." : "No messages found");
+                NotificationService.NotifyInfo(append ? "No more messages available." : "No messages found", "peek-result");
             }
         }
         catch (Exception ex)
@@ -1036,11 +1109,11 @@
 
             if (messages.Count > 0)
             {
-                NotificationService.NotifySuccess($"Peeked {messages.Count} messages");
+                NotificationService.NotifySuccess($"Peeked {messages.Count} messages", "peek-result");
             }
             else
             {
-                NotificationService.NotifyInfo("No messages found");
+                NotificationService.NotifyInfo("No messages found", "peek-result");
             }
         }
         catch (Exception ex)

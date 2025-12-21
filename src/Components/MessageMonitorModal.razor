@@ -28,35 +28,21 @@
                     <p class="text-muted small mb-3">
                         Peek messages in real-time as they arrive. Messages are not consumed or deleted.
                     </p>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div>
-                            <strong>Messages Received:</strong> @messages.Count
-                        </div>
-                        <div class="btn-group">
-                            @if (!isMonitoring)
-                            {
-                                <button class="btn btn-success" @onclick="StartMonitoring">
-                                    Start Monitoring
-                                </button>
-                            }
-                            else
-                            {
-                                <button class="btn btn-danger" @onclick="StopMonitoring">
-                                    Stop Monitoring
-                                </button>
-                            }
-                            <button class="btn btn-outline-secondary" @onclick="ClearMessages">
-                                Clear
-                            </button>
-                        </div>
-                    </div>
-
                     @if (!string.IsNullOrEmpty(errorMessage))
                     {
                         <div class="alert alert-danger">@errorMessage</div>
                     }
 
-                    <div class="border rounded p-2" style="max-height: 500px; overflow-y: auto; background-color: #f8f9fa;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <strong>Messages Received:</strong> @messages.Count
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="ClearMessages" title="Clear messages">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+
+                    <div class="border rounded p-2" style="max-height: 500px; overflow-y: auto; background-color: var(--surface-color);">
                         @if (messages.Count == 0)
                         {
                             <div class="text-muted text-center py-5">
@@ -104,7 +90,18 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                    @if (!isMonitoring)
+                    {
+                        <button class="btn btn-primary" @onclick="StartMonitoring">
+                            <i class="bi bi-play-fill"></i> Start Monitoring
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-danger" @onclick="StopMonitoring">
+                            <i class="bi bi-stop-fill"></i> Stop Monitoring
+                        </button>
+                    }
                 </div>
             </div>
         </div>
