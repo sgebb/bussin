@@ -14,56 +14,39 @@
                     <button type="button" class="btn-close" @onclick="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <!-- Scope/Entity Selection Row -->
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold">Scope</label>
-                            <select class="form-select" @bind="SelectedScope" @bind:after="OnSelectionChanged">
-                                <option value="namespace">Entire Namespace</option>
-                                @if (hasQueues)
-                                {
-                                    <option value="queue">Specific Queue</option>
-                                }
-                                @if (hasTopics)
-                                {
-                                    <option value="topic">Specific Topic</option>
-                                }
-                            </select>
-                        </div>
-                        
-                        @if (SelectedScope == "queue" && hasQueues)
-                        {
-                            <div class="col-md-8">
-                                <label class="form-label fw-bold">Queue</label>
-                                <select class="form-select" @bind="selectedEntityName" @bind:after="OnSelectionChanged">
-                                    <option value="">-- Select a queue --</option>
-                                    @foreach (var queue in Queues)
+                    <!-- Single dropdown with optgroups -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">View statistics for:</label>
+                        <select class="form-select" @bind="selectedValue" @bind:after="OnSelectionChanged">
+                            <option value="namespace:">Entire Namespace</option>
+                            
+                            @if (Queues.Any())
+                            {
+                                <optgroup label="Queues">
+                                    @foreach (var queue in Queues.OrderBy(q => q.Name))
                                     {
-                                        <option value="@queue.Name">@queue.Name</option>
+                                        <option value="queue:@queue.Name">@queue.Name</option>
                                     }
-                                </select>
-                            </div>
-                        }
-                        else if (SelectedScope == "topic" && hasTopics)
-                        {
-                            <div class="col-md-8">
-                                <label class="form-label fw-bold">Topic</label>
-                                <select class="form-select" @bind="selectedEntityName" @bind:after="OnSelectionChanged">
-                                    <option value="">-- Select a topic --</option>
-                                    @foreach (var topic in Topics)
+                                </optgroup>
+                            }
+                            
+                            @if (Topics.Any())
+                            {
+                                <optgroup label="Topics">
+                                    @foreach (var topic in Topics.OrderBy(t => t.Name))
                                     {
-                                        <option value="@topic.Name">@topic.Name</option>
+                                        <option value="topic:@topic.Name">@topic.Name</option>
                                     }
-                                </select>
-                            </div>
-                        }
+                                </optgroup>
+                            }
+                        </select>
                     </div>
 
                     <!-- Stats Panel with key to force re-render -->
                     <StatsPanel @key="statsPanelKey"
                                 NamespaceInfo="@NamespaceInfo"
-                                EntityName="@GetEntityNameForStats()"
-                                EntityType="@GetEntityTypeForStats()"
+                                EntityName="@GetEntityName()"
+                                EntityType="@GetEntityType()"
                                 AutoLoad="true" />
                 </div>
                 <div class="modal-footer">
@@ -81,47 +64,42 @@
     [Parameter] public List<ServiceBusQueueInfo> Queues { get; set; } = new();
     [Parameter] public List<ServiceBusTopicInfo> Topics { get; set; } = new();
 
-    private string SelectedScope { get; set; } = "namespace";
-    private string selectedEntityName = "";
-    private int statsPanelKey = 0; // Used to force StatsPanel to re-render
-    
-    private bool hasQueues => Queues.Any();
-    private bool hasTopics => Topics.Any();
+    private string selectedValue = "namespace:";
+    private int statsPanelKey = 0;
 
     private void OnSelectionChanged()
     {
-        // When scope changes to namespace, clear entity name
-        if (SelectedScope == "namespace")
-        {
-            selectedEntityName = "";
-        }
-        
         // Increment key to force StatsPanel to re-create and auto-load
         statsPanelKey++;
     }
 
-    private string? GetEntityNameForStats()
+    private string? GetEntityName()
     {
-        if (SelectedScope == "namespace")
+        if (string.IsNullOrEmpty(selectedValue) || selectedValue == "namespace:")
             return null;
         
-        return string.IsNullOrEmpty(selectedEntityName) ? null : selectedEntityName;
+        // Format is "type:name"
+        var parts = selectedValue.Split(':', 2);
+        return parts.Length == 2 ? parts[1] : null;
     }
 
-    private string? GetEntityTypeForStats()
+    private string? GetEntityType()
     {
-        return SelectedScope switch
+        if (string.IsNullOrEmpty(selectedValue) || selectedValue == "namespace:")
+            return null;
+        
+        // Format is "type:name"
+        var parts = selectedValue.Split(':', 2);
+        if (parts.Length == 2 && !string.IsNullOrEmpty(parts[1]))
         {
-            "queue" when !string.IsNullOrEmpty(selectedEntityName) => "queue",
-            "topic" when !string.IsNullOrEmpty(selectedEntityName) => "topic",
-            _ => null
-        };
+            return parts[0]; // "queue" or "topic"
+        }
+        return null;
     }
 
     private async Task Close()
     {
-        SelectedScope = "namespace";
-        selectedEntityName = "";
+        selectedValue = "namespace:";
         statsPanelKey = 0;
         await OnClose.InvokeAsync();
     }
