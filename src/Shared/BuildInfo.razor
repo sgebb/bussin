@@ -1,75 +1,67 @@
 @inject HttpClient Http
-@inject IJSRuntime JS
+@inject NavigationStateService NavState
+@implements IDisposable
 
-@if (buildInfo != null)
+@if (NavState.ShowBuildModal && buildInfo != null)
 {
-    <div class="build-info-badge" @onclick="ToggleDetails">
-        <span class="badge bg-secondary">
-            <span class="me-1">🔨</span>
-            Build: @buildInfo.CommitShort
-        </span>
-    </div>
+    <div class="build-info-modal" @onclick="NavState.HideBuildModal">
+        <div class="build-info-content" @onclick:stopPropagation>
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-hammer me-2"></i>Build Information</h5>
+                    <button type="button" class="btn-close" @onclick="NavState.HideBuildModal"></button>
+                </div>
+                <div class="card-body">
+                    <p class="lead">This build is verifiable and matches the open-source code on GitHub.</p>
+                    
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <th>Commit Hash:</th>
+                                <td><code>@buildInfo.CommitShort</code></td>
+                            </tr>
+                            <tr>
+                                <th>Build Time:</th>
+                                <td>@FormatBuildTime(buildInfo.BuildTime)</td>
+                            </tr>
+                            <tr>
+                                <th>Branch:</th>
+                                <td>@buildInfo.Branch</td>
+                            </tr>
+                            <tr>
+                                <th>Repository:</th>
+                                <td><a href="https://github.com/@buildInfo.Repository" target="_blank">@buildInfo.Repository</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
 
-    @if (showDetails)
-    {
-        <div class="build-info-modal" @onclick="ToggleDetails">
-            <div class="build-info-content" @onclick:stopPropagation>
-                <div class="card">
-                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Build Information</h5>
-                        <button type="button" class="btn-close btn-close-white" @onclick="ToggleDetails"></button>
+                    <div class="alert alert-info">
+                        <strong>🔍 Verify this build:</strong>
+                        <p class="mb-2">Click below to see the exact source code that was used to build this deployment.</p>
+                        <a href="@buildInfo.VerifyUrl" target="_blank" class="btn btn-primary btn-sm">
+                            View Source Code on GitHub
+                        </a>
                     </div>
-                    <div class="card-body">
-                        <p class="lead">This build is verifiable and matches the open-source code on GitHub.</p>
-                        
-                        <table class="table table-sm">
-                            <tbody>
-                                <tr>
-                                    <th>Commit Hash:</th>
-                                    <td><code>@buildInfo.CommitShort</code></td>
-                                </tr>
-                                <tr>
-                                    <th>Build Time:</th>
-                                    <td>@FormatBuildTime(buildInfo.BuildTime)</td>
-                                </tr>
-                                <tr>
-                                    <th>Branch:</th>
-                                    <td>@buildInfo.Branch</td>
-                                </tr>
-                                <tr>
-                                    <th>Repository:</th>
-                                    <td><a href="https://github.com/@buildInfo.Repository" target="_blank">@buildInfo.Repository</a></td>
-                                </tr>
-                            </tbody>
-                        </table>
 
-                        <div class="alert alert-info">
-                            <strong>🔍 Verify this build:</strong>
-                            <p class="mb-2">Click below to see the exact source code that was used to build this deployment.</p>
-                            <a href="@buildInfo.VerifyUrl" target="_blank" class="btn btn-primary btn-sm">
-                                View Source Code on GitHub
-                            </a>
-                        </div>
-
-                        <div class="mt-3">
-                            <small class="text-muted">
-                                This application is 100% client-side. Your credentials never leave your browser.
-                                All code is open source and auditable.
-                            </small>
-                        </div>
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            This application is 100% client-side. Your credentials never leave your browser.
+                            All code is open source and auditable.
+                        </small>
                     </div>
                 </div>
             </div>
         </div>
-    }
+    </div>
 }
 
 @code {
     private BuildInfoModel? buildInfo;
-    private bool showDetails = false;
 
     protected override async Task OnInitializedAsync()
     {
+        NavState.OnBuildModalChange += OnBuildModalChange;
+        
         try
         {
             buildInfo = await Http.GetFromJsonAsync<BuildInfoModel>("buildinfo.json");
@@ -89,9 +81,14 @@
         }
     }
 
-    private void ToggleDetails()
+    private void OnBuildModalChange()
     {
-        showDetails = !showDetails;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        NavState.OnBuildModalChange -= OnBuildModalChange;
     }
 
     private string FormatBuildTime(string? buildTime)
@@ -118,19 +115,6 @@
 }
 
 <style>
-    .build-info-badge {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        cursor: pointer;
-        z-index: 1000;
-        transition: transform 0.2s;
-    }
-
-    .build-info-badge:hover {
-        transform: scale(1.1);
-    }
-
     .build-info-modal {
         position: fixed;
         top: 0;
@@ -149,6 +133,15 @@
         max-width: 600px;
         width: 100%;
         animation: slideIn 0.3s ease-out;
+    }
+
+    .build-info-content .card-header {
+        background-color: var(--card-bg);
+        border-bottom-color: var(--border-color);
+    }
+
+    .build-info-content .card-header h5 {
+        color: var(--text-color);
     }
 
     @@keyframes slideIn {

@@ -381,4 +381,21 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         _showSupportModal = false;
         OnSupportModalChange?.Invoke();
     }
+
+    // Build info modal state
+    private bool _showBuildModal = false;
+    public bool ShowBuildModal => _showBuildModal;
+    public event Action? OnBuildModalChange;
+
+    public void ShowBuildModalDialog()
+    {
+        _showBuildModal = true;
+        OnBuildModalChange?.Invoke();
+    }
+
+    public void HideBuildModal()
+    {
+        _showBuildModal = false;
+        OnBuildModalChange?.Invoke();
+    }
 }

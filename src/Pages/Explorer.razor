@@ -107,11 +107,17 @@
                                             {
                                                 <i class="bi bi-arrow-right-circle" title="Forwards to: @queue.ForwardTo"></i>
                                             }
+                                            @if (queue.ScheduledMessageCount > 0)
+                                            {
+                                                <i class="bi bi-clock" title="@queue.ScheduledMessageCount scheduled message(s)"></i>
+                                            }
                                         </span>
                                     </span>
-                                    @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0)
+                                    @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0 || queue.ScheduledMessageCount > 0)
                                     {
-                                        <span class="badge bg-secondary">@queue.ActiveMessageCount / @queue.DeadLetterMessageCount</span>
+                                        <span class="badge bg-secondary" title="Active / Dead-lettered@(queue.ScheduledMessageCount > 0 ? " / Scheduled" : "")">
+                                            @queue.ActiveMessageCount / @queue.DeadLetterMessageCount@(queue.ScheduledMessageCount > 0 ? $" / {queue.ScheduledMessageCount}" : "")
+                                        </span>
                                     }
                                 </div>
                             </div>
@@ -128,7 +134,23 @@
                         @foreach (var topic in topics)
                         {
                             <div class="entity-item @(selectedTopicName == topic.Name ? "active" : "")" @onclick="() => SelectTopic(topic.Name)">
-                                <div>@topic.Name</div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="entity-name-with-icons">
+                                        @topic.Name
+                                        <span class="entity-icons">
+                                            @if (topic.ScheduledMessageCount > 0)
+                                            {
+                                                <i class="bi bi-clock" title="@topic.ScheduledMessageCount scheduled message(s)"></i>
+                                            }
+                                        </span>
+                                    </span>
+                                    @if (topic.ScheduledMessageCount > 0)
+                                    {
+                                        <span class="badge bg-info" title="Scheduled messages">
+                                            <i class="bi bi-clock"></i> @topic.ScheduledMessageCount
+                                        </span>
+                                    }
+                                </div>
                             </div>
                         }
                     </div>
@@ -298,10 +320,43 @@
         </div>
         @if (!string.IsNullOrEmpty(errorMessage))
         {
-            <div class="alert alert-danger alert-dismissible alert-sm mt-2" style="max-height: 120px; overflow-y: auto;">
-                <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
-                <strong>Error:</strong> @errorMessage
-            </div>
+            @if (PermissionErrorHelper.IsPermissionError(rawErrorMessage ?? ""))
+            {
+                var permissionType = PermissionErrorHelper.GetPermissionType(rawErrorMessage ?? "");
+                var roles = PermissionErrorHelper.GetRecommendedRoles(permissionType);
+                <div class="alert alert-warning alert-dismissible mt-2">
+                    <button type="button" class="btn-close" @onclick="ClearError"></button>
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-shield-exclamation me-2 fs-5"></i>
+                        <div>
+                            <strong>@errorMessage</strong>
+                            <div class="mt-2">
+                                <small>To perform this operation, you need one of these Azure RBAC roles:</small>
+                                <ul class="mb-2 mt-1">
+                                    @foreach (var role in roles)
+                                    {
+                                        <li><code>@role</code></li>
+                                    }
+                                </ul>
+                                <small class="text-muted">@PermissionErrorHelper.GetSasPolicyHelp(permissionType)</small>
+                            </div>
+                            <details class="mt-2">
+                                <summary class="text-muted" style="cursor: pointer; font-size: 0.8rem;">
+                                    <i class="bi bi-code-slash me-1"></i>Technical details
+                                </summary>
+                                <pre class="mt-1 p-2 bg-dark text-light rounded" style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto;">@rawErrorMessage</pre>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-danger alert-dismissible alert-sm mt-2" style="max-height: 120px; overflow-y: auto;">
+                    <button type="button" class="btn-close" @onclick="ClearError"></button>
+                    <strong>Error:</strong> @errorMessage
+                </div>
+            }
         }
     </div>
 </div>
@@ -372,6 +427,17 @@
     }
 </ConfirmModal>
 
+<StatsModal IsVisible="@showStatsModal"
+            NamespaceInfo="@_state.CurrentNamespace"
+            Queues="@queues"
+            Topics="@topics"
+            OnClose="@(() => showStatsModal = false)" />
+
+<!-- Floating Statistics Button -->
+<div class="stats-floating-btn" @onclick="() => showStatsModal = true" title="View Statistics">
+    <i class="bi bi-bar-chart-line"></i>
+</div>
+
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
     public string? NamespaceParam { get; set; }
@@ -417,6 +483,7 @@
     private bool showMonitorModal = false;
     private bool showReceiveAndLockModal = false;
     private bool showPeekOptionsModal = false;
+    private bool showStatsModal = false;
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
@@ -437,6 +504,7 @@
     // UI refs
     private MessageList? _messageListRef;
     private string? errorMessage;
+    private string? rawErrorMessage;
     private string displayName = "";
     
     // Rename state
@@ -814,6 +882,7 @@
         }
         catch (Exception ex)
         {
+            rawErrorMessage = ex.Message;
             errorMessage = FormatPeekError(ex.Message);
             Console.WriteLine($"Peek error: {ex}");
         }
@@ -839,16 +908,25 @@
     private static string FormatPeekError(string errorMsg)
     {
         errorMsg = errorMsg.Replace("Peek failed: Peek failed:", "Peek failed:");
-        
-        if (errorMsg.Contains("WebSocket") || errorMsg.Contains("websocket"))
-        {
-            return $"WebSocket connection failed. This could be due to token expiration (try refreshing) or network issues. Details: {errorMsg}";
-        }
-        if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
-        {
-            return $"Permission denied: {errorMsg}";
-        }
-        return errorMsg;
+        return PermissionErrorHelper.FormatError(errorMsg, "peek messages from");
+    }
+
+    private static string FormatSendError(string errorMsg)
+    {
+        errorMsg = errorMsg.Replace("Send failed: Send failed:", "Send failed:");
+        return PermissionErrorHelper.FormatError(errorMsg, "send messages to");
+    }
+
+    private static string FormatPurgeError(string errorMsg)
+    {
+        errorMsg = errorMsg.Replace("Purge failed: Purge failed:", "Purge failed:");
+        return PermissionErrorHelper.FormatError(errorMsg, "purge messages from");
+    }
+
+    private void ClearError()
+    {
+        errorMessage = null;
+        rawErrorMessage = null;
     }
 
     private void PurgeMessages()
@@ -942,6 +1020,7 @@
         }
         catch (Exception ex)
         {
+            rawErrorMessage = ex.Message;
             errorMessage = FormatPurgeError(ex.Message);
             Console.WriteLine($"Purge error: {ex}");
         }
@@ -966,17 +1045,6 @@
             return await JsInterop.StartPurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, _purgeCallbackRef!, isViewingDLQ);
         }
         return null;
-    }
-
-    private static string FormatPurgeError(string errorMsg)
-    {
-        errorMsg = errorMsg.Replace("Purge failed: Purge failed:", "Purge failed:");
-        
-        if (errorMsg.Contains("401") || errorMsg.Contains("Unauthorized") || errorMsg.Contains("claim"))
-        {
-            return "Permission denied: You don't have the required permissions to purge messages from this entity.";
-        }
-        return errorMsg;
     }
 
     private void ShowSendMessageModal()
@@ -1051,7 +1119,8 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to send message: {ex.Message}";
+            rawErrorMessage = ex.Message;
+            errorMessage = FormatSendError(ex.Message);
             Console.WriteLine($"Send error: {ex}");
         }
         finally
@@ -1118,6 +1187,7 @@
         }
         catch (Exception ex)
         {
+            rawErrorMessage = ex.Message;
             errorMessage = FormatPeekError(ex.Message);
             Console.WriteLine($"Peek error: {ex}");
         }

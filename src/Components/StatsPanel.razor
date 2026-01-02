@@ -1,0 +1,235 @@
+@using Bussin.Models
+@using Azure.Core
+
+<div class="stats-panel">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">
+            <i class="bi bi-graph-up"></i> Message Statistics
+            @if (!string.IsNullOrEmpty(EntityName))
+            {
+                <small class="text-muted ms-2">(@EntityName)</small>
+            }
+        </h6>
+        <div class="d-flex align-items-center gap-2">
+            <select class="form-select form-select-sm" style="width: auto;" @bind="selectedPeriod" @bind:after="LoadMetrics">
+                <option value="1">Last hour</option>
+                <option value="6">Last 6 hours</option>
+                <option value="24">Last 24 hours</option>
+            </select>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="LoadMetrics" disabled="@isLoading" title="Refresh stats">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                }
+                else
+                {
+                    <i class="bi bi-arrow-clockwise"></i>
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (metrics == null && !isLoading && !hasAttemptedLoad)
+    {
+        <div class="text-center py-3">
+            <button class="btn btn-outline-primary btn-sm" @onclick="LoadMetrics">
+                <i class="bi bi-graph-up"></i> Load Statistics
+            </button>
+            <p class="text-muted small mt-2 mb-0">Click to fetch message metrics from Azure Monitor</p>
+        </div>
+    }
+    else if (isLoading)
+    {
+        <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm me-2"></div>
+            <span class="text-muted">Loading statistics...</span>
+        </div>
+    }
+    else if (metrics != null && !metrics.IsAvailable)
+    {
+        <div class="alert alert-warning py-2 mb-0">
+            <small>
+                <i class="bi bi-exclamation-triangle"></i> 
+                @if (!string.IsNullOrEmpty(metrics.ErrorMessage))
+                {
+                    @metrics.ErrorMessage
+                }
+                else
+                {
+                    <text>Unable to retrieve metrics. You may need additional permissions.</text>
+                }
+            </small>
+        </div>
+    }
+    else if (metrics != null && metrics.IsAvailable)
+    {
+        <div class="row g-2">
+            <div class="col-6 col-md-4">
+                <div class="stat-card bg-success bg-opacity-10 border-success">
+                    <div class="stat-value text-success">@FormatNumber(metrics.IncomingMessages)</div>
+                    <div class="stat-label">Incoming</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="stat-card bg-primary bg-opacity-10 border-primary">
+                    <div class="stat-value text-primary">@FormatNumber(metrics.OutgoingMessages)</div>
+                    <div class="stat-label">Outgoing</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="stat-card bg-info bg-opacity-10 border-info">
+                    <div class="stat-value text-info">@FormatNumber(metrics.ActiveMessages)</div>
+                    <div class="stat-label">Active</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="stat-card bg-danger bg-opacity-10 border-danger">
+                    <div class="stat-value text-danger">@FormatNumber(metrics.DeadLetteredMessages)</div>
+                    <div class="stat-label">Dead-lettered</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="stat-card bg-warning bg-opacity-10 border-warning">
+                    <div class="stat-value text-warning">@FormatNumber(metrics.ScheduledMessages)</div>
+                    <div class="stat-label">Scheduled</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="stat-card bg-secondary bg-opacity-10 border-secondary">
+                    <div class="stat-value text-secondary">@FormatBytes(metrics.SizeInBytes)</div>
+                    <div class="stat-label">Size</div>
+                </div>
+            </div>
+        </div>
+        <div class="text-muted small mt-2 text-end">
+            <i class="bi bi-clock"></i> @metrics.PeriodStart.ToLocalTime().ToString("g") - @metrics.PeriodEnd.ToLocalTime().ToString("g")
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ServiceBusNamespaceInfo? NamespaceInfo { get; set; }
+    [Parameter] public string? EntityName { get; set; }
+    [Parameter] public string? EntityType { get; set; } // "queue" or "topic"
+    [Parameter] public bool AutoLoad { get; set; } = false;
+
+    [Inject] private IMetricsService MetricsService { get; set; } = default!;
+    [Inject] private IAuthenticationService AuthService { get; set; } = default!;
+
+    private EntityMetrics? metrics;
+    private bool isLoading = false;
+    private bool hasAttemptedLoad = false;
+    private int selectedPeriod = 1; // hours
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AutoLoad && NamespaceInfo != null)
+        {
+            await LoadMetrics();
+        }
+    }
+
+    private async Task LoadMetrics()
+    {
+        if (NamespaceInfo == null) return;
+
+        isLoading = true;
+        hasAttemptedLoad = true;
+        StateHasChanged();
+
+        try
+        {
+            var credential = await AuthService.GetTokenCredentialAsync();
+            if (credential == null)
+            {
+                metrics = new EntityMetrics
+                {
+                    IsAvailable = false,
+                    ErrorMessage = "Authentication required",
+                    PeriodStart = DateTime.UtcNow.AddHours(-selectedPeriod),
+                    PeriodEnd = DateTime.UtcNow
+                };
+                return;
+            }
+
+            var period = TimeSpan.FromHours(selectedPeriod);
+
+            if (!string.IsNullOrEmpty(EntityName) && EntityType == "queue")
+            {
+                metrics = await MetricsService.GetQueueMetricsAsync(credential, NamespaceInfo, EntityName, period);
+            }
+            else if (!string.IsNullOrEmpty(EntityName) && EntityType == "topic")
+            {
+                metrics = await MetricsService.GetTopicMetricsAsync(credential, NamespaceInfo, EntityName, period);
+            }
+            else
+            {
+                metrics = await MetricsService.GetNamespaceMetricsAsync(credential, NamespaceInfo, period);
+            }
+        }
+        catch (Exception ex)
+        {
+            metrics = new EntityMetrics
+            {
+                IsAvailable = false,
+                ErrorMessage = ex.Message,
+                PeriodStart = DateTime.UtcNow.AddHours(-selectedPeriod),
+                PeriodEnd = DateTime.UtcNow
+            };
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatNumber(long value)
+    {
+        if (value >= 1_000_000)
+            return $"{value / 1_000_000.0:F1}M";
+        if (value >= 1_000)
+            return $"{value / 1_000.0:F1}K";
+        return value.ToString("N0");
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1_073_741_824) // 1 GB
+            return $"{bytes / 1_073_741_824.0:F1} GB";
+        if (bytes >= 1_048_576) // 1 MB
+            return $"{bytes / 1_048_576.0:F1} MB";
+        if (bytes >= 1_024) // 1 KB
+            return $"{bytes / 1_024.0:F1} KB";
+        return $"{bytes} B";
+    }
+}
+
+<style>
+    .stats-panel {
+        padding: 1rem;
+        background: var(--bs-body-bg);
+        border-radius: 0.5rem;
+        border: 1px solid var(--bs-border-color);
+    }
+
+    .stat-card {
+        padding: 0.75rem;
+        border-radius: 0.375rem;
+        border: 1px solid;
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        color: var(--bs-secondary-color);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+</style>

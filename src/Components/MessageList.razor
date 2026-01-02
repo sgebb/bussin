@@ -54,12 +54,29 @@
                             <div class="d-flex justify-content-between">
                                 <h6 class="mb-1">
                                     <span class="badge bg-secondary me-2">Seq: @message.SequenceNumber</span>
+                                    @if (IsScheduledMessage(message))
+                                    {
+                                        <span class="badge bg-info me-2" title="Scheduled for @FormatScheduledTime(message.ScheduledEnqueueTime!.Value)">
+                                            <i class="bi bi-clock"></i> Scheduled
+                                        </span>
+                                    }
                                     @if (!string.IsNullOrEmpty(message.MessageId))
                                     {
                                         <small class="text-muted">ID: @message.MessageId</small>
                                     }
                                 </h6>
-                                <small class="text-muted">@message.EnqueuedTime?.ToString("g")</small>
+                                <small class="text-muted">
+                                    @if (IsScheduledMessage(message))
+                                    {
+                                        <span class="text-info" title="Scheduled delivery time">
+                                            <i class="bi bi-clock-history"></i> @FormatScheduledTime(message.ScheduledEnqueueTime!.Value)
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        @message.EnqueuedTime?.ToString("g")
+                                    }
+                                </small>
                             </div>
                             <p class="mb-1 text-truncate">
                                 <small>@GetMessagePreview(message)</small>
@@ -171,5 +188,33 @@
         SelectedMessages.Clear();
         allSelected = false;
         StateHasChanged();
+    }
+
+    private static bool IsScheduledMessage(ServiceBusMessage message)
+    {
+        if (!message.ScheduledEnqueueTime.HasValue || message.ScheduledEnqueueTime.Value == 0)
+            return false;
+        
+        // ScheduledEnqueueTime is in unix milliseconds
+        var scheduledTime = DateTimeOffset.FromUnixTimeMilliseconds(message.ScheduledEnqueueTime.Value);
+        return scheduledTime > DateTimeOffset.UtcNow;
+    }
+
+    private static string FormatScheduledTime(long unixMs)
+    {
+        var scheduledTime = DateTimeOffset.FromUnixTimeMilliseconds(unixMs);
+        var localTime = scheduledTime.LocalDateTime;
+        var now = DateTime.Now;
+        
+        // If it's today, just show time
+        if (localTime.Date == now.Date)
+            return $"Today {localTime:HH:mm}";
+        
+        // If it's tomorrow, show "Tomorrow HH:mm"
+        if (localTime.Date == now.Date.AddDays(1))
+            return $"Tomorrow {localTime:HH:mm}";
+        
+        // Otherwise show full date/time
+        return localTime.ToString("g");
     }
 }

@@ -56,7 +56,8 @@
     background: #505050;
 }
 
-html, body {
+html,
+body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
     padding: 0;
@@ -69,7 +70,8 @@ h1:focus {
     outline: none;
 }
 
-a, .btn-link {
+a,
+.btn-link {
     color: var(--link-color);
 }
 
@@ -258,7 +260,7 @@ main::-webkit-scrollbar-thumb:hover {
 }
 
 .card {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .message-card {
@@ -266,7 +268,7 @@ main::-webkit-scrollbar-thumb:hover {
 }
 
 .message-card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .message-card.selected {
@@ -275,11 +277,13 @@ main::-webkit-scrollbar-thumb:hover {
 }
 
 pre {
-    background-color: #f8f9fa; /* Light mode bg */
+    background-color: #f8f9fa;
+    /* Light mode bg */
     padding: 10px;
     border-radius: 4px;
     overflow-x: auto;
-    color: #212529; /* Light mode text */
+    color: #212529;
+    /* Light mode text */
     border: 1px solid var(--border-color);
 }
 
@@ -297,7 +301,7 @@ pre {
     --bs-table-border-color: var(--border-color);
 }
 
-.btn-group-sm > .btn {
+.btn-group-sm>.btn {
     font-size: 0.875rem;
 }
 
@@ -585,7 +589,7 @@ pre {
     padding: 0;
     line-height: 1;
     color: #ffc107;
-    text-shadow: 0 0 3px rgba(0,0,0,0.3);
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
     transition: transform 0.2s ease;
     z-index: 10;
 }
@@ -617,7 +621,7 @@ pre {
     background-color: var(--hover-bg);
     border-color: var(--primary-color);
     transform: translateX(4px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .recent-namespace-tile .text-muted {
@@ -721,13 +725,15 @@ textarea:focus {
 }
 
 .alert-info {
-    background-color: #e7f5ff; /* Calmer blue */
+    background-color: #e7f5ff;
+    /* Calmer blue */
     border-color: #b6effb;
     color: #004085;
 }
 
 [data-theme="dark"] .alert-info {
-    background-color: #0e2a47; /* Darker blue for dark mode */
+    background-color: #0e2a47;
+    /* Darker blue for dark mode */
     border-color: #103f6b;
     color: #b8daff;
 }
@@ -736,7 +742,8 @@ textarea:focus {
     color: var(--muted-text) !important;
 }
 
-pre, code {
+pre,
+code {
     background-color: var(--card-bg);
     color: var(--text-color);
 }
@@ -767,7 +774,8 @@ pre, code {
     padding: 0.75rem;
     border-bottom: 1px solid var(--border-color);
     background-color: var(--card-bg);
-    height: 200px; /* Fixed height for ~3.5 rows */
+    height: 200px;
+    /* Fixed height for ~3.5 rows */
 }
 
 .explorer-entities-grid {
@@ -911,7 +919,7 @@ pre, code {
     min-height: 0;
 }
 
-.explorer-messages-main > .explorer-messages-list {
+.explorer-messages-main>.explorer-messages-list {
     flex: 1;
 }
 
@@ -1050,7 +1058,7 @@ pre, code {
     color: #adb5bd !important;
 }
 
-.dlq-toggle-btn > i:first-child {
+.dlq-toggle-btn>i:first-child {
     font-size: 1.1rem;
     color: var(--muted-text);
 }
@@ -1064,7 +1072,7 @@ pre, code {
     background-color: var(--warning-hover);
 }
 
-.dlq-toggle-btn.active > i:first-child {
+.dlq-toggle-btn.active>i:first-child {
     color: white;
 }
 
@@ -1261,4 +1269,42 @@ pre, code {
 .message-list .list-group {
     flex: 1;
     overflow-y: auto;
+}
+
+/* Floating Statistics Button */
+.stats-floating-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-color) 0%, #5a9fd4 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 113, 227, 0.3);
+    transition: all 0.3s ease;
+    z-index: 1000;
+    font-size: 1.25rem;
+}
+
+.stats-floating-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(0, 113, 227, 0.4);
+}
+
+.stats-floating-btn:active {
+    transform: scale(0.95);
+}
+
+[data-theme="dark"] .stats-floating-btn {
+    background: linear-gradient(135deg, #5a9fd4 0%, #7ab8e8 100%);
+    box-shadow: 0 4px 12px rgba(90, 159, 212, 0.3);
+}
+
+[data-theme="dark"] .stats-floating-btn:hover {
+    box-shadow: 0 6px 16px rgba(90, 159, 212, 0.4);
 }

@@ -33,5 +33,6 @@ builder.Services.AddScoped<IConfirmModalService, ConfirmModalService>();
 builder.Services.AddScoped<NavigationStateService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddSingleton<BackgroundPurgeService>();
+builder.Services.AddScoped<IMetricsService, MetricsService>();
 
 await builder.Build().RunAsync();

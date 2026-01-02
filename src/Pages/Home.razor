@@ -109,6 +109,84 @@
                         }
                     </div>
                 }
+                else if (!isRefreshing)
+                {
+                    @* No namespaces found - show helpful guidance *@
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8">
+                            <div class="card border-info">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="bi bi-search"></i> No Service Bus Namespaces Found</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">We couldn't find any Service Bus namespaces in your Azure subscriptions. This could be because:</p>
+                                    
+                                    <div class="accordion accordion-flush" id="noNamespacesHelp">
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#noNsReason1">
+                                                    <i class="bi bi-collection me-2"></i> No namespaces exist in your subscriptions
+                                                </button>
+                                            </h2>
+                                            <div id="noNsReason1" class="accordion-collapse collapse" data-bs-parent="#noNamespacesHelp">
+                                                <div class="accordion-body">
+                                                    <p>If you haven't created any Service Bus namespaces yet, you'll need to create one in the Azure portal first.</p>
+                                                    <a href="https://portal.azure.com/#create/Microsoft.ServiceBus" target="_blank" class="btn btn-outline-primary btn-sm">
+                                                        <i class="bi bi-plus-circle"></i> Create Service Bus Namespace in Azure
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#noNsReason2">
+                                                    <i class="bi bi-shield-lock me-2"></i> Missing permissions to view namespaces
+                                                </button>
+                                            </h2>
+                                            <div id="noNsReason2" class="accordion-collapse collapse" data-bs-parent="#noNamespacesHelp">
+                                                <div class="accordion-body">
+                                                    <p>To list Service Bus namespaces, you need the <code>Microsoft.ServiceBus/namespaces/read</code> permission.</p>
+                                                    <p><strong>Required Azure RBAC role (at subscription or resource group level):</strong></p>
+                                                    <ul class="mb-3">
+                                                        <li><strong>Reader</strong> - Can view all resources</li>
+                                                        <li><strong>Contributor</strong> - Can manage all resources</li>
+                                                        <li><strong>Owner</strong> - Full access including role assignments</li>
+                                                    </ul>
+                                                    <div class="alert alert-warning mb-0">
+                                                        <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> Data plane roles like "Azure Service Bus Data Receiver" or "Azure Service Bus Data Sender" do <em>not</em> include permission to list namespaces. You need a Reader/Contributor role at the subscription or resource group level.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header">
+                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#noNsReason3">
+                                                    <i class="bi bi-building me-2"></i> Namespace is in a different Azure AD tenant
+                                                </button>
+                                            </h2>
+                                            <div id="noNsReason3" class="accordion-collapse collapse" data-bs-parent="#noNamespacesHelp">
+                                                <div class="accordion-body">
+                                                    <p>If the namespace belongs to a different Azure AD tenant, you'll need to sign out and sign in with an account from that tenant.</p>
+                                                    <a href="/user" class="btn btn-outline-secondary btn-sm">
+                                                        <i class="bi bi-person"></i> Go to Account Settings
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <hr />
+                                    <p class="mb-2"><i class="bi bi-lightbulb"></i> <strong>Tip:</strong> If you know your namespace URL, you can add it as a favorite and access it directly:</p>
+                                    <p class="text-muted small mb-0">
+                                        Navigate directly to: <code>/explorer?namespace=YOUR-NAMESPACE.servicebus.windows.net</code>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
             }
 
             @if (!string.IsNullOrEmpty(errorMessage))
