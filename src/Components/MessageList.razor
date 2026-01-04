@@ -108,6 +108,7 @@
     [Parameter] public EventCallback<List<long>> OnDeleteMessages { get; set; }
     [Parameter] public EventCallback<List<long>> OnResubmitMessages { get; set; }
     [Parameter] public EventCallback<List<long>> OnMoveToDLQMessages { get; set; }
+    [Parameter] public EventCallback<string> OnScheduledMessageWarning { get; set; }
 
     private HashSet<long> SelectedMessages { get; set; } = new();
     private bool allSelected = false;
@@ -150,9 +151,19 @@
 
     private async Task OnDeleteSelected()
     {
-        if (SelectedMessages.Any())
+        if (!SelectedMessages.Any()) return;
+        
+        // Filter out scheduled messages - they cannot be deleted, only cancelled
+        var (regularMessages, scheduledCount) = FilterOutScheduledMessages(SelectedMessages);
+        
+        if (scheduledCount > 0)
         {
-            await OnDeleteMessages.InvokeAsync(SelectedMessages.ToList());
+            await OnScheduledMessageWarning.InvokeAsync($"{scheduledCount} scheduled message(s) were excluded. Scheduled messages cannot be deleted - they can only be cancelled before their scheduled time.");
+        }
+        
+        if (regularMessages.Any())
+        {
+            await OnDeleteMessages.InvokeAsync(regularMessages);
         }
     }
 
@@ -166,10 +177,41 @@
 
     private async Task OnMoveToDLQSelected()
     {
-        if (SelectedMessages.Any())
+        if (!SelectedMessages.Any()) return;
+        
+        // Filter out scheduled messages - they cannot be moved to DLQ
+        var (regularMessages, scheduledCount) = FilterOutScheduledMessages(SelectedMessages);
+        
+        if (scheduledCount > 0)
         {
-            await OnMoveToDLQMessages.InvokeAsync(SelectedMessages.ToList());
+            await OnScheduledMessageWarning.InvokeAsync($"{scheduledCount} scheduled message(s) were excluded. Scheduled messages cannot be moved to DLQ.");
         }
+        
+        if (regularMessages.Any())
+        {
+            await OnMoveToDLQMessages.InvokeAsync(regularMessages);
+        }
+    }
+
+    private (List<long> regularMessages, int scheduledCount) FilterOutScheduledMessages(HashSet<long> sequenceNumbers)
+    {
+        var regularMessages = new List<long>();
+        var scheduledCount = 0;
+        
+        foreach (var seqNum in sequenceNumbers)
+        {
+            var message = Messages.FirstOrDefault(m => m.SequenceNumber == seqNum);
+            if (message != null && IsScheduledMessage(message))
+            {
+                scheduledCount++;
+            }
+            else
+            {
+                regularMessages.Add(seqNum);
+            }
+        }
+        
+        return (regularMessages, scheduledCount);
     }
 
     private string GetMessagePreview(ServiceBusMessage message)

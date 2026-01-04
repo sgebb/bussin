@@ -148,10 +148,18 @@
                             <pre class="p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
                         </div>
                     </div>
+                    
+                    @if (IsScheduledMessage)
+                    {
+                        <div class="alert alert-info d-flex align-items-center mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <span><strong>Scheduled message.</strong> Scheduled messages cannot be deleted or moved. They can only wait for their scheduled time or be cancelled via the Service Bus API.</span>
+                        </div>
+                    }
                 </div>
                 <div class="modal-footer justify-content-end">
-                    <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession)"
-                            title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete message")">
+                    <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
+                            title="@GetDeleteButtonTitle()">
                         @if (IsProcessing)
                         {
                             <span class="spinner-border spinner-border-sm me-2"></span>
@@ -170,8 +178,8 @@
                     }
                     else
                     {
-                        <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession)"
-                                title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
+                        <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
+                                title="@GetMoveToDLQButtonTitle()">
                             @if (IsProcessing)
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
@@ -239,6 +247,36 @@
     {
         var dt = DateTimeOffset.FromUnixTimeMilliseconds(unixMs).UtcDateTime;
         return dt.ToString("yyyy-MM-dd HH:mm:ss") + " UTC";
+    }
+
+    private bool IsScheduledMessage
+    {
+        get
+        {
+            if (Message == null || !Message.ScheduledEnqueueTime.HasValue || Message.ScheduledEnqueueTime.Value == 0)
+                return false;
+            
+            var scheduledTime = DateTimeOffset.FromUnixTimeMilliseconds(Message.ScheduledEnqueueTime.Value);
+            return scheduledTime > DateTimeOffset.UtcNow;
+        }
+    }
+
+    private string GetDeleteButtonTitle()
+    {
+        if (IsScheduledMessage)
+            return "Scheduled messages cannot be deleted";
+        if (RequiresSession)
+            return "Delete not supported for session-enabled entities";
+        return "Delete message";
+    }
+
+    private string GetMoveToDLQButtonTitle()
+    {
+        if (IsScheduledMessage)
+            return "Scheduled messages cannot be moved to DLQ";
+        if (RequiresSession)
+            return "Move to DLQ not supported for session-enabled entities";
+        return "Move to DLQ";
     }
 
     private async Task Close()

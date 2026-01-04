@@ -1308,3 +1308,91 @@ code {
 [data-theme="dark"] .stats-floating-btn:hover {
     box-shadow: 0 6px 16px rgba(90, 159, 212, 0.4);
 }
+
+/* Schedule Help Icon Tooltip */
+.schedule-help-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    color: var(--muted-text);
+    font-size: 0.85rem;
+    position: relative;
+}
+
+.schedule-help-icon:hover {
+    color: var(--link-color);
+}
+
+.schedule-help-icon::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    white-space: normal;
+    width: max-content;
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    z-index: 1000;
+    pointer-events: none;
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+
+.schedule-help-icon:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Hide the native title tooltip when using custom CSS tooltip */
+.schedule-help-icon[title] {
+    --tooltip-content: attr(title);
+}
+
+.schedule-help-icon:hover[title] {
+    position: relative;
+}
+
+/* Enhanced DateTime Picker Styling */
+.datetime-picker-enhanced {
+    cursor: pointer;
+}
+
+.datetime-picker-enhanced::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    padding: 4px;
+    margin-right: -4px;
+    border-radius: 4px;
+    opacity: 0.8;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.datetime-picker-enhanced::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+    background-color: var(--hover-bg);
+}
+
+/* Dark mode - invert the calendar icon so it's visible */
+[data-theme="dark"] .datetime-picker-enhanced::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.7;
+}
+
+[data-theme="dark"] .datetime-picker-enhanced::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+    background-color: var(--hover-bg);
+}
+
+.text-danger-light {
+    color: #ff8787 !important;
+}

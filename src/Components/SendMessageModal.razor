@@ -87,7 +87,19 @@
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label small mb-1">Scheduled Enqueue (UTC)</label>
-                                            <input type="datetime-local" class="form-control form-control-sm" @bind="scheduledEnqueueTime" />
+                                            <input type="datetime-local" 
+                                                   class="form-control form-control-sm datetime-picker-enhanced" 
+                                                   @bind="scheduledEnqueueTime" 
+                                                   min="@GetMinDateTime()" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1 d-flex align-items-center gap-1">
+                                                Relative Schedule
+                                                <span class="schedule-help-icon" title="Schedule relative to now. Examples: 5m (5 minutes), 2h (2 hours), 1d (1 day), 30s (30 seconds). Overrides the datetime field above if specified.">
+                                                    <i class="bi bi-question-circle"></i>
+                                                </span>
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm" @bind="relativeScheduleTime" @bind:event="oninput" placeholder="e.g., 5m, 2h, 1d" />
                                         </div>
                                     </div>
                                 </div>
@@ -179,6 +191,7 @@
     private int? ttlSeconds = null;
     private string contentType = "";
     private DateTime? scheduledEnqueueTime = null;
+    private string relativeScheduleTime = "";
     
     // Custom properties
     private List<CustomProperty> customProperties = new();
@@ -224,6 +237,7 @@
         ttlSeconds = null;
         contentType = "";
         scheduledEnqueueTime = null;
+        relativeScheduleTime = "";
         customProperties.Clear();
         showBrokerProperties = false;
         showCustomProperties = false;
@@ -247,6 +261,37 @@
             return;
         }
 
+        // Compute the effective scheduled enqueue time
+        DateTime? effectiveScheduledTime = null;
+        
+        // Relative time takes precedence if specified
+        if (!string.IsNullOrWhiteSpace(relativeScheduleTime))
+        {
+            var parsed = TryParseRelativeTime(relativeScheduleTime.Trim());
+            if (parsed == null)
+            {
+                validationError = "Invalid relative time format. Use formats like: 30s, 5m, 2h, 1d (seconds, minutes, hours, days).";
+                return;
+            }
+            effectiveScheduledTime = DateTime.UtcNow.Add(parsed.Value);
+        }
+        else if (scheduledEnqueueTime.HasValue)
+        {
+            // Validate the datetime picker value
+            // The datetime-local input gives us local time, we need to treat it as UTC
+            var scheduledUtc = scheduledEnqueueTime.Value;
+            
+            // If the time component is midnight (00:00:00), that's fine - user may have only specified date
+            // But we should validate it's not in the past
+            if (scheduledUtc < DateTime.UtcNow)
+            {
+                validationError = "Scheduled enqueue time cannot be in the past. Please select a future date/time.";
+                return;
+            }
+            
+            effectiveScheduledTime = scheduledUtc;
+        }
+
         // Build the request
         var request = new SendMessageRequest
         {
@@ -259,7 +304,7 @@
             To = string.IsNullOrWhiteSpace(to) ? null : to,
             TimeToLiveSeconds = ttlSeconds,
             ContentType = string.IsNullOrWhiteSpace(contentType) ? null : contentType,
-            ScheduledEnqueueTimeUtc = scheduledEnqueueTime,
+            ScheduledEnqueueTimeUtc = effectiveScheduledTime,
             CustomProperties = BuildCustomProperties()
         };
 
@@ -302,6 +347,39 @@
         {
             await OnClose.InvokeAsync();
         }
+    }
+
+    private string GetMinDateTime()
+    {
+        // Return current UTC time formatted for datetime-local input (YYYY-MM-DDTHH:MM)
+        return DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm");
+    }
+
+    private TimeSpan? TryParseRelativeTime(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return null;
+        
+        input = input.Trim().ToLowerInvariant();
+        
+        // Match pattern: number followed by unit (s, m, h, d)
+        if (input.Length < 2)
+            return null;
+        
+        var unit = input[^1];
+        var numberPart = input[..^1];
+        
+        if (!double.TryParse(numberPart, out var value) || value <= 0)
+            return null;
+        
+        return unit switch
+        {
+            's' => TimeSpan.FromSeconds(value),
+            'm' => TimeSpan.FromMinutes(value),
+            'h' => TimeSpan.FromHours(value),
+            'd' => TimeSpan.FromDays(value),
+            _ => null
+        };
     }
 
     public class CustomProperty

@@ -115,8 +115,13 @@
                                     </span>
                                     @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0 || queue.ScheduledMessageCount > 0)
                                     {
-                                        <span class="badge bg-secondary" title="Active / Dead-lettered@(queue.ScheduledMessageCount > 0 ? " / Scheduled" : "")">
-                                            @queue.ActiveMessageCount / @queue.DeadLetterMessageCount@(queue.ScheduledMessageCount > 0 ? $" / {queue.ScheduledMessageCount}" : "")
+                                        <span class="badge bg-secondary" title="Active (Scheduled) / Dead-lettered">
+                                            @queue.ActiveMessageCount
+                                            @if (queue.ScheduledMessageCount > 0)
+                                            {
+                                                <span class="text-info fw-bold">(@queue.ScheduledMessageCount)</span>
+                                            }
+                                            / <span class="text-danger-light fw-bold">@queue.DeadLetterMessageCount</span>
                                         </span>
                                     }
                                 </div>
@@ -199,7 +204,9 @@
                                         </span>
                                         @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
                                         {
-                                            <span class="badge bg-secondary">@sub.ActiveMessageCount / @sub.DeadLetterMessageCount</span>
+                                            <span class="badge bg-secondary" title="Active / Dead-lettered">
+                                                @sub.ActiveMessageCount / <span class="text-danger-light fw-bold">@sub.DeadLetterMessageCount</span>
+                                            </span>
                                         }
                                     </div>
                                 </div>
@@ -237,7 +244,8 @@
                                 OnMessageSelected="@ShowMessageDetail"
                                 OnDeleteMessages="@DeleteMessages"
                                 OnResubmitMessages="@ResubmitMessages"
-                                OnMoveToDLQMessages="@MoveToDLQMessages" />
+                                OnMoveToDLQMessages="@MoveToDLQMessages"
+                                OnScheduledMessageWarning="@ShowScheduledMessageWarning" />
                 }
                 else if (selectedQueueName != null || selectedSubscriptionName != null)
                 {
@@ -338,7 +346,6 @@
                                         <li><code>@role</code></li>
                                     }
                                 </ul>
-                                <small class="text-muted">@PermissionErrorHelper.GetSasPolicyHelp(permissionType)</small>
                             </div>
                             <details class="mt-2">
                                 <summary class="text-muted" style="cursor: pointer; font-size: 0.8rem;">
@@ -1269,6 +1276,11 @@
     {
         showMessageDetailModal = false;
         selectedMessage = null;
+    }
+
+    private void ShowScheduledMessageWarning(string message)
+    {
+        NotificationService.NotifyWarning(message);
     }
 
     // Batch operations - consolidated with helper method

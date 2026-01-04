@@ -100,22 +100,6 @@ public static class PermissionErrorHelper
     }
 
     /// <summary>
-    /// Gets help text for using Shared Access Policies.
-    /// </summary>
-    public static string GetSasPolicyHelp(string permissionType)
-    {
-        var claim = permissionType switch
-        {
-            "Listen" => "'Listen'",
-            "Send" => "'Send'",
-            "Manage" => "'Manage'",
-            _ => "the required permissions"
-        };
-        
-        return $"If using Shared Access Policies, ensure your policy has {claim} enabled.";
-    }
-
-    /// <summary>
     /// Cleans up common error message prefixes and duplication.
     /// </summary>
     private static string CleanErrorMessage(string errorMessage)
