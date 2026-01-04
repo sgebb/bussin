@@ -24,8 +24,10 @@
                     </main>
                 </div>
 
-                <ToastNotification />
-                <BuildInfo />
+                <div data-theme="@(_isDarkMode ? "dark" : "light")">
+                    <ToastNotification />
+                    <BuildInfo />
+                </div>
 
                 <!-- Support Modal (rendered outside .page for proper z-index) -->
                 @if (NavState.ShowSupportModal)
