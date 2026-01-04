@@ -1393,6 +1393,6 @@ code {
     background-color: var(--hover-bg);
 }
 
-.text-danger-light {
-    color: #ff8787 !important;
+.text-dlq-orange {
+    color: #fd7e14 !important;
 }

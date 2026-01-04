@@ -121,7 +121,7 @@
                                             {
                                                 <span class="text-info fw-bold">(@queue.ScheduledMessageCount)</span>
                                             }
-                                            / <span class="text-danger-light fw-bold">@queue.DeadLetterMessageCount</span>
+                                            / <span class="text-dlq-orange fw-bold">@queue.DeadLetterMessageCount</span>
                                         </span>
                                     }
                                 </div>
@@ -205,7 +205,7 @@
                                         @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
                                         {
                                             <span class="badge bg-secondary" title="Active / Dead-lettered">
-                                                @sub.ActiveMessageCount / <span class="text-danger-light fw-bold">@sub.DeadLetterMessageCount</span>
+                                                @sub.ActiveMessageCount / <span class="text-dlq-orange fw-bold">@sub.DeadLetterMessageCount</span>
                                             </span>
                                         }
                                     </div>
