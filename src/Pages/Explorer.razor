@@ -28,7 +28,7 @@
                            @bind:event="oninput"
                            @onkeydown="HandleRenameKeyDown"
                            @onblur="CancelRename" />
-                    <button class="btn btn-sm btn-primary" @onclick="SaveDisplayName" disabled="@string.IsNullOrWhiteSpace(editDisplayName)">
+                    <button class="btn btn-sm btn-primary" @onmousedown="SaveDisplayName" @onmousedown:preventDefault="true" disabled="@string.IsNullOrWhiteSpace(editDisplayName)">
                         <i class="bi bi-check-lg"></i>
                     </button>
                     <button class="btn btn-sm btn-secondary" @onclick="CancelRename">

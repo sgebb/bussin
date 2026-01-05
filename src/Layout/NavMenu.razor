@@ -13,7 +13,11 @@
     </div>
 
     <!-- Scrollable Favorites Section -->
-    <div class="nav-favorites-scroll">
+    <div class="nav-favorites-scroll"
+         @ondragover="OnRootDragOver"
+         @ondragover:preventDefault="true"
+         @ondrop="OnRootDrop"
+         @ondrop:preventDefault="true">
         <nav class="flex-column">
             <AuthorizeView>
                 <Authorized>
@@ -34,7 +38,8 @@
                                     <input type="text" class="form-control form-control-sm mb-2" placeholder="Folder name" 
                                            @bind="newFolderName" 
                                            @bind:event="oninput"
-                                           @onkeydown="HandleFolderNameKeyDown" />
+                                           @onkeydown="HandleFolderNameKeyDown"
+                                           autofocus />
                                     <div class="d-flex gap-2">
                                         <button class="btn btn-sm btn-primary flex-fill" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(newFolderName)">Create</button>
                                         <button class="btn btn-sm btn-secondary flex-fill" @onclick="CancelCreateFolder">Cancel</button>
@@ -206,6 +211,34 @@
         dragItemType = DragItemType.None;
     }
 
+    private void OnRootDragOver(DragEventArgs e)
+    {
+        if (dragItemType != DragItemType.None)
+        {
+            dragOverFolderId = null;
+        }
+    }
+
+    private async Task OnRootDrop(DragEventArgs e)
+    {
+        dragOverFolderId = null;
+        
+        if (dragItemType == DragItemType.Namespace && !string.IsNullOrEmpty(draggedNamespace))
+        {
+            // If dropped on root, move to default "namespaces" folder
+            await NavState.MoveNamespaceToFolderAsync(draggedNamespace, "namespaces");
+        }
+        else if (dragItemType == DragItemType.Folder && !string.IsNullOrEmpty(draggedFolderId))
+        {
+            // Move to root
+            await NavState.MoveFolderAsync(draggedFolderId, null);
+        }
+        
+        draggedNamespace = null;
+        draggedFolderId = null;
+        dragItemType = DragItemType.None;
+    }
+
     private RenderFragment RenderFavoritesSection() => __builder =>
     {
         // Get the default "Favorites" folder and show its namespaces directly
@@ -269,7 +302,9 @@
         __builder.AddAttribute(9, "ondragleave", EventCallback.Factory.Create(this, OnDragLeave));
         __builder.AddAttribute(10, "ondrop", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnDrop(e, folderId)));
         __builder.AddEventPreventDefaultAttribute(11, "ondragover", true);
-        __builder.AddEventPreventDefaultAttribute(12, "ondrop", true);
+        __builder.AddEventStopPropagationAttribute(12, "ondragover", true);
+        __builder.AddEventPreventDefaultAttribute(13, "ondrop", true);
+        __builder.AddEventStopPropagationAttribute(14, "ondrop", true);
         
         // Clickable folder name area
         __builder.OpenElement(13, "div");
