@@ -233,6 +233,7 @@
                         <span><strong>Session-enabled.</strong> Send requires Session ID. Delete/Purge not supported.</span>
                     </div>
                 }
+                
                 <div class="explorer-messages-list">
                 @if (peekedMessages.Count > 0)
                 {
@@ -245,7 +246,8 @@
                                 OnDeleteMessages="@DeleteMessages"
                                 OnResubmitMessages="@ResubmitMessages"
                                 OnMoveToDLQMessages="@MoveToDLQMessages"
-                                OnScheduledMessageWarning="@ShowScheduledMessageWarning" />
+                                OnScheduledMessageWarning="@ShowScheduledMessageWarning" 
+                                OnClearMessages="@ClearPeekedMessages" />
                 }
                 else if (selectedQueueName != null || selectedSubscriptionName != null)
                 {
@@ -298,12 +300,12 @@
                                 disabled="@(!HasQueueOrSubscriptionSelected || isPeeking)">
                             <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
                         </button>
-                        <button class="peek-btn-options" 
+                        <button class="peek-btn-options @(ArePeekOptionsModified ? "text-warning" : "")" 
                                 @onclick="ShowPeekOptionsModal"
                                 @onclick:stopPropagation="true"
                                 disabled="@(!HasQueueOrSubscriptionSelected)"
-                                title="Peek with options">
-                            <i class="bi bi-chevron-down"></i>
+                                title="@(ArePeekOptionsModified ? "Peek with options (Active)" : "Peek with options")">
+                            <i class="bi bi-gear"></i>
                         </button>
                     </div>
                     <button class="btn btn-action btn-secondary w-100 @(!HasQueueOrSubscriptionSelected || isViewingDLQ ? "disabled-grey" : "")" 
@@ -394,7 +396,8 @@
 
 <PeekOptionsModal IsVisible="@showPeekOptionsModal"
                   OnClose="@(() => showPeekOptionsModal = false)"
-                  OnPeek="@PeekWithOptions" />
+                  InitialOptions="@lastPeekOptions"
+                  OnPeek="@(async (options) => await PeekWithOptions(options, append: false))" />
 
 <MessageMonitorModal IsVisible="@showMonitorModal"
                     NamespaceName="@NamespaceNameOnly"
@@ -480,6 +483,14 @@
     private bool hasPeeked = false;
     private int peekCount = 50;
     private int peekFromSequence = 0;
+    private PeekOptions? lastPeekOptions = null; // Store last peek options for "Peek More"
+
+    private bool ArePeekOptionsModified => lastPeekOptions != null && (
+        lastPeekOptions.MaxCount != 50 ||
+        lastPeekOptions.FromSequenceNumber != 0 ||
+        !string.IsNullOrEmpty(lastPeekOptions.BodyFilter) ||
+        lastPeekOptions.PeekFromNewest
+    );
     
     // Modal state
     private bool resubmitRemoveFromDLQ = true;
@@ -828,7 +839,17 @@
         peekedMessages.Clear();
         hasPeeked = false;
         peekFromSequence = 0;
+        lastPeekOptions = null; // Reset peek options when switching entities
         // Don't reset isViewingDLQ - user preference should persist across entity switches
+        _messageListRef?.ClearSelection();
+    }
+
+    private void ClearPeekedMessages()
+    {
+        peekedMessages.Clear();
+        hasPeeked = false;
+        peekFromSequence = 0;
+        lastPeekOptions = null; // Also reset options when manually clearing
         _messageListRef?.ClearSelection();
     }
 
@@ -837,6 +858,14 @@
 
     private async Task PeekMessagesAsync(bool append)
     {
+        // If we have stored options and this is "Peek More", use them
+        if (append && lastPeekOptions != null)
+        {
+            // For "Peek More", continue with the same options
+            await PeekWithOptions(lastPeekOptions, append: true);
+            return;
+        }
+
         if (append && peekedMessages.Count >= 1000)
         {
             errorMessage = "Maximum of 1000 messages loaded. Use filters or start from a different sequence number.";
@@ -851,6 +880,7 @@
             hasPeeked = true;
             peekedMessages.Clear();
             peekFromSequence = 0;
+            lastPeekOptions = null; // Clear options for basic peek
         }
         else if (peekedMessages.Any())
         {
@@ -1149,13 +1179,18 @@
         showPeekOptionsModal = true;
     }
 
-    private async Task PeekWithOptions((int maxCount, long fromSequenceNumber) options)
+    private async Task PeekWithOptions(PeekOptions options, bool append = false)
     {
         showPeekOptionsModal = false;
         isPeeking = true;
         errorMessage = null;
-        hasPeeked = true;
-        peekedMessages.Clear();
+        
+        if (!append)
+        {
+            hasPeeked = true;
+            peekedMessages.Clear();
+            lastPeekOptions = options; // Store options for "Peek More"
+        }
 
         try
         {
@@ -1166,30 +1201,130 @@
                 return;
             }
 
-            List<ServiceBusMessage> messages;
-            if (selectedQueueName != null)
+            // Calculate starting sequence
+            long startSequence = options.FromSequenceNumber;
+            
+            if (append)
             {
-                messages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, options.maxCount, (int)options.fromSequenceNumber, isViewingDLQ);
+                if (options.PeekFromNewest)
+                {
+                    // Reverse peek logic (unchanged)
+                    if (peekedMessages.Any())
+                    {
+                        var oldestSeq = peekedMessages.Min(m => m.SequenceNumber ?? 0);
+                        var desiredStart = oldestSeq - options.MaxCount;
+                        startSequence = Math.Max(0, desiredStart);
+                        
+                        if (startSequence + options.MaxCount > oldestSeq)
+                        {
+                            startSequence = oldestSeq > 0 ? 0 : 0;
+                        }
+                    }
+                }
+                else
+                {
+                    // Forward peek logic: Start from where we left off
+                    startSequence = peekFromSequence;
+                }
             }
-            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            else if (options.PeekFromNewest)
             {
-                messages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, options.maxCount, (int)options.fromSequenceNumber, isViewingDLQ);
+                // Initial peek from newest
+                startSequence = await CalculateNewestStartSequence(token, options.MaxCount);
+            }
+
+            List<ServiceBusMessage> messages;
+            
+            // If we have a body filter, we need to peek more messages and filter client-side
+            if (!string.IsNullOrWhiteSpace(options.BodyFilter))
+            {
+                var result = await PeekWithBodyFilter(token, options.BodyFilter, startSequence);
+                messages = result.messages;
+                // Update peekFromSequence based on where the scan stopped
+                peekFromSequence = (int)result.nextSequence;
             }
             else
             {
-                messages = new List<ServiceBusMessage>();
+                // Normal peek without filter
+                if (selectedQueueName != null)
+                {
+                    messages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, options.MaxCount, (int)startSequence, isViewingDLQ);
+                }
+                else if (selectedTopicName != null && selectedSubscriptionName != null)
+                {
+                    messages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, options.MaxCount, (int)startSequence, isViewingDLQ);
+                }
+                else
+                {
+                    messages = new List<ServiceBusMessage>();
+                }
+                
+                // For normal peek, we update peekFromSequence based on the messages found
+                if (messages.Any())
+                {
+                    peekFromSequence = (int)(messages.Max(m => m.SequenceNumber ?? 0) + 1);
+                }
+                // If no messages found, peekFromSequence remains as is (startSequence) or maybe we should advance it?
+                // Actually if 0 messages found, startSequence was likely at end.
+                // But if we want to be safe for "Peek More" retry:
+                 else if (!options.PeekFromNewest)
+                 {
+                     // If we didn't find anything, we're likely at the end. 
+                     // But let's leave peekFromSequence as is or set it to startSequence
+                     // ensuring next peek tries from same spot or later.
+                 }
             }
 
-            peekedMessages = messages;
-            peekFromSequence = messages.Any() ? (int)(messages.Max(m => m.SequenceNumber ?? 0) + 1) : 0;
+            // Reverse order if peeking from newest (newest on top)
+            if (options.PeekFromNewest)
+            {
+                messages = messages.OrderByDescending(m => m.SequenceNumber ?? 0).ToList();
+            }
+
+            if (append)
+            {
+                // Filter out messages we already have to prevent duplicates (due to gaps or overlap)
+                var existingSequences = peekedMessages.Where(m => m.SequenceNumber.HasValue)
+                                                      .Select(m => m.SequenceNumber!.Value)
+                                                      .ToHashSet();
+                
+                var newMessages = messages.Where(m => !m.SequenceNumber.HasValue || !existingSequences.Contains(m.SequenceNumber.Value))
+                                          .ToList();
+
+                if (options.PeekFromNewest)
+                {
+                    // When appending in reverse mode, add older messages to the bottom
+                    peekedMessages.AddRange(newMessages);
+                }
+                else
+                {
+                    // Normal append - add newer messages to the bottom
+                    peekedMessages.AddRange(newMessages);
+                }
+                
+                // Update messages validation count to reflect only what we actually added?
+                // Or keep it as "found"? The notification below uses messages.Count.
+                // Maybe we should update messages var to allow notification to be accurate?
+                // But notification says "Peeked X messages", which is technically true even if we deduped them.
+                // But "Peeked 10 messages" and seeing 0 added is confusing.
+                // Let's update messages to be newMessages for notification accuracy.
+                messages = newMessages;
+            }
+            else
+            {
+                peekedMessages = messages;
+            }
+
 
             if (messages.Count > 0)
             {
-                NotificationService.NotifySuccess($"Peeked {messages.Count} messages", "peek-result");
+                var filterMsg = !string.IsNullOrWhiteSpace(options.BodyFilter) ? $" matching '{options.BodyFilter}'" : "";
+                var suffix = append ? " more" : "";
+                NotificationService.NotifySuccess($"Peeked {messages.Count}{suffix} messages{filterMsg}", "peek-result");
             }
             else
             {
-                NotificationService.NotifyInfo("No messages found", "peek-result");
+                NotificationService.NotifyInfo(append ? "No more messages available" : "No messages found", "peek-result");
             }
         }
         catch (Exception ex)
@@ -1203,6 +1338,107 @@
             isPeeking = false;
         }
     }
+
+    private async Task<long> CalculateNewestStartSequence(string token, int maxCount)
+    {
+        try
+        {
+            // First, peek one message from the beginning to get the first sequence number
+            List<ServiceBusMessage> firstMessage;
+            if (selectedQueueName != null)
+            {
+                firstMessage = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, 1, 0, isViewingDLQ);
+            }
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            {
+                firstMessage = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, 1, 0, isViewingDLQ);
+            }
+            else
+            {
+                return 0;
+            }
+
+            if (!firstMessage.Any())
+            {
+                return 0; // No messages
+            }
+
+            var firstSeq = firstMessage[0].SequenceNumber ?? 0;
+            
+            // Get the total message count from the entity info
+            long totalMessages = 0;
+            if (selectedQueueName != null && queueDict.TryGetValue(selectedQueueName, out var queue))
+            {
+                totalMessages = isViewingDLQ ? queue.DeadLetterMessageCount : queue.ActiveMessageCount;
+            }
+            else if (selectedSubscriptionName != null && subscriptionDict.TryGetValue(selectedSubscriptionName, out var sub))
+            {
+                totalMessages = isViewingDLQ ? sub.DeadLetterMessageCount : sub.ActiveMessageCount;
+            }
+
+            if (totalMessages <= maxCount)
+            {
+                return 0; // If total messages is less than or equal to what we want, start from beginning
+            }
+
+            // Calculate approximate starting sequence
+            // This is a best-effort approximation
+            var approximateStartSeq = firstSeq + (totalMessages - maxCount);
+            
+            return Math.Max(0, approximateStartSeq);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error calculating newest start sequence: {ex}");
+            return 0; // Fall back to beginning on error
+        }
+    }
+
+    private async Task<(List<ServiceBusMessage> messages, long nextSequence)> PeekWithBodyFilter(string token, string bodyFilter, long startSequence)
+    {
+        var matchingMessages = new List<ServiceBusMessage>();
+        var currentSequence = (int)startSequence;
+        const int batchSize = 100; // Peek in batches of 100
+        const int maxAttempts = 100; // Maximum 100 batches (10,000 messages max to scan)
+        var attempts = 0;
+
+        while (matchingMessages.Count < 50 && attempts < maxAttempts)
+        {
+            List<ServiceBusMessage> batch;
+            
+            if (selectedQueueName != null)
+            {
+                batch = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, batchSize, currentSequence, isViewingDLQ);
+            }
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            {
+                batch = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, batchSize, currentSequence, isViewingDLQ);
+            }
+            else
+            {
+                break;
+            }
+
+            if (!batch.Any())
+            {
+                break; // No more messages
+            }
+
+            // Filter messages by body content
+            var matches = batch.Where(m => 
+                m.Body?.Contains(bodyFilter, StringComparison.OrdinalIgnoreCase) == true).ToList();
+            
+            matchingMessages.AddRange(matches);
+
+            // Update sequence for next batch
+            currentSequence = (int)(batch.Max(m => m.SequenceNumber ?? 0) + 1);
+            attempts++;
+        }
+
+        // Return up to 50 matching messages and the sequence to start next scan from
+        return (matchingMessages.Take(50).ToList(), currentSequence);
+    }
+
 
     private void CloseConfirmModal()
     {

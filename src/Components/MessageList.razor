@@ -16,7 +16,7 @@
                 
                 @if (SelectedMessages.Any())
                 {
-                    <div class="btn-group btn-group-sm">
+                    <div class="btn-group btn-group-sm me-2">
                         <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@(IsProcessing || RequiresSession)" 
                                 title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete selected messages")">
                             Delete (@SelectedMessages.Count)
@@ -36,6 +36,10 @@
                         }
                     </div>
                 }
+                
+                <button class="btn btn-sm btn-outline-secondary" @onclick="OnClearMessagesClick" title="Clear all peeked messages">
+                    <i class="bi bi-trash"></i> Clear
+                </button>
             </div>
         </div>
 
@@ -109,6 +113,7 @@
     [Parameter] public EventCallback<List<long>> OnResubmitMessages { get; set; }
     [Parameter] public EventCallback<List<long>> OnMoveToDLQMessages { get; set; }
     [Parameter] public EventCallback<string> OnScheduledMessageWarning { get; set; }
+    [Parameter] public EventCallback OnClearMessages { get; set; }
 
     private HashSet<long> SelectedMessages { get; set; } = new();
     private bool allSelected = false;
@@ -258,5 +263,10 @@
         
         // Otherwise show full date/time
         return localTime.ToString("g");
+    }
+
+    private async Task OnClearMessagesClick()
+    {
+        await OnClearMessages.InvokeAsync();
     }
 }
