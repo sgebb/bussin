@@ -398,4 +398,85 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         _showBuildModal = false;
         OnBuildModalChange?.Invoke();
     }
+    public async Task ReorderFolderAsync(string folderId, int newIndex)
+    {
+        if (!_isInitialized || _preferences?.Folders == null) return;
+        if (folderId == DefaultFolderId) return; // Can't move default folder? Maybe we should allow it.
+        // Let's assume default folder "Favorites" can be moved if user wants, or maybe kept at top?
+        // User said "reorderable items".
+        
+        var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
+        if (folder != null)
+        {
+            var oldIndex = _preferences.Folders.IndexOf(folder);
+            if (oldIndex > -1 && oldIndex != newIndex)
+            {
+                _preferences.Folders.RemoveAt(oldIndex);
+                if (newIndex > _preferences.Folders.Count) newIndex = _preferences.Folders.Count;
+                if (newIndex < 0) newIndex = 0;
+                
+                _preferences.Folders.Insert(newIndex, folder);
+                await preferencesService.SavePreferencesAsync(_preferences);
+                NotifyStateChanged();
+            }
+        }
+    }
+
+    public async Task ReorderNamespaceAsync(string fullyQualifiedNamespace, string targetFolderId, int newIndex)
+    {
+        if (!_isInitialized || _preferences?.Folders == null) return;
+        
+        // Find source
+        NamespaceConnection? connectionToMove = null;
+        Folder? sourceFolder = null;
+        foreach (var f in _preferences.Folders)
+        {
+            var conn = f.Namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
+            if (conn != null)
+            {
+                connectionToMove = conn;
+                sourceFolder = f;
+                break;
+            }
+        }
+
+        if (connectionToMove == null || sourceFolder == null) return;
+
+        var targetFolder = _preferences.Folders.FirstOrDefault(f => f.Id == targetFolderId);
+        if (targetFolder == null) return;
+
+        // If same folder, reorder
+        if (sourceFolder == targetFolder)
+        {
+            var oldIndex = sourceFolder.Namespaces.IndexOf(connectionToMove);
+            if (oldIndex > -1 && oldIndex != newIndex)
+            {
+                sourceFolder.Namespaces.RemoveAt(oldIndex);
+                // Adjust index if we removed from before the insertion point
+                // Actually, RemoveAt shifts indices. 
+                // If moving down (old < new): insert at new-1?
+                // Visual DnD usually calculates "insert before".
+                // If I remove first, the list shrinks. 
+                
+                if (newIndex > sourceFolder.Namespaces.Count) newIndex = sourceFolder.Namespaces.Count;
+                if (newIndex < 0) newIndex = 0;
+                
+                sourceFolder.Namespaces.Insert(newIndex, connectionToMove);
+                await preferencesService.SavePreferencesAsync(_preferences);
+                NotifyStateChanged();
+            }
+        }
+        else
+        {
+            // Move to different folder at specific index
+            sourceFolder.Namespaces.Remove(connectionToMove);
+            
+            if (newIndex > targetFolder.Namespaces.Count) newIndex = targetFolder.Namespaces.Count;
+            if (newIndex < 0) newIndex = 0;
+            
+            targetFolder.Namespaces.Insert(newIndex, connectionToMove);
+            await preferencesService.SavePreferencesAsync(_preferences);
+            NotifyStateChanged();
+        }
+    }
 }

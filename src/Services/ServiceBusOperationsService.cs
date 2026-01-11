@@ -39,7 +39,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             var token = await GetTokenAsync();
             var messages = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, count, 0, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "queue";
-            _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source}");
+            _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source} '{queueName}'");
             return messages;
         }
         catch (Exception ex)
@@ -56,7 +56,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             var token = await GetTokenAsync();
             var messages = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, count, 0, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "subscription";
-            _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source}");
+            _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source} '{topicName}/Subscriptions/{subscriptionName}'");
             return messages;
         }
         catch (Exception ex)
@@ -74,7 +74,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         {
             var token = await GetTokenAsync();
             await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, messageBody, properties);
-            _notificationService.NotifySuccess("Message sent successfully");
+            _notificationService.NotifySuccess($"Message sent successfully to queue '{queueName}'");
         }
         catch (Exception ex)
         {
@@ -89,7 +89,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         {
             var token = await GetTokenAsync();
             await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, messageBody, properties);
-            _notificationService.NotifySuccess("Message sent successfully");
+            _notificationService.NotifySuccess($"Message sent successfully to topic '{topicName}'");
         }
         catch (Exception ex)
         {
@@ -107,7 +107,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             var token = await GetTokenAsync();
             var count = await _jsInterop.PurgeQueueAsync(namespaceName, queueName, token, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "queue";
-            _notificationService.NotifySuccess($"{source} purged successfully - deleted {count} message(s)");
+            _notificationService.NotifySuccess($"{source} '{queueName}' purged successfully - deleted {count} message(s)");
             return count;
         }
         catch (Exception ex)
@@ -124,7 +124,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             var token = await GetTokenAsync();
             var count = await _jsInterop.PurgeSubscriptionAsync(namespaceName, topicName, subscriptionName, token, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "subscription";
-            _notificationService.NotifySuccess($"{source} purged successfully - deleted {count} message(s)");
+            _notificationService.NotifySuccess($"{source} '{topicName}/Subscriptions/{subscriptionName}' purged successfully - deleted {count} message(s)");
             return count;
         }
         catch (Exception ex)

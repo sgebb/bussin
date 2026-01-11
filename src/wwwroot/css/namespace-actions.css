@@ -1,0 +1,51 @@
+/* Namespace header action buttons - ensure perfect alignment */
+.rename-btn,
+.favorite-toggle-btn,
+.refresh-btn,
+.stats-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    width: 34px;
+    /* Slightly bigger */
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 22px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.rename-btn:hover,
+.refresh-btn:hover,
+.stats-btn:hover {
+    background-color: var(--hover-bg);
+    color: var(--text-color);
+}
+
+.favorite-toggle-btn {
+    font-size: 22px;
+}
+
+.favorite-toggle-btn.favorited {
+    color: #ffc107;
+}
+
+.favorite-toggle-btn.not-favorited {
+    color: var(--text-muted);
+}
+
+.favorite-toggle-btn:hover {
+    transform: scale(1.1);
+    color: #ffc107;
+    /* Allow hover to show yellow even if not favorited */
+}
+
+/* Spinner that matches button dimensions */
+.spinner-border-sm {
+    width: 20px !important;
+    height: 20px !important;
+}

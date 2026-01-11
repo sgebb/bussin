@@ -63,45 +63,54 @@
     }
     else if (metrics != null && metrics.IsAvailable)
     {
-        <div class="row g-2">
-            <div class="col-6 col-md-4">
+        <h6 class="text-muted small fw-bold mb-2 text-uppercase">
+            <i class="bi bi-activity"></i> Message Flow
+        </h6>
+        <div class="row g-2 mb-4">
+            <div class="col-6">
                 <div class="stat-card bg-success bg-opacity-10 border-success">
                     <div class="stat-value text-success">@FormatNumber(metrics.IncomingMessages)</div>
                     <div class="stat-label">Incoming</div>
                 </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6">
                 <div class="stat-card bg-primary bg-opacity-10 border-primary">
                     <div class="stat-value text-primary">@FormatNumber(metrics.OutgoingMessages)</div>
                     <div class="stat-label">Outgoing</div>
                 </div>
             </div>
-            <div class="col-6 col-md-4">
+        </div>
+
+        <h6 class="text-muted small fw-bold mb-2 text-uppercase">
+            <i class="bi bi-hdd-stack"></i> Current State
+        </h6>
+        <div class="row g-2">
+            <div class="col-6 col-md-3">
                 <div class="stat-card bg-info bg-opacity-10 border-info">
                     <div class="stat-value text-info">@FormatNumber(metrics.ActiveMessages)</div>
                     <div class="stat-label">Active</div>
                 </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6 col-md-3">
                 <div class="stat-card bg-danger bg-opacity-10 border-danger">
                     <div class="stat-value text-danger">@FormatNumber(metrics.DeadLetteredMessages)</div>
                     <div class="stat-label">Dead-lettered</div>
                 </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6 col-md-3">
                 <div class="stat-card bg-warning bg-opacity-10 border-warning">
                     <div class="stat-value text-warning">@FormatNumber(metrics.ScheduledMessages)</div>
                     <div class="stat-label">Scheduled</div>
                 </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6 col-md-3">
                 <div class="stat-card bg-secondary bg-opacity-10 border-secondary">
                     <div class="stat-value text-secondary">@FormatBytes(metrics.SizeInBytes)</div>
                     <div class="stat-label">Size</div>
                 </div>
             </div>
         </div>
-        <div class="text-muted small mt-2 text-end">
+        <div class="text-muted small mt-3 text-end">
             <i class="bi bi-clock"></i> @metrics.PeriodStart.ToLocalTime().ToString("g") - @metrics.PeriodEnd.ToLocalTime().ToString("g")
         </div>
     }

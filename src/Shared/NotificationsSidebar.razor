@@ -1,0 +1,156 @@
+@inject INotificationService NotificationService
+@implements IDisposable
+
+<!-- Notification Badge/Button -->
+<div class="notifications-badge @(isOpen ? "active" : "")" 
+     @onclick="ToggleSidebar"
+     title="Event Log">
+    @if (unreadCount > 0)
+    {
+        <div class="notifications-count @GetCountClass()">
+            @(unreadCount > 99 ? "99+" : unreadCount.ToString())
+        </div>
+    }
+    <i class="bi bi-journal-text"></i>
+</div>
+
+<!-- Sidebar -->
+@if (isOpen)
+{
+    <div class="notifications-sidebar">
+        <div class="notifications-header">
+            <h6 class="mb-0"><i class="bi bi-journal-text me-2"></i>Event Log</h6>
+            <div class="notifications-header-actions">
+                @if (notifications.Any())
+                {
+                    <button class="btn btn-sm btn-link text-muted p-0" @onclick="ClearAll" title="Clear all">
+                        Clear all
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="notifications-body">
+            @if (notifications.Any())
+            {
+                @foreach (var notification in notifications.OrderByDescending(n => n.Timestamp))
+                {
+                    <div class="notification-item notification-@notification.Type.ToString().ToLower()"
+                         title="@notification.Timestamp.ToString("G")">
+                        <div class="notification-content">
+                            <div class="notification-icon">
+                                <i class="bi @GetIconClass(notification.Type)"></i>
+                            </div>
+                            <div class="notification-text">
+                                <div class="notification-message">@notification.Message</div>
+                                <small class="notification-time text-muted">@notification.TimeAgo</small>
+                            </div>
+                            <button class="notification-dismiss" @onclick="() => DismissNotification(notification.Id)" title="Dismiss">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="notifications-empty">
+                    <i class="bi bi-journal-check"></i>
+                    <p class="text-muted mb-0">Event log is empty</p>
+                </div>
+            }
+        </div>
+    </div>
+    
+    <!-- Backdrop -->
+    <div class="notifications-backdrop" @onclick="ToggleSidebar"></div>
+}
+
+@code {
+    private bool isOpen = false;
+    private List<StoredNotification> notifications = new();
+    private int unreadCount = 0;
+
+    protected override void OnInitialized()
+    {
+        if (NotificationService is NotificationService service)
+        {
+            service.OnNotificationsChanged += OnNotificationsChanged;
+            UpdateNotifications(service);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (NotificationService is NotificationService service)
+        {
+            service.OnNotificationsChanged -= OnNotificationsChanged;
+        }
+    }
+
+    private void OnNotificationsChanged()
+    {
+        if (NotificationService is NotificationService service)
+        {
+            UpdateNotifications(service);
+            InvokeAsync(StateHasChanged);
+        }
+    }
+    
+    private void UpdateNotifications(NotificationService service)
+    {
+        notifications = service.RecentNotifications.ToList();
+        unreadCount = service.UnreadCount;
+    }
+
+    private void ToggleSidebar()
+    {
+        isOpen = !isOpen;
+        
+        if (isOpen && NotificationService is NotificationService service)
+        {
+            service.MarkAllAsRead();
+        }
+    }
+
+    private void DismissNotification(string id)
+    {
+        if (NotificationService is NotificationService service)
+        {
+            service.ClearNotification(id);
+        }
+    }
+
+    private void ClearAll()
+    {
+        if (NotificationService is NotificationService service)
+        {
+            service.ClearAllNotifications();
+        }
+    }
+
+    private string GetCountClass()
+    {
+        // Color code by severity of unread items - highest severity wins
+        // Logic: if any unread is Error -> Red. Else if any unread is Warning -> Yellow.
+        
+        var unreadItems = notifications.Where(n => !n.IsRead).ToList();
+        if (!unreadItems.Any()) return "count-success"; // Should not happen if count > 0
+        
+        if (unreadItems.Any(n => n.Type == NotificationType.Error))
+            return "count-error";
+        if (unreadItems.Any(n => n.Type == NotificationType.Warning))
+            return "count-warning";
+        if (unreadItems.Any(n => n.Type == NotificationType.Info))
+            return "count-info";
+        return "count-success";
+    }
+
+    private string GetIconClass(NotificationType type) => type switch
+    {
+        NotificationType.Success => "bi-check-circle-fill",
+        NotificationType.Error => "bi-x-circle-fill",
+        NotificationType.Warning => "bi-exclamation-triangle-fill",
+        NotificationType.Info => "bi-info-circle-fill",
+        _ => "bi-bell-fill"
+    };
+}

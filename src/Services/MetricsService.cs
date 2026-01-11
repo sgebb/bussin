@@ -181,15 +181,28 @@ public sealed class MetricsService : IMetricsService
 
                         foreach (var dp in dataPoints.EnumerateArray())
                         {
-                            // Try to get the total aggregation, fall back to maximum
+                            // Determine correct aggregation based on metric type
+                            // Flow metrics (Incoming/Outgoing) should use Total (Sum)
+                            // State metrics (Active, Size, etc) should use Maximum (Peak) or Average
+                            
                             double value = 0;
-                            if (dp.TryGetProperty("total", out var total) && total.ValueKind == JsonValueKind.Number)
+                            bool isFlowMetric = name == "IncomingMessages" || name == "OutgoingMessages";
+
+                            if (isFlowMetric)
                             {
-                                value = total.GetDouble();
+                                if (dp.TryGetProperty("total", out var total) && total.ValueKind == JsonValueKind.Number)
+                                    value = total.GetDouble();
                             }
-                            else if (dp.TryGetProperty("maximum", out var max) && max.ValueKind == JsonValueKind.Number)
+                            else
                             {
-                                value = max.GetDouble();
+                                // For state metrics, prefer Maximum, then Average
+                                if (dp.TryGetProperty("maximum", out var max) && max.ValueKind == JsonValueKind.Number)
+                                    value = max.GetDouble();
+                                else if (dp.TryGetProperty("average", out var avg) && avg.ValueKind == JsonValueKind.Number)
+                                    value = avg.GetDouble();
+                                // Fallback to total if nothing else exists (though unlikely for state metrics to only have total)
+                                else if (dp.TryGetProperty("total", out var tot) && tot.ValueKind == JsonValueKind.Number)
+                                    value = tot.GetDouble();
                             }
 
                             switch (name)

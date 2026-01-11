@@ -1,0 +1,127 @@
+/* Explorer Header Restructured Layout */
+.explorer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+}
+
+.explorer-header-left {
+    flex: 1;
+    min-width: 0;
+}
+
+.explorer-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+/* Namespace title section */
+.namespace-title-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.namespace-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.explorer-namespace-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin: 0;
+    padding: 4px 12px;
+    margin-left: -12px;
+    /* Pull back to align with edge */
+    border: 1px solid transparent;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    cursor: default;
+}
+
+/* Editable state hover - looks like input */
+.explorer-namespace-title.editable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.explorer-namespace-title.editable:hover {
+    background-color: var(--input-bg);
+    border-color: var(--border-color);
+    /* No text color change, just bg/border */
+}
+
+/* FQDN below title */
+.namespace-fqdn-below {
+    font-size: 0.8rem;
+    color: var(--muted-text);
+    font-family: monospace;
+    margin-left: 2px;
+}
+
+/* Edit section */
+.namespace-edit-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Input styling to match the title exactly */
+.namespace-rename-input {
+    font-size: 1.75rem;
+    /* Match title font size */
+    font-weight: 600;
+    padding: 4px 11px;
+    /* Match title padding (minus 1px border diff) */
+    margin-left: -12px;
+    border-radius: 6px;
+    border: 1px solid var(--primary-color);
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    width: 100%;
+    max-width: 600px;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+}
+
+/* Header action buttons */
+.header-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Auto-width input wrapper */
+.namespace-edit-wrapper {
+    display: grid;
+    margin-left: -12px;
+    align-items: center;
+}
+
+/* Mirror element for width calculation */
+.namespace-edit-wrapper::after {
+    content: attr(data-value) " ";
+    visibility: hidden;
+    white-space: pre;
+    grid-area: 1 / 1;
+    font-size: 1.75rem;
+    font-weight: 600;
+    padding: 4px 11px;
+    border: 1px solid transparent;
+    font-family: inherit;
+}
+
+/* Override input styling when inside wrapper */
+.namespace-edit-wrapper .namespace-rename-input {
+    grid-area: 1 / 1;
+    width: 100%;
+    margin-left: 0;
+    max-width: none;
+    box-sizing: border-box;
+}

@@ -64,12 +64,6 @@ public sealed class BackgroundPurgeService : IDisposable
                 {
                     operation.MessagesDeleted = count;
                     Console.WriteLine($"[BackgroundPurge] Progress: {count} messages deleted");
-                    
-                    // Update the same notification with progress (every 100 messages to avoid too many updates)
-                    if (count % 100 == 0 || count < 100)
-                    {
-                        _notificationService.NotifyInfo($"Purging {entityPath}: {count:N0} messages deleted...", notificationId);
-                    }
                     NotifyChanged();
                 });
                 
@@ -132,7 +126,8 @@ public sealed class BackgroundPurgeService : IDisposable
                     operation.EndTime = DateTime.Now;
                     
                     // Show success notification (updates the progress notification)
-                    _notificationService.NotifySuccess($"Purge complete: {finalCount:N0} messages deleted from {entityPath}", notificationId);
+                    string typeLabel = entityType == "queue" ? "queue" : "subscription";
+                    _notificationService.NotifySuccess($"Purge complete: {finalCount:N0} messages deleted from {typeLabel} '{entityPath}'", notificationId);
                 }
                 else
                 {
@@ -154,8 +149,8 @@ public sealed class BackgroundPurgeService : IDisposable
             finally
             {
                 NotifyChanged();
-                // Remove completed operations after 30 seconds
-                await Task.Delay(30000);
+                // Remove completed operations after 10 seconds
+                await Task.Delay(10000);
                 _activeOperations.Remove(operation);
                 NotifyChanged();
             }
@@ -171,12 +166,13 @@ public sealed class BackgroundPurgeService : IDisposable
         {
             try
             {
+                operation.Status = PurgeStatus.Stopping;
+                NotifyChanged();
                 await operation.Controller.InvokeVoidAsync("stop");
-                operation.Status = PurgeStatus.Cancelled;
-                operation.EndTime = DateTime.Now;
+                // Do not remove immediately; let the background task complete and clean up
             }
             catch { }
-            NotifyChanged();
+            // NotifyChanged will be called by catch or finally in the background task eventually
         }
     }
     
@@ -212,5 +208,6 @@ public enum PurgeStatus
     Running,
     Completed,
     Failed,
-    Cancelled
+    Cancelled,
+    Stopping
 }

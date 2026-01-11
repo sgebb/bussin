@@ -7,26 +7,31 @@
     <title>bussin</title>
     <meta name="description" content="A zero-backend, installable PWA for managing Azure Service Bus" />
     <base href="/" />
-    
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="stylesheet" href="css/custom-theme.css" />
-	<link rel="icon" type="image/svg" href="favicon.svg" />
+    <link rel="stylesheet" href="css/namespace-actions.css" />
+    <link rel="stylesheet" href="css/footer-icons.css" />
+    <link rel="stylesheet" href="css/explorer-header.css" />
+    <link rel="stylesheet" href="css/notifications-sidebar.css" />
+    <link rel="stylesheet" href="css/tasks-sidebar.css" />
+    <link rel="icon" type="image/svg" href="favicon.svg" />
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" content="#512bd4" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="bussin" />
-    
+
     <!-- Google Analytics 4 -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-46J4E5R4DN"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
-        
+
         // Configure GA4 with enhanced measurement
         gtag('config', 'G-46J4E5R4DN', {
             'send_page_view': true,
@@ -54,7 +59,7 @@
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
-    
+
     <script src="js/storage.js"></script>
     <script src="js/analytics.js"></script>
     <script src="https://alcdn.msauth.net/browser/2.33.0/js/msal-browser.min.js"></script>
@@ -62,10 +67,10 @@
     <script src="js/msal-helper.js"></script>
     <script src="js/servicebus-api.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
-    
+
     <script>
         // Helper functions for monitoring with DotNetObjectReference callbacks
-        window.startMonitoringQueue = async function(namespaceName, queueName, token, dotnetRef) {
+        window.startMonitoringQueue = async function (namespaceName, queueName, token, dotnetRef) {
             return await ServiceBusAPI.monitorQueue(
                 namespaceName,
                 queueName,
@@ -75,7 +80,7 @@
             );
         };
 
-        window.startMonitoringSubscription = async function(namespaceName, topicName, subscriptionName, token, dotnetRef) {
+        window.startMonitoringSubscription = async function (namespaceName, topicName, subscriptionName, token, dotnetRef) {
             return await ServiceBusAPI.monitorSubscription(
                 namespaceName,
                 topicName,
@@ -85,13 +90,13 @@
                 (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
             );
         };
-        
+
         // Helper to start purge with progress callback
         // Queue signature: (namespace, queueName, token, callbackRef, fromDeadLetter, "queue")
         // Subscription signature: (namespace, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription")
-        window.startPurgeWithProgress = async function(...args) {
+        window.startPurgeWithProgress = async function (...args) {
             const type = args[args.length - 1]; // Last argument is type
-            
+
             if (type === 'queue') {
                 const [namespace, queueName, token, callbackRef, fromDeadLetter] = args;
                 const progressCallback = (count) => callbackRef.invokeMethodAsync('OnProgress', count);
@@ -103,7 +108,7 @@
             }
         };
     </script>
-    
+
     <script>
         // Register service worker for PWA installability
         if ('serviceWorker' in navigator) {
@@ -111,7 +116,7 @@
                 // Use base href for service worker path
                 const baseHref = document.querySelector('base')?.getAttribute('href') || '/';
                 const swPath = baseHref + 'service-worker.js';
-                
+
                 navigator.serviceWorker.register(swPath)
                     .then(registration => {
                         console.log('Service Worker registered:', registration.scope);
@@ -123,4 +128,5 @@
         }
     </script>
 </body>
+
 </html>

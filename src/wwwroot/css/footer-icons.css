@@ -1,0 +1,64 @@
+/* Footer icon hover effects */
+.footer-icon-btn {
+    position: relative;
+    transition: transform 0.2s ease;
+}
+
+.footer-icon-btn:hover {
+    transform: translateY(-2px);
+}
+
+/* Dark mode toggle - specific colors on hover */
+.footer-icon-btn .bi-brightness-high-fill,
+.footer-icon-btn .bi-moon-fill {
+    transition: color 0.3s ease, transform 0.3s ease;
+}
+
+.footer-icon-btn:hover .bi-brightness-high-fill {
+    color: #ffd700;
+    /* Yellow for Sun */
+}
+
+.footer-icon-btn:hover .bi-moon-fill {
+    color: #87ceeb;
+    /* Light Blue for Moon */
+}
+
+/* Hammer icon - turn brown on hover */
+.footer-icon-btn .bi-hammer {
+    transition: color 0.3s ease;
+}
+
+.footer-icon-btn:hover .bi-hammer {
+    color: #8b4513;
+}
+
+/* Heart stays as is, maybe slight scale */
+.footer-icon-btn .bi-heart-fill {
+    transition: transform 0.3s ease;
+}
+
+.footer-icon-btn:hover .bi-heart-fill {
+    color: #dc3545;
+    transform: scale(1.1);
+}
+
+/* User Section Hover - only icon changes color */
+.user-section {
+    transition: opacity 0.2s ease;
+}
+
+.user-section:hover i {
+    color: #0dcaf0 !important;
+    /* Cyan for user icon */
+}
+
+/* Home favorite star hover */
+.favorite-btn {
+    transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.favorite-btn:hover {
+    color: #ffc107 !important;
+    transform: scale(1.2);
+}

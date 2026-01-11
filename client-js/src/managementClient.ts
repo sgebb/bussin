@@ -35,7 +35,7 @@ export class ManagementClient {
         return new Promise((resolve, reject) => {
             // Create unique reply-to address
             this.replyTo = `mgmt-reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-            
+
             this.sender = this.connection.connection!.open_sender({
                 target: { address: this.managementAddress }
             });
@@ -86,7 +86,7 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
-            
+
             // Set up receiver for response
             const responseHandler = (context: any) => {
                 const statusCode = context.message.application_properties?.statusCode;
@@ -96,18 +96,18 @@ export class ManagementClient {
                 if (statusCode === 200 || statusCode === 204) {
                     const body = context.message.body;
                     let messages: any[] = [];
-                    
+
                     // Status 204 means no messages
                     if (statusCode === 204) {
                         resolve([]);
                         this.receiver!.removeListener('message', responseHandler);
                         return;
                     }
-                    
+
                     // Body is a map with 'messages' key containing array of {message: Buffer}
                     if (body && body.messages) {
                         const msgArray = Array.isArray(body.messages) ? body.messages : [body.messages];
-                        
+
                         for (const item of msgArray) {
                             if (item.message) {
                                 // The message is an encoded AMQP message buffer
@@ -120,7 +120,7 @@ export class ManagementClient {
                             }
                         }
                     }
-                    
+
                     resolve(messages);
                 } else {
                     reject(new Error(`Peek failed: ${statusCode} - ${statusDescription}`));
@@ -135,7 +135,7 @@ export class ManagementClient {
             const messageBody: Record<string, any> = {};
             messageBody['from-sequence-number'] = rhea.types.wrap_long(fromSequenceNumber);
             messageBody['message-count'] = rhea.types.wrap_int(messageCount);
-            
+
             const request = {
                 body: messageBody,
                 reply_to: replyTo,
@@ -166,7 +166,7 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
-            
+
             const responseHandler = (context: any) => {
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
@@ -189,7 +189,7 @@ export class ManagementClient {
             const messageBody: Record<string, any> = {};
             messageBody['sequence-numbers'] = wrappedSeqNums;
             messageBody['receiver-settle-mode'] = rhea.types.wrap_uint(0); // 0 = receive-and-delete
-            
+
             const request = {
                 body: messageBody,
                 reply_to: replyTo,
@@ -219,7 +219,7 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
-            
+
             const responseHandler = (context: any) => {
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
@@ -228,7 +228,7 @@ export class ManagementClient {
                     // Response body contains messages with lock tokens
                     const body = context.message.body;
                     const results: { sequenceNumber: number; lockToken: string }[] = [];
-                    
+
                     if (body && body.messages) {
                         const msgArray = Array.isArray(body.messages) ? body.messages : [body.messages];
                         for (let i = 0; i < msgArray.length; i++) {
@@ -261,7 +261,7 @@ export class ManagementClient {
             const messageBody: Record<string, any> = {};
             messageBody['sequence-numbers'] = wrappedSeqNums;
             messageBody['receiver-settle-mode'] = rhea.types.wrap_uint(1); // 1 = peek-lock
-            
+
             const request = {
                 body: messageBody,
                 reply_to: replyTo,
@@ -290,7 +290,7 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
-            
+
             const responseHandler = (context: any) => {
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
@@ -312,12 +312,12 @@ export class ManagementClient {
             const messageBody: Record<string, any> = {};
             messageBody['lock-tokens'] = lockTokenBuffers;
             messageBody['disposition-status'] = disposition; // 'completed', 'abandoned', or 'suspended' (dead-letter)
-            
+
             if (disposition === 'suspended' && deadLetterReason) {
                 messageBody['deadletter-reason'] = deadLetterReason;
                 messageBody['deadletter-description'] = deadLetterDescription || '';
             }
-            
+
             const request = {
                 body: messageBody,
                 reply_to: replyTo,
@@ -333,6 +333,67 @@ export class ManagementClient {
                 this.receiver!.removeListener('message', responseHandler);
                 reject(new Error('Update disposition request timeout'));
             }, 10000);
+        });
+    }
+
+    /**
+     * Purge messages using batch delete API (what Azure Portal uses)
+     * This is the FASTEST way to purge - server-side batch deletion
+     * @param messageCount - Number of messages to delete in this batch (max 4000 for Premium, 500 for Standard)
+     * @param beforeEnqueueTime - Optional: only delete messages enqueued before this time
+     * @returns Number of messages actually deleted
+     */
+    async purgeMessages(messageCount: number = 4000, beforeEnqueueTime?: Date): Promise<number> {
+        if (!this.sender || !this.receiver || !this.replyTo) {
+            throw new Error('Management client not opened');
+        }
+
+        return new Promise((resolve, reject) => {
+            const replyTo = this.replyTo!;
+
+            const responseHandler = (context: any) => {
+                const statusCode = context.message.application_properties?.statusCode;
+                const statusDescription = context.message.application_properties?.statusDescription;
+
+                if (statusCode === 200) {
+                    // Response contains the count of deleted messages
+                    const body = context.message.body;
+                    const deletedCount = body?.['message-count'] || body?.messageCount || 0;
+                    resolve(deletedCount);
+                } else if (statusCode === 204) {
+                    // No messages to delete
+                    resolve(0);
+                } else {
+                    reject(new Error(`Purge failed: ${statusCode} - ${statusDescription}`));
+                }
+
+                this.receiver!.removeListener('message', responseHandler);
+            };
+
+            this.receiver!.on('message', responseHandler);
+
+            const messageBody: Record<string, any> = {};
+            messageBody['message-count'] = rhea.types.wrap_int(messageCount);
+
+            if (beforeEnqueueTime) {
+                messageBody['before-enqueue-time'] = rhea.types.wrap_timestamp(beforeEnqueueTime.getTime());
+            }
+
+            const request = {
+                body: messageBody,
+                reply_to: replyTo,
+                application_properties: {
+                    operation: 'com.microsoft:purge-messages'
+                },
+                message_id: `purge-${Date.now()}`
+            };
+
+            this.sender!.send(request);
+
+            setTimeout(() => {
+                this.receiver!.removeListener('message', responseHandler);
+                reject(new Error('Purge request timeout'));
+            }, 30000); // Longer timeout for large batch operations
         });
     }
 
@@ -361,7 +422,7 @@ function longToBytes(num: number): Uint8Array & { copy: (target: Uint8Array, off
         bytes[i] = Number(bigNum >> BigInt((7 - i) * 8) & BigInt(0xff));
     }
     // Add copy method for rhea compatibility (it expects Node Buffer interface)
-    (bytes as any).copy = function(target: Uint8Array, offset: number) {
+    (bytes as any).copy = function (target: Uint8Array, offset: number) {
         for (let i = 0; i < this.length; i++) {
             target[offset + i] = this[i];
         }
@@ -381,7 +442,7 @@ function uuidFromBuffer(buffer: Uint8Array | { type: string; data: number[] }): 
     } else {
         throw new Error('Invalid UUID buffer format');
     }
-    
+
     const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
@@ -411,7 +472,7 @@ function decodeEncodedMessage(messageBuffer: any): any {
     } else {
         throw new Error('Invalid message buffer format');
     }
-    
+
     // Use rhea's message decoder (cast to any due to Node.js Buffer vs browser Uint8Array mismatch)
     const decoded = rhea.message.decode(bytes as any);
     return decoded;

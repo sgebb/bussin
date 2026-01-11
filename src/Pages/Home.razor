@@ -91,7 +91,7 @@
                                             @onclick="async () => await ToggleFavorite(ns.FullyQualifiedNamespace)" 
                                             @onclick:stopPropagation="true"
                                             title="@(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "Remove from favorites" : "Add to favorites")">
-                                        @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "★" : "☆")
+                                        <i class="bi @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "bi-star-fill" : "bi-star")"></i>
                                     </button>
                                     <div class="card-body" @onclick="() => NavigateToExplorer(ns)">
                                         <h5 class="card-title">@ns.Name</h5>

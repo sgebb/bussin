@@ -1,0 +1,131 @@
+@inject BackgroundPurgeService BackgroundPurge
+@implements IDisposable
+
+<!-- Tasks Floating Button -->
+<div class="tasks-float-btn @(HasActiveTasks ? "active shake" : "")" 
+     @onclick="ToggleSidebar"
+     title="Running Tasks">
+    @if (HasActiveTasks)
+    {
+        <div class="tasks-count-badge">
+            @BackgroundPurge.ActiveOperations.Count
+        </div>
+    }
+    <i class="bi bi-hourglass-split"></i>
+</div>
+
+<!-- Sidebar -->
+@if (isOpen)
+{
+    <div class="tasks-sidebar">
+        <div class="tasks-header">
+            <h6 class="mb-0">Running Tasks</h6>
+        </div>
+        <div class="tasks-body">
+            @if (HasActiveTasks)
+            {
+                <div class="task-list">
+                    @foreach (var task in BackgroundPurge.ActiveOperations)
+                    {
+                        var isCompleted = task.Status == PurgeStatus.Completed;
+                        var isFailed = task.Status == PurgeStatus.Failed;
+                        var isRunning = task.Status == PurgeStatus.Running;
+                        var isStopping = task.Status == PurgeStatus.Stopping;
+                        
+                        <div class="task-card @(isCompleted ? "task-success" : "") @(isFailed ? "task-failed" : "")" 
+                             title="Started: @task.StartTime.ToString("G")">
+                            <div class="task-card-header">
+                                <div class="task-icon">
+                                    @if (isRunning)
+                                    {
+                                        <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                                    }
+                                    else if (isStopping)
+                                    {
+                                        <div class="spinner-grow spinner-grow-sm text-warning" role="status"></div>
+                                    }
+                                    else if (isCompleted)
+                                    {
+                                        <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                    }
+                                    else if (isFailed)
+                                    {
+                                        <i class="bi bi-exclamation-circle-fill text-danger fs-5"></i>
+                                    }
+                                </div>
+                                <div class="task-details">
+                                    <div class="task-name">
+                                        @if (isStopping) { <span class="text-warning me-1">Stopping...</span> }
+                                        Purging @task.EntityPath
+                                    </div>
+                                    <div class="task-meta">
+                                        @if (task.IsDeadLetter) { <span class="badge bg-secondary me-1">DLQ</span> }
+                                        <span>@task.MessagesDeleted.ToString("N0") deleted</span>
+                                        @if (isFailed) { <br/><span class="text-danger small">@task.ErrorMessage</span> }
+                                    </div>
+                                </div>
+                                @if (isRunning)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger task-cancel-btn"
+                                            @onclick="() => StopTask(task.Id)" 
+                                            title="Stop Task">
+                                        <i class="bi bi-stop-fill"></i>
+                                    </button>
+                                }
+                            </div>
+                            <div class="progress mt-2" style="height: 3px;">
+                                @if (isRunning || isStopping)
+                                {
+                                    <div class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                                }
+                                else if (isCompleted)
+                                {
+                                    <div class="progress-bar bg-success" style="width: 100%"></div>
+                                }
+                                else
+                                {
+                                    <div class="progress-bar bg-danger" style="width: 100%"></div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="tasks-empty">
+                    <i class="bi bi-check-circle"></i>
+                    <p class="text-muted mb-0">No running tasks</p>
+                </div>
+            }
+        </div>
+    </div>
+    
+    <!-- Backdrop -->
+    <div class="tasks-backdrop" @onclick="ToggleSidebar"></div>
+}
+
+@code {
+    private bool isOpen = false;
+    private bool HasActiveTasks => BackgroundPurge.ActiveOperations.Any();
+
+    protected override void OnInitialized()
+    {
+        BackgroundPurge.OnOperationsChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        BackgroundPurge.OnOperationsChanged -= StateHasChanged;
+    }
+
+    private void ToggleSidebar()
+    {
+        isOpen = !isOpen;
+    }
+
+    private async Task StopTask(string taskId)
+    {
+        await BackgroundPurge.CancelPurgeAsync(taskId);
+    }
+}

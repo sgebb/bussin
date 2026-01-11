@@ -17,39 +17,51 @@
 <PageTitle>Explorer - bussin</PageTitle>
 
 <div class="explorer-layout">
-    <!-- Section 1: Compact Header -->
+    <!-- Section 1: Restructured Header -->
     <div class="explorer-header">
-        <div class="d-flex align-items-center justify-content-between w-100">
-            <div class="d-flex align-items-center gap-2">
-                @if (isEditingDisplayName)
-                {
-                    <input type="text" class="form-control form-control-lg namespace-rename-input" 
-                           @bind="editDisplayName" 
-                           @bind:event="oninput"
-                           @onkeydown="HandleRenameKeyDown"
-                           @onblur="CancelRename" />
-                    <button class="btn btn-sm btn-primary" @onmousedown="SaveDisplayName" @onmousedown:preventDefault="true" disabled="@string.IsNullOrWhiteSpace(editDisplayName)">
+        <div class="explorer-header-left">
+            @if (isEditingDisplayName)
+            {
+                <div class="namespace-edit-section">
+                    <div class="namespace-edit-wrapper" data-value="@editDisplayName">
+                        <input type="text" class="form-control namespace-rename-input"
+                               @bind="editDisplayName"
+                               @bind:event="oninput"
+                               @onkeydown="HandleRenameKeyDown"
+                               @onblur="CancelRename"
+                               @ref="renameInputRef" />
+                    </div>
+                    <button class="btn btn-sm btn-success" @onmousedown="SaveDisplayName" @onmousedown:preventDefault="true" disabled="@string.IsNullOrWhiteSpace(editDisplayName)">
                         <i class="bi bi-check-lg"></i>
                     </button>
-                    <button class="btn btn-sm btn-secondary" @onclick="CancelRename">
+                    <button class="btn btn-sm btn-secondary" @onmousedown="CancelRename" @onmousedown:preventDefault="true">
                         <i class="bi bi-x-lg"></i>
                     </button>
-                }
-                else
-                {
-                    <h1 class="explorer-namespace-title mb-0">@displayName</h1>
-                    @if (NavState.IsFavorite(NamespaceParam ?? ""))
-                    {
-                        <button class="rename-btn" @onclick="StartRename" title="Rename namespace">
-                            <i class="bi bi-pencil"></i>
+                </div>
+            }
+            else
+            {
+                <div class="namespace-title-section">
+                    <div class="namespace-title-row">
+                        <h1 class="explorer-namespace-title @(NavState.IsFavorite(NamespaceParam ?? "") ? "editable" : "")" 
+                            @onclick="@(NavState.IsFavorite(NamespaceParam ?? "") ? StartRename : (Action)(() => {}))"
+                            title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Click to rename" : displayName)">
+                            @displayName
+                        </h1>
+                        <button class="namespace-action-btn favorite-toggle-btn @(NavState.IsFavorite(NamespaceParam ?? "") ? "favorited" : "not-favorited")"
+                                @onclick="() => ToggleFavorite()"
+                                title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Remove from favorites" : "Add to favorites")">
+                            <i class="bi @(NavState.IsFavorite(NamespaceParam ?? "") ? "bi-star-fill" : "bi-star")"></i>
                         </button>
-                    }
-                }
-                <button class="favorite-toggle-btn @(NavState.IsFavorite(NamespaceParam ?? "") ? "favorited" : "not-favorited")" 
-                        @onclick="() => ToggleFavorite()" 
-                        title="@(NavState.IsFavorite(NamespaceParam ?? "") ? "Remove from favorites" : "Add to favorites")">
-                    @(NavState.IsFavorite(NamespaceParam ?? "") ? "★" : "☆")
-                </button>
+                    </div>
+                </div>
+            }
+            <div class="namespace-fqdn-below">
+                @NamespaceParam
+            </div>
+        </div>
+        <div class="explorer-header-right">
+            <div class="header-action-buttons">
                 @if (isLoadingEntities)
                 {
                     <div class="spinner-border spinner-border-sm text-muted" role="status">
@@ -58,13 +70,13 @@
                 }
                 else
                 {
-                    <button class="refresh-btn" @onclick="RefreshEntities" title="Refresh queues and topics">
+                    <button class="namespace-action-btn refresh-btn" @onclick="RefreshEntities" title="Refresh queues and topics">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
                 }
-            </div>
-            <div class="namespace-fqdn text-muted" title="@NamespaceParam">
-                @NamespaceParam
+                <button class="namespace-action-btn stats-btn" @onclick="() => showStatsModal = true" title="Statistics">
+                    <i class="bi bi-bar-chart-line"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -233,47 +245,47 @@
                         <span><strong>Session-enabled.</strong> Send requires Session ID. Delete/Purge not supported.</span>
                     </div>
                 }
-                
+
                 <div class="explorer-messages-list">
-                @if (peekedMessages.Count > 0)
-                {
-                    <MessageList @ref="_messageListRef"
-                                Messages="@peekedMessages"
-                                IsDLQ="@isViewingDLQ"
-                                IsProcessing="@isProcessingBatch"
-                                RequiresSession="@SelectedEntityRequiresSession"
-                                OnMessageSelected="@ShowMessageDetail"
-                                OnDeleteMessages="@DeleteMessages"
-                                OnResubmitMessages="@ResubmitMessages"
-                                OnMoveToDLQMessages="@MoveToDLQMessages"
-                                OnScheduledMessageWarning="@ShowScheduledMessageWarning" 
-                                OnClearMessages="@ClearPeekedMessages" />
-                }
-                else if (selectedQueueName != null || selectedSubscriptionName != null)
-                {
-                    <div class="text-center text-muted p-4">
-                        <p>@(hasPeeked ? "No messages found" : "Click 'Peek' to load messages")</p>
-                    </div>
-                }
-                else
-                {
-                    <div class="text-center text-muted p-4">
-                        <p>Select a queue or topic subscription to view messages</p>
-                    </div>
-                }
+                    @if (peekedMessages.Count > 0)
+                    {
+                        <MessageList @ref="_messageListRef"
+                                     Messages="@peekedMessages"
+                                     IsDLQ="@isViewingDLQ"
+                                     IsProcessing="@isProcessingBatch"
+                                     RequiresSession="@SelectedEntityRequiresSession"
+                                     OnMessageSelected="@ShowMessageDetail"
+                                     OnDeleteMessages="@DeleteMessages"
+                                     OnResubmitMessages="@ResubmitMessages"
+                                     OnMoveToDLQMessages="@MoveToDLQMessages"
+                                     OnScheduledMessageWarning="@ShowScheduledMessageWarning"
+                                     OnClearMessages="@ClearPeekedMessages" />
+                    }
+                    else if (selectedQueueName != null || selectedSubscriptionName != null)
+                    {
+                        <div class="text-center text-muted p-4">
+                            <p>@(hasPeeked ? "No messages found" : "Click 'Peek' to load messages")</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted p-4">
+                            <p>Select a queue or topic subscription to view messages</p>
+                        </div>
+                    }
                 </div>
             </div>
 
             <div class="explorer-actions-sidebar">
                 <!-- Send + DLQ Toggle Row -->
                 <div class="send-dlq-row">
-                    <button class="btn btn-action btn-primary send-btn @(!CanSend ? "disabled-grey" : "")" 
-                            @onclick="ShowSendMessageModal" 
+                    <button class="btn btn-action btn-primary send-btn @(!CanSend ? "disabled-grey" : "")"
+                            @onclick="ShowSendMessageModal"
                             disabled="@(!CanSend)"
                             title="Send a message">
                         <i class="bi bi-envelope-fill"></i> Send
                     </button>
-                    <button class="dlq-toggle-btn @(isViewingDLQ ? "active" : "") @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")" 
+                    <button class="dlq-toggle-btn @(isViewingDLQ ? "active" : "") @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")"
                             @onclick="ToggleDLQ"
                             disabled="@(!HasQueueOrSubscriptionSelected)"
                             title="@(HasQueueOrSubscriptionSelected ? (isViewingDLQ ? "Viewing Dead Letter Queue" : "Switch to Dead Letter Queue") : "Select a queue or subscription first")">
@@ -295,12 +307,12 @@
                 <div class="action-btn-group">
                     <div class="action-btn-group-title">Read</div>
                     <div class="peek-btn-combined @(!HasQueueOrSubscriptionSelected || isPeeking ? "disabled" : "")">
-                        <button class="peek-btn-main" 
-                                @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)" 
+                        <button class="peek-btn-main"
+                                @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)"
                                 disabled="@(!HasQueueOrSubscriptionSelected || isPeeking)">
                             <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
                         </button>
-                        <button class="peek-btn-options @(ArePeekOptionsModified ? "text-warning" : "")" 
+                        <button class="peek-btn-options @(ArePeekOptionsModified ? "text-warning" : "")"
                                 @onclick="ShowPeekOptionsModal"
                                 @onclick:stopPropagation="true"
                                 disabled="@(!HasQueueOrSubscriptionSelected)"
@@ -308,7 +320,7 @@
                             <i class="bi bi-gear"></i>
                         </button>
                     </div>
-                    <button class="btn btn-action btn-secondary w-100 @(!HasQueueOrSubscriptionSelected || isViewingDLQ ? "disabled-grey" : "")" 
+                    <button class="btn btn-action btn-secondary w-100 @(!HasQueueOrSubscriptionSelected || isViewingDLQ ? "disabled-grey" : "")"
                             @onclick="ShowMonitorModal"
                             disabled="@(!HasQueueOrSubscriptionSelected || isViewingDLQ)"
                             title="@(isViewingDLQ ? "Monitoring not available for Dead Letter Queue" : "Monitor incoming messages")">
@@ -319,11 +331,11 @@
                 <!-- Dangerous Actions -->
                 <div class="action-btn-group">
                     <div class="action-btn-group-title">Dangerous</div>
-                    <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || isPurging || SelectedEntityRequiresSession ? "disabled-grey" : "")" 
-                            @onclick="() => PurgeMessages()" 
-                            disabled="@(!HasQueueOrSubscriptionSelected || isPurging || SelectedEntityRequiresSession)"
-                            title="@(SelectedEntityRequiresSession ? "Purge not supported for session-enabled entities" : "Purge all messages")">
-                        <i class="bi bi-trash"></i> Purge All
+                    <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession ? "disabled-grey" : "")"
+                            @onclick="() => PurgeMessages()"
+                            disabled="@(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession)"
+                            title="@(SelectedEntityRequiresSession ? "Purge not supported for session-enabled entities" : CurrentPurgeOperation != null ? "Purge already in progress" : "Purge all messages")">
+                        <i class="bi bi-trash"></i> Purge
                     </button>
                 </div>
             </div>
@@ -372,27 +384,27 @@
 
 <!-- Modals -->
 <SendMessageModal IsVisible="@showSendMessageModal"
-                 IsSending="@isSending"
-                 RequiresSession="@SelectedEntityRequiresSession"
-                 OnClose="@(() => showSendMessageModal = false)"
-                 OnSend="@SendMessage" />
+                  IsSending="@isSending"
+                  RequiresSession="@SelectedEntityRequiresSession"
+                  OnClose="@(() => showSendMessageModal = false)"
+                  OnSend="@SendMessage" />
 
 <MessageDetailModal IsVisible="@showMessageDetailModal"
-                   Message="@selectedMessage"
-                   IsDLQ="@isViewingDLQ"
-                   IsProcessing="@isProcessingBatch"
-                   RequiresSession="@SelectedEntityRequiresSession"
-                   OnClose="@CloseMessageDetail"
-                   OnDelete="@DeleteSingleMessage"
-                   OnResubmit="@ResubmitSingleMessage"
-                   OnMoveToDLQ="@MoveToDLQSingleMessage" />
+                    Message="@selectedMessage"
+                    IsDLQ="@isViewingDLQ"
+                    IsProcessing="@isProcessingBatch"
+                    RequiresSession="@SelectedEntityRequiresSession"
+                    OnClose="@CloseMessageDetail"
+                    OnDelete="@DeleteSingleMessage"
+                    OnResubmit="@ResubmitSingleMessage"
+                    OnMoveToDLQ="@MoveToDLQSingleMessage" />
 
 <PeekLockModal IsVisible="@showPeekLockModal"
-              IsProcessing="@isPeeking"
-              InitialCount="@peekLockCount"
-              InitialDuration="@peekLockDuration"
-              OnClose="@(() => showPeekLockModal = false)"
-              OnPeekLock="@PeekLockMessagesWithSettings" />
+               IsProcessing="@isPeeking"
+               InitialCount="@peekLockCount"
+               InitialDuration="@peekLockDuration"
+               OnClose="@(() => showPeekLockModal = false)"
+               OnPeekLock="@PeekLockMessagesWithSettings" />
 
 <PeekOptionsModal IsVisible="@showPeekOptionsModal"
                   OnClose="@(() => showPeekOptionsModal = false)"
@@ -400,29 +412,29 @@
                   OnPeek="@(async (options) => await PeekWithOptions(options, append: false))" />
 
 <MessageMonitorModal IsVisible="@showMonitorModal"
-                    NamespaceName="@NamespaceNameOnly"
-                    QueueName="@selectedQueueName"
-                    TopicName="@selectedTopicName"
-                    SubscriptionName="@selectedSubscriptionName"
-                    OnClose="@(() => showMonitorModal = false)" />
+                     NamespaceName="@NamespaceNameOnly"
+                     QueueName="@selectedQueueName"
+                     TopicName="@selectedTopicName"
+                     SubscriptionName="@selectedSubscriptionName"
+                     OnClose="@(() => showMonitorModal = false)" />
 
 <ReceiveAndLockModal IsVisible="@showReceiveAndLockModal"
-                    OnClose="@(() => showReceiveAndLockModal = false)"
-                    OnLockMessages="@LockMessagesForModal" />
+                     OnClose="@(() => showReceiveAndLockModal = false)"
+                     OnLockMessages="@LockMessagesForModal" />
 
 <ConfirmModal IsVisible="@ConfirmModal.IsVisible"
-             Title="@ConfirmModal.Title"
-             Message="@ConfirmModal.Message"
-             DetailMessage="@ConfirmModal.DetailMessage"
-             ConfirmButtonText="@ConfirmModal.ConfirmButtonText"
-             ConfirmButtonClass="@ConfirmModal.ConfirmButtonClass"
-             AlternativeConfirmButtonText="@ConfirmModal.AlternativeButtonText"
-             AlternativeConfirmButtonClass="@ConfirmModal.AlternativeButtonClass"
-             IsProcessing="@ConfirmModal.IsProcessing"
-             ProgressCount="@ConfirmModal.ProgressCount"
-             OnConfirm="@OnConfirmModalConfirm"
-             OnAlternativeConfirm="@OnConfirmModalAlternativeConfirm"
-             OnCancel="@OnConfirmModalCancel">
+              Title="@ConfirmModal.Title"
+              Message="@ConfirmModal.Message"
+              DetailMessage="@ConfirmModal.DetailMessage"
+              ConfirmButtonText="@ConfirmModal.ConfirmButtonText"
+              ConfirmButtonClass="@ConfirmModal.ConfirmButtonClass"
+              AlternativeConfirmButtonText="@ConfirmModal.AlternativeButtonText"
+              AlternativeConfirmButtonClass="@ConfirmModal.AlternativeButtonClass"
+              IsProcessing="@ConfirmModal.IsProcessing"
+              ProgressCount="@ConfirmModal.ProgressCount"
+              OnConfirm="@OnConfirmModalConfirm"
+              OnAlternativeConfirm="@OnConfirmModalAlternativeConfirm"
+              OnCancel="@OnConfirmModalCancel">
     @if (isResubmitModal)
     {
         <div class="resubmit-delete-option mt-3 p-3 rounded">
@@ -443,21 +455,16 @@
             Topics="@topics"
             OnClose="@(() => showStatsModal = false)" />
 
-<!-- Floating Statistics Button -->
-<div class="stats-floating-btn" @onclick="() => showStatsModal = true" title="View Statistics">
-    <i class="bi bi-bar-chart-line"></i>
-</div>
-
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
     public string? NamespaceParam { get; set; }
-    
+
     [SupplyParameterFromQuery(Name = "rg")]
     public string? ResourceGroupParam { get; set; }
-    
+
     [SupplyParameterFromQuery(Name = "sub")]
     public string? SubscriptionIdParam { get; set; }
-    
+
     [SupplyParameterFromQuery(Name = "name")]
     public string? NameParam { get; set; }
 
@@ -466,18 +473,18 @@
     private Dictionary<string, ServiceBusQueueInfo> queueDict = new();
     private Dictionary<string, ServiceBusTopicInfo> topicDict = new();
     private Dictionary<string, ServiceBusSubscriptionInfo> subscriptionDict = new();
-    
+
     private List<ServiceBusQueueInfo> queues => queueDict.Values.OrderBy(q => q.Name).ToList();
     private List<ServiceBusTopicInfo> topics => topicDict.Values.OrderBy(t => t.Name).ToList();
     private List<ServiceBusSubscriptionInfo> subscriptions => subscriptionDict.Values.OrderBy(s => s.Name).ToList();
-    
+
     // Convenience accessors for state
     private string? selectedQueueName => _state.SelectedQueueName;
     private string? selectedTopicName => _state.SelectedTopicName;
     private string? selectedSubscriptionName => _state.SelectedSubscriptionName;
     private bool isViewingDLQ { get => _state.IsViewingDLQ; set => _state.IsViewingDLQ = value; }
     private string? _loadedSubscriptionsForTopic;
-    
+
     // Message state
     private List<ServiceBusMessage> peekedMessages = new();
     private bool hasPeeked = false;
@@ -491,7 +498,7 @@
         !string.IsNullOrEmpty(lastPeekOptions.BodyFilter) ||
         lastPeekOptions.PeekFromNewest
     );
-    
+
     // Modal state
     private bool resubmitRemoveFromDLQ = true;
     private bool isResubmitModal = false;
@@ -505,52 +512,51 @@
     private ServiceBusMessage? selectedMessage = null;
     private int peekLockCount = 10;
     private int peekLockDuration = 30;
-    
+
     // Loading/processing state
     private bool isLoadingEntities = false;
     private bool isLoadingSubscriptions = false;
     private bool isPeeking = false;
-    private bool isPurging = false;
     private bool isSending = false;
     private bool isProcessingBatch = false;
     private CancellationTokenSource? _loadCts;
-    
-    // Purge state
-    private IJSObjectReference? _purgeController;
-    private DotNetObjectReference<PurgeProgressCallback>? _purgeCallbackRef;
-    
+
+
+
     // UI refs
     private MessageList? _messageListRef;
     private string? errorMessage;
     private string? rawErrorMessage;
     private string displayName = "";
-    
+
     // Rename state
     private bool isEditingDisplayName = false;
     private string editDisplayName = "";
-    
+    private ElementReference renameInputRef;
+
     // Computed properties
     private string NamespaceNameOnly => _state.NamespaceNameOnly;
     private bool HasEntitySelected => _state.HasEntitySelected;
     private bool HasQueueOrSubscriptionSelected => _state.HasQueueOrSubscriptionSelected;
     private bool CanSend => HasEntitySelected && !isViewingDLQ;
-    private bool SelectedEntityRequiresSession => 
+    private bool SelectedEntityRequiresSession =>
         (selectedQueueName != null && queueDict.TryGetValue(selectedQueueName, out var q) && q.RequiresSession) ||
         (selectedSubscriptionName != null && subscriptionDict.TryGetValue(selectedSubscriptionName, out var s) && s.RequiresSession);
 
     private string? _lastNamespace;
-    
+
     protected override void OnInitialized()
     {
         ConfirmModal.OnChange += StateHasChanged;
+        BackgroundPurge.OnOperationsChanged += StateHasChanged;
     }
-    
+
     public void Dispose()
     {
         ConfirmModal.OnChange -= StateHasChanged;
+        BackgroundPurge.OnOperationsChanged -= StateHasChanged;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
-        _purgeCallbackRef?.Dispose();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -559,7 +565,9 @@
         if (!string.IsNullOrEmpty(NamespaceParam) && NamespaceParam != _lastNamespace)
         {
             _lastNamespace = NamespaceParam;
-            
+            isEditingDisplayName = false;
+            editDisplayName = "";
+
             _state.SetNamespace(new ServiceBusNamespaceInfo
             {
                 Name = NamespaceParam?.Split('.').FirstOrDefault() ?? "",
@@ -567,16 +575,16 @@
                 ResourceGroup = ResourceGroupParam ?? "",
                 SubscriptionId = SubscriptionIdParam ?? ""
             });
-            
+
             peekedMessages.Clear();
             hasPeeked = false;
             peekFromSequence = 0;
-            
+
             // Clear all entity dictionaries when switching namespaces
             queueDict.Clear();
             topicDict.Clear();
             subscriptionDict.Clear();
-            
+
             // Initialize display name
             if (!string.IsNullOrEmpty(NamespaceParam))
             {
@@ -590,7 +598,7 @@
                     displayName = NameParam ?? "";
                 }
             }
-            
+
             await LoadEntitiesAsync();
         }
     }
@@ -610,7 +618,7 @@
                 errorMessage = "Cannot add to favorites: missing resource group or subscription information";
                 return;
             }
-            
+
             await NavState.AddToFavoritesAsync(NamespaceParam, ResourceGroupParam, SubscriptionIdParam, displayName);
         }
     }
@@ -626,16 +634,28 @@
         isEditingDisplayName = false;
         editDisplayName = "";
     }
+    
+    private async Task SaveOrCancelRename()
+    {
+        if (string.IsNullOrWhiteSpace(editDisplayName))
+        {
+            CancelRename();
+        }
+        else
+        {
+            await SaveDisplayName();
+        }
+    }
 
     private async Task SaveDisplayName()
     {
         if (string.IsNullOrWhiteSpace(editDisplayName) || string.IsNullOrEmpty(NamespaceParam)) return;
-        
+
         await NavState.RenameNamespaceAsync(NamespaceParam, editDisplayName.Trim());
         displayName = editDisplayName.Trim();
         isEditingDisplayName = false;
         editDisplayName = "";
-        NotificationService.NotifySuccess("Namespace renamed");
+        NotificationService.NotifySuccess($"Namespace renamed to '{displayName}'");
     }
 
     private async Task HandleRenameKeyDown(KeyboardEventArgs e)
@@ -653,7 +673,7 @@
     private async Task LoadEntitiesAsync()
     {
         if (_state.CurrentNamespace == null) return;
-        
+
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
 
@@ -693,22 +713,22 @@
         topicDict.Clear();
         subscriptionDict.Clear();
         _loadedSubscriptionsForTopic = null;
-        
+
         await LoadEntitiesAsync();
-        
+
         // Reload subscriptions if a topic is selected
         if (selectedTopicName != null)
         {
             await LoadSubscriptionsAsync(selectedTopicName);
         }
-        
+
         NotificationService.NotifySuccess("Refreshed queues and topics");
     }
 
     private async Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
         var ct = _loadCts?.Token ?? CancellationToken.None;
-        
+
         try
         {
             await foreach (var queue in ResourceService.ListQueuesAsync(credential, namespaceInfo, ct))
@@ -724,7 +744,7 @@
     private async Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
     {
         var ct = _loadCts?.Token ?? CancellationToken.None;
-        
+
         try
         {
             await foreach (var topic in ResourceService.ListTopicsAsync(credential, namespaceInfo, ct))
@@ -747,32 +767,32 @@
     {
         _state.SelectTopic(topicName);
         ResetMessageState();
-        
+
         // Reset DLQ when switching to topic (since topics don't have DLQ, only subscriptions do)
         isViewingDLQ = false;
-        
+
         // Only clear subscriptions if switching to a different topic
         if (_loadedSubscriptionsForTopic != topicName)
         {
             subscriptionDict.Clear();
             _loadedSubscriptionsForTopic = null;
         }
-        
+
         await LoadSubscriptionsAsync(topicName);
     }
 
     private async Task LoadSubscriptionsAsync(string topicName)
     {
         if (_state.CurrentNamespace == null) return;
-        
+
         // Cancel any previous subscription loading
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
-        
+
         // Show loading spinner
         isLoadingSubscriptions = true;
-        
+
         // Clear subscriptions if loading for a different topic
         if (_loadedSubscriptionsForTopic != topicName)
         {
@@ -792,13 +812,13 @@
             await foreach (var sub in ResourceService.ListSubscriptionsAsync(credential, _state.CurrentNamespace, topicName, ct))
             {
                 if (ct.IsCancellationRequested) break;
-                
+
                 // Only add if we're still loading for the same topic
                 if (selectedTopicName == topicName)
                 {
                     subscriptionDict[sub.Name] = sub;
                 }
-                
+
                 if (firstItem)
                 {
                     isLoadingSubscriptions = false;
@@ -806,7 +826,7 @@
                 }
                 StateHasChanged();
             }
-            
+
             // Mark that we've loaded subscriptions for this topic
             if (!ct.IsCancellationRequested && selectedTopicName == topicName)
             {
@@ -874,7 +894,7 @@
 
         isPeeking = true;
         errorMessage = null;
-        
+
         if (!append)
         {
             hasPeeked = true;
@@ -897,7 +917,7 @@
             }
 
             var messages = await PeekEntityMessagesAsync(token);
-            
+
             if (append)
             {
                 peekedMessages.AddRange(messages);
@@ -970,118 +990,67 @@
     {
         var entityName = _state.GetEntityPath();
         var dlqSuffix = isViewingDLQ ? " (Dead Letter Queue)" : "";
-        
-        ConfirmModal.ShowWithAlternative(
+
+        ConfirmModal.Show(
             title: "Confirm Purge",
             message: $"Are you sure you want to purge all messages from {entityName}{dlqSuffix}?",
-            detail: "This action cannot be undone. All messages will be permanently deleted.\n\n" +
-                    "• Purge with Progress: Stay on this page and watch live progress.\n" +
-                    "• Purge in Background: Purge continues even if you navigate away. You'll get a notification when complete. Background purges persist until completion, page refresh, or closing the app.",
-            confirmText: "Purge with Progress",
+            detail: "This action cannot be undone. The purge operation runs in the background and might take a while to complete. You can monitor progress in 'Running Tasks'.",
+            confirmText: "Purge",
             confirmClass: "btn-danger",
-            alternativeText: "Purge in Background",
-            alternativeClass: "btn-outline-danger",
-            onConfirm: ExecutePurgeMessages,
-            onAlternativeConfirm: ExecuteBackgroundPurge
+            onConfirm: ExecutePurge
         );
     }
-    
-    private async Task ExecuteBackgroundPurge()
+
+    private async Task ExecutePurge()
     {
         ConfirmModal.IsProcessing = true;
         errorMessage = null;
-        
+
         try
         {
             var entityType = _state.IsQueueSelected ? "queue" : "subscription";
             var entityPath = _state.GetEntityPath();
-            
+
             await BackgroundPurge.StartPurgeAsync(
                 NamespaceNameOnly,
                 entityType,
                 entityPath,
                 isViewingDLQ
             );
-            
-            peekedMessages.Clear();
-            peekFromSequence = 0;
-            CloseConfirmModal();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to start background purge: {ex.Message}";
-            Console.WriteLine($"Background purge error: {ex}");
-        }
-        finally
-        {
-            ConfirmModal.IsProcessing = false;
-        }
-    }
-
-    private async Task ExecutePurgeMessages()
-    {
-        ConfirmModal.IsProcessing = true;
-        ConfirmModal.ProgressCount = 0;
-        errorMessage = null;
-
-        try
-        {
-            var token = await AuthService.GetServiceBusTokenAsync();
-            if (string.IsNullOrEmpty(token))
-            {
-                errorMessage = "Service Bus token not available";
-                return;
-            }
-
-            // Create progress callback
-            var callback = new PurgeProgressCallback(count =>
-            {
-                ConfirmModal.ProgressCount = count;
-                InvokeAsync(StateHasChanged);
-            });
-            _purgeCallbackRef = DotNetObjectReference.Create(callback);
-
-            // Start purge with progress tracking
-            _purgeController = await StartPurgeAsync(token);
-
-            // Wait for completion
-            if (_purgeController != null)
-            {
-                var finalCount = await JsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", _purgeController);
-                NotificationService.NotifySuccess($"Purged {finalCount} messages");
-            }
 
             peekedMessages.Clear();
             peekFromSequence = 0;
-            CloseConfirmModal();
+            ConfirmModal.Close();
         }
         catch (Exception ex)
         {
-            rawErrorMessage = ex.Message;
-            errorMessage = FormatPurgeError(ex.Message);
+            errorMessage = $"Failed to purge: {ex.Message}";
             Console.WriteLine($"Purge error: {ex}");
         }
         finally
         {
             ConfirmModal.IsProcessing = false;
-            ConfirmModal.ProgressCount = null;
-            _purgeCallbackRef?.Dispose();
-            _purgeCallbackRef = null;
-            _purgeController = null;
         }
     }
 
-    private async Task<IJSObjectReference?> StartPurgeAsync(string token)
+    private async Task StopPurge()
     {
-        if (selectedQueueName != null)
+        if (CurrentPurgeOperation != null)
         {
-            return await JsInterop.StartPurgeQueueAsync(NamespaceNameOnly, selectedQueueName, token, _purgeCallbackRef!, isViewingDLQ);
+            await BackgroundPurge.CancelPurgeAsync(CurrentPurgeOperation.Id);
+            await InvokeAsync(StateHasChanged);
         }
-        if (selectedTopicName != null && selectedSubscriptionName != null)
+    }
+
+    private PurgeOperation? CurrentPurgeOperation
+    {
+        get
         {
-            return await JsInterop.StartPurgeSubscriptionAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, _purgeCallbackRef!, isViewingDLQ);
+            var currentEntity = _state.GetEntityPath();
+            var currentDLQ = isViewingDLQ;
+            return BackgroundPurge.ActiveOperations.FirstOrDefault(op =>
+                op.EntityPath == currentEntity && op.IsDeadLetter == currentDLQ);
         }
-        return null;
     }
 
     private void ShowSendMessageModal()
@@ -1138,7 +1107,7 @@
                 ContentType = request.ContentType,
                 TimeToLive = request.TimeToLiveSeconds.HasValue ? TimeSpan.FromSeconds(request.TimeToLiveSeconds.Value) : null,
                 ApplicationProperties = request.CustomProperties,
-                MessageAnnotations = request.ScheduledEnqueueTimeUtc.HasValue 
+                MessageAnnotations = request.ScheduledEnqueueTimeUtc.HasValue
                     ? new Dictionary<string, object> { ["x-opt-scheduled-enqueue-time"] = DateTime.SpecifyKind(request.ScheduledEnqueueTimeUtc.Value, DateTimeKind.Utc) }
                     : null
             };
@@ -1184,7 +1153,7 @@
         showPeekOptionsModal = false;
         isPeeking = true;
         errorMessage = null;
-        
+
         if (!append)
         {
             hasPeeked = true;
@@ -1203,7 +1172,7 @@
 
             // Calculate starting sequence
             long startSequence = options.FromSequenceNumber;
-            
+
             if (append)
             {
                 if (options.PeekFromNewest)
@@ -1214,7 +1183,7 @@
                         var oldestSeq = peekedMessages.Min(m => m.SequenceNumber ?? 0);
                         var desiredStart = oldestSeq - options.MaxCount;
                         startSequence = Math.Max(0, desiredStart);
-                        
+
                         if (startSequence + options.MaxCount > oldestSeq)
                         {
                             startSequence = oldestSeq > 0 ? 0 : 0;
@@ -1234,7 +1203,7 @@
             }
 
             List<ServiceBusMessage> messages;
-            
+
             // If we have a body filter, we need to peek more messages and filter client-side
             if (!string.IsNullOrWhiteSpace(options.BodyFilter))
             {
@@ -1258,7 +1227,7 @@
                 {
                     messages = new List<ServiceBusMessage>();
                 }
-                
+
                 // For normal peek, we update peekFromSequence based on the messages found
                 if (messages.Any())
                 {
@@ -1267,12 +1236,12 @@
                 // If no messages found, peekFromSequence remains as is (startSequence) or maybe we should advance it?
                 // Actually if 0 messages found, startSequence was likely at end.
                 // But if we want to be safe for "Peek More" retry:
-                 else if (!options.PeekFromNewest)
-                 {
-                     // If we didn't find anything, we're likely at the end. 
-                     // But let's leave peekFromSequence as is or set it to startSequence
-                     // ensuring next peek tries from same spot or later.
-                 }
+                else if (!options.PeekFromNewest)
+                {
+                    // If we didn't find anything, we're likely at the end.
+                    // But let's leave peekFromSequence as is or set it to startSequence
+                    // ensuring next peek tries from same spot or later.
+                }
             }
 
             // Reverse order if peeking from newest (newest on top)
@@ -1287,7 +1256,7 @@
                 var existingSequences = peekedMessages.Where(m => m.SequenceNumber.HasValue)
                                                       .Select(m => m.SequenceNumber!.Value)
                                                       .ToHashSet();
-                
+
                 var newMessages = messages.Where(m => !m.SequenceNumber.HasValue || !existingSequences.Contains(m.SequenceNumber.Value))
                                           .ToList();
 
@@ -1301,7 +1270,7 @@
                     // Normal append - add newer messages to the bottom
                     peekedMessages.AddRange(newMessages);
                 }
-                
+
                 // Update messages validation count to reflect only what we actually added?
                 // Or keep it as "found"? The notification below uses messages.Count.
                 // Maybe we should update messages var to allow notification to be accurate?
@@ -1320,11 +1289,17 @@
             {
                 var filterMsg = !string.IsNullOrWhiteSpace(options.BodyFilter) ? $" matching '{options.BodyFilter}'" : "";
                 var suffix = append ? " more" : "";
-                NotificationService.NotifySuccess($"Peeked {messages.Count}{suffix} messages{filterMsg}", "peek-result");
+                var entityType = selectedQueueName != null ? "queue" : "subscription";
+                var entityName = selectedQueueName ?? $"{selectedTopicName}/Subscriptions/{selectedSubscriptionName}";
+                var source = isViewingDLQ ? $"DLQ of {entityType} '{entityName}'" : $"{entityType} '{entityName}'";
+                NotificationService.NotifySuccess($"Peeked {messages.Count}{suffix} messages from {source}{filterMsg}", "peek-result");
             }
             else
             {
-                NotificationService.NotifyInfo(append ? "No more messages available" : "No messages found", "peek-result");
+                var entityType = selectedQueueName != null ? "queue" : "subscription";
+                var entityName = selectedQueueName ?? $"{selectedTopicName}/Subscriptions/{selectedSubscriptionName}";
+                var source = isViewingDLQ ? $"DLQ of {entityType} '{entityName}'" : $"{entityType} '{entityName}'";
+                NotificationService.NotifyInfo(append ? $"No more messages available from {source}" : $"No messages found in {source}", "peek-result");
             }
         }
         catch (Exception ex)
@@ -1364,7 +1339,7 @@
             }
 
             var firstSeq = firstMessage[0].SequenceNumber ?? 0;
-            
+
             // Get the total message count from the entity info
             long totalMessages = 0;
             if (selectedQueueName != null && queueDict.TryGetValue(selectedQueueName, out var queue))
@@ -1384,7 +1359,7 @@
             // Calculate approximate starting sequence
             // This is a best-effort approximation
             var approximateStartSeq = firstSeq + (totalMessages - maxCount);
-            
+
             return Math.Max(0, approximateStartSeq);
         }
         catch (Exception ex)
@@ -1405,7 +1380,7 @@
         while (matchingMessages.Count < 50 && attempts < maxAttempts)
         {
             List<ServiceBusMessage> batch;
-            
+
             if (selectedQueueName != null)
             {
                 batch = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, batchSize, currentSequence, isViewingDLQ);
@@ -1425,9 +1400,9 @@
             }
 
             // Filter messages by body content
-            var matches = batch.Where(m => 
+            var matches = batch.Where(m =>
                 m.Body?.Contains(bodyFilter, StringComparison.OrdinalIgnoreCase) == true).ToList();
-            
+
             matchingMessages.AddRange(matches);
 
             // Update sequence for next batch
@@ -1437,28 +1412,6 @@
 
         // Return up to 50 matching messages and the sequence to start next scan from
         return (matchingMessages.Take(50).ToList(), currentSequence);
-    }
-
-
-    private void CloseConfirmModal()
-    {
-        // If purging, stop it
-        if (_purgeController != null)
-        {
-            try
-            {
-                _purgeController.InvokeVoidAsync("stop");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error stopping purge: {ex.Message}");
-            }
-        }
-        
-        ConfirmModal.Close();
-        _purgeCallbackRef?.Dispose();
-        _purgeCallbackRef = null;
-        _purgeController = null;
     }
 
     private async Task OnConfirmModalConfirm() => await ConfirmModal.ConfirmAsync();
@@ -1552,7 +1505,7 @@
             detail: "Messages will be sent back to the main queue/subscription.",
             confirmText: "Resubmit",
             confirmClass: "btn-primary",
-            onConfirm: async () => 
+            onConfirm: async () =>
             {
                 var shouldRemoveFromView = resubmitRemoveFromDLQ;
                 await ExecuteBatchOperationAsync(
@@ -1600,7 +1553,7 @@
         try
         {
             await operation(sequenceNumbers);
-            
+
             // Remove processed messages from the view and clear selection (only if they were actually removed)
             if (removeFromView)
             {
@@ -1611,17 +1564,30 @@
                 }
             }
             _messageListRef?.ClearSelection();
-            
-            var pastTense = operationName switch
+
+            // Start of replacement logic
+            string entityName = _state.IsQueueSelected ? $"queue '{selectedQueueName}'" : 
+                                _state.IsSubscriptionSelected ? $"subscription '{selectedTopicName}/Subscriptions/{selectedSubscriptionName}'" : "entity";
+
+            string notificationMsg;
+            switch (operationName)
             {
-                "delete" => "Deleted",
-                "resubmit" => "Resubmitted",
-                "move to Dead Letter Queue" => "Moved",
-                _ => operationName
-            };
-            var suffix = operationName == "move to Dead Letter Queue" ? " to Dead Letter Queue" : "";
-            NotificationService.NotifySuccess($"{pastTense} {sequenceNumbers.Count} messages{suffix}");
-            CloseConfirmModal();
+                case "delete":
+                    notificationMsg = $"Deleted {sequenceNumbers.Count} messages from {entityName}";
+                    break;
+                case "resubmit":
+                    notificationMsg = $"Resubmitted {sequenceNumbers.Count} messages to {entityName}";
+                    break;
+                case "move to Dead Letter Queue":
+                    notificationMsg = $"Moved {sequenceNumbers.Count} messages from {entityName} to Dead Letter Queue";
+                    break;
+                default:
+                    notificationMsg = $"{operationName} {sequenceNumbers.Count} messages regarding {entityName}";
+                    break;
+            }
+            
+            NotificationService.NotifySuccess(notificationMsg);
+            ConfirmModal.Close();
         }
         catch (Exception ex)
         {
