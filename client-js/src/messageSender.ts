@@ -125,6 +125,15 @@ export class MessageSender {
             message.message_annotations = annotations;
         }
 
+        // Add bussin.dev origin marker to application properties
+        // Using x-bussin- prefix to avoid conflicts with other applications
+        const existingAppProps = properties.application_properties || {};
+        message.application_properties = {
+            ...existingAppProps,
+            'x-bussin-sent-via': 'bussin.dev',
+            'x-bussin-sent-at': new Date().toISOString()
+        };
+
         // Clean up camelCase duplicates
         delete message.contentType;
         delete message.messageId;
@@ -144,9 +153,66 @@ export class MessageSender {
         return body;
     }
 
+    private extractErrorMessage(error: any): string | null {
+        if (!error) return null;
+
+        if (typeof error === 'string') {
+            return error;
+        }
+
+        // AMQP errors have condition and description
+        if (error.condition) {
+            return `${error.condition}${error.description ? ': ' + error.description : ''}`;
+        }
+
+        if (error.message) {
+            return error.message;
+        }
+
+        if (error.description) {
+            return error.description;
+        }
+
+        // Try to stringify
+        try {
+            const str = JSON.stringify(error);
+            if (str !== '{}') return str;
+        } catch { }
+
+        return String(error);
+    }
+
     private async dispatchMessage(message: any): Promise<void> {
+        const maxAttempts = 3;
+        const baseTimeout = 10000; // Increased to 10 seconds
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                await this.dispatchMessageOnce(message, baseTimeout);
+                return; // Success
+            } catch (err: any) {
+                const isTimeout = err.message?.includes('sender not ready');
+                const isLastAttempt = attempt === maxAttempts;
+
+                if (isTimeout && !isLastAttempt) {
+                    console.warn(`[MessageSender] Send attempt ${attempt} timed out for ${this.entityPath}, retrying...`);
+                    // Small delay before retry
+                    await new Promise(r => setTimeout(r, 500));
+                    continue;
+                }
+
+                throw err;
+            }
+        }
+    }
+
+    private async dispatchMessageOnce(message: any, timeout: number): Promise<void> {
         await new Promise<void>((resolve, reject) => {
+            let settled = false;
+
             const sendHandler = () => {
+                if (settled) return;
+                settled = true;
                 try {
                     this.sender!.send(message);
                     resolve();
@@ -155,17 +221,45 @@ export class MessageSender {
                 }
             };
 
+            const errorHandler = (context: any) => {
+                if (settled) return;
+                settled = true;
+                const error = context?.sender?.error;
+                const errorMsg = this.extractErrorMessage(error) || 'Sender error during dispatch';
+                console.error(`[MessageSender] Sender error for ${this.entityPath}:`, error);
+                reject(new Error(errorMsg));
+            };
+
+            const closeHandler = (context: any) => {
+                if (settled) return;
+                settled = true;
+                const error = context?.sender?.error;
+                const errorMsg = this.extractErrorMessage(error) || 'Sender closed unexpectedly';
+                console.error(`[MessageSender] Sender closed for ${this.entityPath}:`, error);
+                reject(new Error(`Sender closed: ${errorMsg}`));
+            };
+
+            // Check if already sendable
             if (this.sender!.sendable()) {
                 sendHandler();
                 return;
             }
 
+            console.log(`[MessageSender] Waiting for sendable state on ${this.entityPath}...`);
+
             this.sender!.once('sendable', sendHandler);
+            this.sender!.once('sender_error', errorHandler);
+            this.sender!.once('sender_close', closeHandler);
 
             setTimeout(() => {
+                if (settled) return;
+                settled = true;
                 this.sender!.removeListener('sendable', sendHandler);
-                reject(new Error('Send timeout - sender not ready'));
-            }, 5000);
+                this.sender!.removeListener('sender_error', errorHandler);
+                this.sender!.removeListener('sender_close', closeHandler);
+                console.error(`[MessageSender] Send timeout for ${this.entityPath} - sender credit: ${(this.sender as any)?.credit}, sendable: ${this.sender?.sendable()}`);
+                reject(new Error(`Send timeout - sender not ready (entity: ${this.entityPath})`));
+            }, timeout);
         });
     }
 

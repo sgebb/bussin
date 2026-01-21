@@ -337,15 +337,15 @@ a:hover,
     color: var(--text-color);
 }
 
-/* Resubmit modal delete option - styled as destructive */
+/* Resubmit modal delete option - styled as warning */
 .resubmit-delete-option {
-    background-color: rgba(220, 38, 38, 0.1);
-    border: 1px solid var(--destructive-color);
+    background-color: rgba(245, 158, 11, 0.1);
+    border: 1px solid var(--warning-color);
 }
 
 .resubmit-delete-option .form-check-input:checked {
-    background-color: var(--destructive-color);
-    border-color: var(--destructive-color);
+    background-color: var(--warning-color);
+    border-color: var(--warning-color);
 }
 
 /* Input Fields */

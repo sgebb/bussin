@@ -416,11 +416,21 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         // Always use the decoded body approach - don't try to preserve original binary format
         // The OriginalBody is a raw AMQP structure (JsonElement) that doesn't serialize correctly through Blazor JS interop
+        
+        // Start with existing application properties or create new dictionary
+        var appProps = msg.ApplicationProperties != null 
+            ? new Dictionary<string, object>(msg.ApplicationProperties) 
+            : new Dictionary<string, object>();
+        
+        // Add resubmit marker
+        appProps["x-bussin-resubmitted"] = "true";
+        appProps["x-bussin-resubmitted-at"] = DateTime.UtcNow.ToString("o");
+        
         return new MessageProperties
         {
             MessageId = msg.MessageId,
             ContentType = msg.ContentType,
-            ApplicationProperties = msg.ApplicationProperties
+            ApplicationProperties = appProps
         };
     }
 

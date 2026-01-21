@@ -222,9 +222,29 @@ async function sendMessageBatch(
 
         sender.close();
         connection.close();
-    } catch (err) {
+    } catch (err: any) {
         connection.close();
-        throw new Error(`Batch send failed: ${(err as Error).message}`);
+        // Extract error message properly from various error types
+        let errorMsg = 'Unknown error';
+        if (err) {
+            if (typeof err === 'string') {
+                errorMsg = err;
+            } else if (err.message) {
+                errorMsg = err.message;
+            } else if (err.description) {
+                errorMsg = err.description;
+            } else if (err.condition) {
+                errorMsg = `${err.condition}: ${err.description || ''}`;
+            } else {
+                try {
+                    errorMsg = JSON.stringify(err);
+                } catch {
+                    errorMsg = String(err);
+                }
+            }
+        }
+        console.error(`[sendMessageBatch] Failed to send to ${entityPath}:`, err);
+        throw new Error(`Batch send failed: ${errorMsg}`);
     }
 }
 
