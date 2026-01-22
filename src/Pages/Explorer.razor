@@ -91,10 +91,10 @@
                     <div class="entity-column-header">
                         <i class="bi bi-list-ul"></i> Queues (@queues.Count)
                     </div>
-                    <div class="entity-list-scroll">
+                    <div class="entity-list-scroll entity-list-grid">
                         @foreach (var queue in queues)
                         {
-                            <div class="entity-item @(selectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectQueue(queue.Name)">
+                            <div class="entity-item @(selectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectQueue(queue.Name)" title="@queue.Name">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <span class="entity-name-with-icons">
                                         @queue.Name
@@ -147,10 +147,10 @@
                     <div class="entity-column-header">
                         <i class="bi bi-broadcast"></i> Topics (@topics.Count)
                     </div>
-                    <div class="entity-list-scroll">
+                    <div class="entity-list-scroll entity-list-grid">
                         @foreach (var topic in topics)
                         {
-                            <div class="entity-item @(selectedTopicName == topic.Name ? "active" : "")" @onclick="() => SelectTopic(topic.Name)">
+                            <div class="entity-item @(selectedTopicName == topic.Name ? "active" : "")" @onclick="() => SelectTopic(topic.Name)" title="@topic.Name">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <span class="entity-name-with-icons">
                                         @topic.Name
@@ -178,7 +178,7 @@
                     <div class="entity-column-header">
                         <i class="bi bi-envelope"></i> Subscriptions (@subscriptions.Count)
                     </div>
-                    <div class="entity-list-scroll">
+                    <div class="entity-list-scroll entity-list-grid">
                         @if (isLoadingSubscriptions)
                         {
                             <div class="text-center p-2">
@@ -195,7 +195,7 @@
                         {
                             @foreach (var sub in subscriptions)
                             {
-                                <div class="entity-item @(selectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectSubscription(sub.Name)">
+                                <div class="entity-item @(selectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectSubscription(sub.Name)" title="@sub.Name">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="entity-name-with-icons">
                                             @sub.Name
