@@ -127,6 +127,16 @@
             });
         }
     </script>
+    <script>
+        // Global listener to map vertical mouse wheel to horizontal scroll for entity lists
+        document.addEventListener('wheel', (evt) => {
+            const target = evt.target.closest('.entity-list-scroll');
+            if (target && target.scrollWidth > target.clientWidth && evt.deltaY !== 0 && !evt.shiftKey) {
+                evt.preventDefault();
+                target.scrollLeft += evt.deltaY;
+            }
+        }, { passive: false });
+    </script>
 </body>
 
 </html>
