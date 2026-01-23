@@ -440,16 +440,17 @@ pre {
     color: white;
 }
 
-.btn-sponsor {
-    background-color: #db61a2;
-    border-color: #db61a2;
-    color: white;
+.btn-bmc {
+    background-color: #FFDD00;
+    border-color: #FFDD00;
+    color: #000000;
+    font-weight: 600;
 }
 
-.btn-sponsor:hover {
-    background-color: #c44d8e;
-    border-color: #c44d8e;
-    color: white;
+.btn-bmc:hover {
+    background-color: #FFC43D;
+    border-color: #FFC43D;
+    color: #000000;
 }
 
 .user-section-row {
