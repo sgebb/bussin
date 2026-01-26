@@ -34,23 +34,12 @@
                     @if (!string.IsNullOrEmpty(consentErrorMessage))
                     {
                         <div class="alert alert-danger mb-3">
-                            <i class="bi bi-exclamation-circle"></i> @consentErrorMessage
-                            @if (requiresRelogin)
-                            {
-                                <div class="mt-2">
-                                    <a href="authentication/logout" class="btn btn-danger btn-sm">
-                                        <i class="bi bi-box-arrow-right"></i> Sign Out and Sign In Again
-                                    </a>
-                                </div>
-                            }
+                            @consentErrorMessage
                         </div>
                     }
-                    @if (!requiresRelogin)
-                    {
-                        <button class="btn btn-warning" @onclick="GrantArmConsent" disabled="@isGrantingArmConsent">
-                            <i class="bi bi-check-circle"></i> Grant Azure Management API Permission
-                        </button>
-                    }
+                    <button class="btn btn-warning" @onclick="GrantArmConsent" disabled="@isGrantingArmConsent">
+                        <i class="bi bi-check-circle"></i> Grant Azure Management API Permission
+                    </button>
                 </div>
             }
             else if (isGrantingArmConsent)
@@ -241,7 +230,6 @@
     private bool hasArmPermission = false;
     private bool isGrantingArmConsent = false;
     private string? consentErrorMessage = null;
-    private bool requiresRelogin = false;
 
     private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
         string.IsNullOrWhiteSpace(searchTerm) 
@@ -287,16 +275,12 @@
     {
         isGrantingArmConsent = true;
         consentErrorMessage = null;
-        requiresRelogin = false;
         StateHasChanged();
 
         try
         {
             var clientId = Configuration["AzureAd:ClientId"];
             var authority = Configuration["AzureAd:Authority"];
-            
-            // Get the current user's username to use as a login hint
-            var currentUser = await AuthService.GetUserNameAsync();
             
             await JSRuntime.InvokeVoidAsync("eval", $@"
                 window.msalConfig = {{
@@ -305,37 +289,14 @@
                 }};
             ");
 
-            // Pass the login hint to help MSAL identify the correct account
             var result = await JSRuntime.InvokeAsync<JsonElement>("msalHelper.acquireTokenPopup", 
-                "https://management.azure.com/user_impersonation",
-                currentUser);
+                "https://management.azure.com/user_impersonation");
 
             if (result.TryGetProperty("success", out var success) && success.GetBoolean())
             {
                 Console.WriteLine("✓ ARM consent granted successfully - reloading page to refresh tokens");
                 Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
                 return;
-            }
-            else if (result.TryGetProperty("requiresRefresh", out var refreshRequired) && refreshRequired.GetBoolean())
-            {
-                // Multiple matching tokens error - page refresh fixes this
-                Console.WriteLine("Token cache conflict detected - auto-refreshing page");
-                Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
-                return;
-            }
-            else if (result.TryGetProperty("requiresRelogin", out var reloginRequired) && reloginRequired.GetBoolean())
-            {
-                // Session expired or credentials changed - prompt user to re-login
-                requiresRelogin = true;
-                if (result.TryGetProperty("friendlyMessage", out var friendlyMsg))
-                {
-                    consentErrorMessage = friendlyMsg.GetString();
-                }
-                else
-                {
-                    consentErrorMessage = "Your session has expired or your credentials have changed. Please sign out and sign in again.";
-                }
-                Console.WriteLine($"✗ Re-login required: {consentErrorMessage}");
             }
             else if (result.TryGetProperty("error", out var error))
             {
