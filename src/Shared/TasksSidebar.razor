@@ -1,14 +1,15 @@
 @inject BackgroundPurgeService BackgroundPurge
+@inject BackgroundSearchService BackgroundSearch
 @implements IDisposable
 
 <!-- Tasks Floating Button -->
-<div class="tasks-float-btn @(HasActiveTasks ? "active shake" : "")" 
+<div class="tasks-float-btn @(HasRunningTasks ? "active shake" : "")" 
      @onclick="ToggleSidebar"
      title="Running Tasks">
     @if (HasActiveTasks)
     {
         <div class="tasks-count-badge">
-            @BackgroundPurge.ActiveOperations.Count
+            @TotalTaskCount
         </div>
     }
     <i class="bi bi-hourglass-split"></i>
@@ -25,6 +26,7 @@
             @if (HasActiveTasks)
             {
                 <div class="task-list">
+                    @* Purge Operations *@
                     @foreach (var task in BackgroundPurge.ActiveOperations)
                     {
                         var isCompleted = task.Status == PurgeStatus.Completed;
@@ -67,7 +69,7 @@
                                 @if (isRunning)
                                 {
                                     <button class="btn btn-sm btn-outline-danger task-cancel-btn"
-                                            @onclick="() => StopTask(task.Id)" 
+                                            @onclick="() => StopPurgeTask(task.Id)" 
                                             title="Stop Task">
                                         <i class="bi bi-stop-fill"></i>
                                     </button>
@@ -81,6 +83,103 @@
                                 else if (isCompleted)
                                 {
                                     <div class="progress-bar bg-success" style="width: 100%"></div>
+                                }
+                                else
+                                {
+                                    <div class="progress-bar bg-danger" style="width: 100%"></div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    
+                    @* Search Operations *@
+                    @foreach (var task in BackgroundSearch.ActiveOperations)
+                    {
+                        var isCompleted = task.Status == SearchStatus.Completed;
+                        var isFailed = task.Status == SearchStatus.Failed;
+                        var isRunning = task.Status == SearchStatus.Running;
+                        var isStopping = task.Status == SearchStatus.Stopping;
+                        var isCancelled = task.Status == SearchStatus.Cancelled;
+                        
+                        <div class="task-card @(isCompleted ? "task-success" : "") @(isFailed ? "task-failed" : "")" 
+                             title="Started: @task.StartTime.ToString("G")\nFilters: @task.GetFilterSummary()">
+                            <div class="task-card-header">
+                                <div class="task-icon">
+                                    @if (isRunning)
+                                    {
+                                        <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                                    }
+                                    else if (isStopping)
+                                    {
+                                        <div class="spinner-grow spinner-grow-sm text-info" role="status"></div>
+                                    }
+                                    else if (isCompleted)
+                                    {
+                                        <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                    }
+                                    else if (isCancelled)
+                                    {
+                                        <i class="bi bi-slash-circle-fill text-secondary fs-5"></i>
+                                    }
+                                    else if (isFailed)
+                                    {
+                                        <i class="bi bi-exclamation-circle-fill text-danger fs-5"></i>
+                                    }
+                                </div>
+                                <div class="task-details">
+                                    <div class="task-name">
+                                        @if (isStopping) { <span class="text-info me-1">Stopping...</span> }
+                                        <i class="bi bi-search me-1"></i>Searching @task.EntityPath
+                                    </div>
+                                    <div class="task-meta">
+                                        @if (task.IsDeadLetter) { <span class="badge bg-secondary me-1">DLQ</span> }
+                                        <span>@task.MessagesScanned.ToString("N0") scanned, <strong class="text-success">@task.MatchCount</strong> matches</span>
+                                        @if (task.TotalMessageCount > 0 && isRunning)
+                                        {
+                                            <span class="text-muted small ms-1">(@task.ProgressPercentage.ToString("F0")%)</span>
+                                        }
+                                        @if (isFailed) { <br/><span class="text-danger small">@task.ErrorMessage</span> }
+                                    </div>
+                                </div>
+                                <div class="task-actions">
+                                    @if (isRunning)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger task-cancel-btn"
+                                                @onclick="() => StopSearchTask(task.Id)" 
+                                                title="Stop Search">
+                                            <i class="bi bi-stop-fill"></i>
+                                        </button>
+                                    }
+                                    @if ((isCompleted || isCancelled) && task.MatchCount > 0)
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                @onclick="() => ViewSearchResults(task)"
+                                                title="View matching messages">
+                                            <i class="bi bi-eye"></i> View
+                                        </button>
+                                    }
+                                    @if (!isRunning)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary ms-1"
+                                                @onclick="() => DismissSearchTask(task.Id)"
+                                                title="Dismiss">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                            <div class="progress mt-2" style="height: 3px;">
+                                @if (isRunning || isStopping)
+                                {
+                                    <div class="progress-bar bg-info progress-bar-striped progress-bar-animated" style="width: @task.ProgressPercentage%"></div>
+                                }
+                                else if (isCompleted)
+                                {
+                                    <div class="progress-bar bg-success" style="width: 100%"></div>
+                                }
+                                else if (isCancelled)
+                                {
+                                    <div class="progress-bar bg-secondary" style="width: @task.ProgressPercentage%"></div>
                                 }
                                 else
                                 {
@@ -106,17 +205,25 @@
 }
 
 @code {
+    [Parameter] public EventCallback<SearchOperation> OnViewSearchResults { get; set; }
+    
     private bool isOpen = false;
-    private bool HasActiveTasks => BackgroundPurge.ActiveOperations.Any();
+    private bool HasActiveTasks => BackgroundPurge.ActiveOperations.Any() || BackgroundSearch.ActiveOperations.Any();
+    private bool HasRunningTasks => 
+        BackgroundPurge.ActiveOperations.Any(o => o.Status == PurgeStatus.Running || o.Status == PurgeStatus.Stopping) || 
+        BackgroundSearch.ActiveOperations.Any(o => o.Status == SearchStatus.Running || o.Status == SearchStatus.Stopping);
+    private int TotalTaskCount => BackgroundPurge.ActiveOperations.Count + BackgroundSearch.ActiveOperations.Count;
 
     protected override void OnInitialized()
     {
         BackgroundPurge.OnOperationsChanged += StateHasChanged;
+        BackgroundSearch.OnOperationsChanged += StateHasChanged;
     }
 
     public void Dispose()
     {
         BackgroundPurge.OnOperationsChanged -= StateHasChanged;
+        BackgroundSearch.OnOperationsChanged -= StateHasChanged;
     }
 
     private void ToggleSidebar()
@@ -124,8 +231,25 @@
         isOpen = !isOpen;
     }
 
-    private async Task StopTask(string taskId)
+    private async Task StopPurgeTask(string taskId)
     {
         await BackgroundPurge.CancelPurgeAsync(taskId);
     }
+
+    private async Task StopSearchTask(string taskId)
+    {
+        await BackgroundSearch.CancelSearchAsync(taskId);
+    }
+
+    private void DismissSearchTask(string taskId)
+    {
+        BackgroundSearch.DismissOperation(taskId);
+    }
+
+    private async Task ViewSearchResults(SearchOperation task)
+    {
+        await OnViewSearchResults.InvokeAsync(task);
+        isOpen = false; // Close sidebar after clicking view
+    }
 }
+

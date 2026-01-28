@@ -10,6 +10,7 @@
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
 @inject BackgroundPurgeService BackgroundPurge
+@inject BackgroundSearchService BackgroundSearch
 @inject INotificationService NotificationService
 @inject IConfirmModalService ConfirmModal
 @implements IDisposable
@@ -84,150 +85,17 @@
     <!-- Section 2: Compact Entity Selector (3 Columns) -->
     @if (queues.Count > 0 || topics.Count > 0)
     {
-        <div class="explorer-entities">
-            <div class="explorer-entities-grid-3col">
-                <!-- Queues Column -->
-                <div class="entity-column">
-                    <div class="entity-column-header">
-                        <i class="bi bi-list-ul"></i> Queues (@queues.Count)
-                    </div>
-                    <div class="entity-list-scroll entity-list-grid">
-                        @foreach (var queue in queues)
-                        {
-                            <div class="entity-item @(selectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectQueue(queue.Name)" title="@queue.Name">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="entity-name-with-icons">
-                                        @queue.Name
-                                        <span class="entity-icons">
-                                            @if (queue.Status != "Active")
-                                            {
-                                                <i class="bi bi-pause-circle" title="Status: @queue.Status"></i>
-                                            }
-                                            @if (queue.RequiresSession)
-                                            {
-                                                <i class="bi bi-person-badge" title="Session-enabled"></i>
-                                            }
-                                            @if (queue.EnablePartitioning)
-                                            {
-                                                <i class="bi bi-grid-3x3" title="Partitioned"></i>
-                                            }
-                                            @if (queue.RequiresDuplicateDetection)
-                                            {
-                                                <i class="bi bi-copy" title="Duplicate detection enabled"></i>
-                                            }
-                                            @if (!string.IsNullOrEmpty(queue.ForwardTo))
-                                            {
-                                                <i class="bi bi-arrow-right-circle" title="Forwards to: @queue.ForwardTo"></i>
-                                            }
-                                            @if (queue.ScheduledMessageCount > 0)
-                                            {
-                                                <i class="bi bi-clock" title="@queue.ScheduledMessageCount scheduled message(s)"></i>
-                                            }
-                                        </span>
-                                    </span>
-                                    @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0 || queue.ScheduledMessageCount > 0)
-                                    {
-                                        <span class="badge bg-secondary" title="Active (Scheduled) / Dead-lettered">
-                                            @queue.ActiveMessageCount
-                                            @if (queue.ScheduledMessageCount > 0)
-                                            {
-                                                <span class="text-info fw-bold">(@queue.ScheduledMessageCount)</span>
-                                            }
-                                            / <span class="text-dlq-orange fw-bold">@queue.DeadLetterMessageCount</span>
-                                        </span>
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
+        <ExplorerEntitySelector Queues="@queues"
+                                Topics="@topics"
+                                Subscriptions="@subscriptions"
+                                SelectedQueueName="@selectedQueueName"
+                                SelectedTopicName="@selectedTopicName"
+                                SelectedSubscriptionName="@selectedSubscriptionName"
+                                IsLoadingSubscriptions="@isLoadingSubscriptions"
+                                OnQueueSelected="@SelectQueue"
+                                OnTopicSelected="@SelectTopic"
+                                OnSubscriptionSelected="@SelectSubscription" />
 
-                <!-- Topics Column -->
-                <div class="entity-column">
-                    <div class="entity-column-header">
-                        <i class="bi bi-broadcast"></i> Topics (@topics.Count)
-                    </div>
-                    <div class="entity-list-scroll entity-list-grid">
-                        @foreach (var topic in topics)
-                        {
-                            <div class="entity-item @(selectedTopicName == topic.Name ? "active" : "")" @onclick="() => SelectTopic(topic.Name)" title="@topic.Name">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="entity-name-with-icons">
-                                        @topic.Name
-                                        <span class="entity-icons">
-                                            @if (topic.ScheduledMessageCount > 0)
-                                            {
-                                                <i class="bi bi-clock" title="@topic.ScheduledMessageCount scheduled message(s)"></i>
-                                            }
-                                        </span>
-                                    </span>
-                                    @if (topic.ScheduledMessageCount > 0)
-                                    {
-                                        <span class="badge bg-info" title="Scheduled messages">
-                                            <i class="bi bi-clock"></i> @topic.ScheduledMessageCount
-                                        </span>
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <!-- Subscriptions Column -->
-                <div class="entity-column">
-                    <div class="entity-column-header">
-                        <i class="bi bi-envelope"></i> Subscriptions (@subscriptions.Count)
-                    </div>
-                    <div class="entity-list-scroll entity-list-grid">
-                        @if (isLoadingSubscriptions)
-                        {
-                            <div class="text-center p-2">
-                                <div class="spinner-border spinner-border-sm"></div>
-                            </div>
-                        }
-                        else if (selectedTopicName == null)
-                        {
-                            <div class="text-center p-3 text-muted small">
-                                Select a topic
-                            </div>
-                        }
-                        else
-                        {
-                            @foreach (var sub in subscriptions)
-                            {
-                                <div class="entity-item @(selectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" @onclick="() => SelectSubscription(sub.Name)" title="@sub.Name">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <span class="entity-name-with-icons">
-                                            @sub.Name
-                                            <span class="entity-icons">
-                                                @if (sub.Status != "Active")
-                                                {
-                                                    <i class="bi bi-pause-circle" title="Status: @sub.Status"></i>
-                                                }
-                                                @if (sub.RequiresSession)
-                                                {
-                                                    <i class="bi bi-person-badge" title="Session-enabled"></i>
-                                                }
-                                                @if (!string.IsNullOrEmpty(sub.ForwardTo))
-                                                {
-                                                    <i class="bi bi-arrow-right-circle" title="Forwards to: @sub.ForwardTo"></i>
-                                                }
-                                            </span>
-                                        </span>
-                                        @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
-                                        {
-                                            <span class="badge bg-secondary" title="Active / Dead-lettered">
-                                                @sub.ActiveMessageCount / <span class="text-dlq-orange fw-bold">@sub.DeadLetterMessageCount</span>
-                                            </span>
-                                        }
-                                    </div>
-                                </div>
-                            }
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
     }
 
     <!-- Section 3: Messages (Takes Majority of Space) -->
@@ -276,69 +144,22 @@
                 </div>
             </div>
 
-            <div class="explorer-actions-sidebar">
-                <!-- Send + DLQ Toggle Row -->
-                <div class="send-dlq-row">
-                    <button class="btn btn-action btn-primary send-btn @(!CanSend ? "disabled-grey" : "")"
-                            @onclick="ShowSendMessageModal"
-                            disabled="@(!CanSend)"
-                            title="Send a message">
-                        <i class="bi bi-envelope-fill"></i> Send
-                    </button>
-                    <button class="dlq-toggle-btn @(isViewingDLQ ? "active" : "") @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")"
-                            @onclick="ToggleDLQ"
-                            disabled="@(!HasQueueOrSubscriptionSelected)"
-                            title="@(HasQueueOrSubscriptionSelected ? (isViewingDLQ ? "Viewing Dead Letter Queue" : "Switch to Dead Letter Queue") : "Select a queue or subscription first")">
-                        <span>DLQ</span>
-                        <span class="dlq-checkbox @(isViewingDLQ ? "checked" : "")">
-                            @if (isViewingDLQ)
-                            {
-                                <i class="bi bi-check-square-fill"></i>
-                            }
-                            else
-                            {
-                                <i class="bi bi-square"></i>
-                            }
-                        </span>
-                    </button>
-                </div>
+            <ExplorerActionsSidebar IsViewingDLQ="@isViewingDLQ"
+                                    CanSend="@CanSend"
+                                    HasQueueOrSubscriptionSelected="@HasQueueOrSubscriptionSelected"
+                                    IsPeeking="@isPeeking"
+                                    PeekedMessagesCount="@peekedMessages.Count"
+                                    ArePeekOptionsModified="@ArePeekOptionsModified"
+                                    CurrentPurgeOperation="@CurrentPurgeOperation"
+                                    SelectedEntityRequiresSession="@SelectedEntityRequiresSession"
+                                    OnShowSendMessage="@ShowSendMessageModal"
+                                    OnToggleDLQ="@ToggleDLQ"
+                                    OnPeek="@PeekMessages"
+                                    OnPeekNext="@PeekNext"
+                                    OnShowPeekOptions="@ShowPeekOptionsModal"
+                                    OnShowMonitor="@ShowMonitorModal"
+                                    OnPurge="@(() => PurgeMessages())" />
 
-                <!-- Read Actions -->
-                <div class="action-btn-group">
-                    <div class="action-btn-group-title">Read</div>
-                    <div class="peek-btn-combined @(!HasQueueOrSubscriptionSelected || isPeeking ? "disabled" : "")">
-                        <button class="peek-btn-main"
-                                @onclick="@(peekedMessages.Count > 0 ? PeekNext : PeekMessages)"
-                                disabled="@(!HasQueueOrSubscriptionSelected || isPeeking)">
-                            <i class="bi bi-search"></i> @(peekedMessages.Count > 0 ? "Peek More" : "Peek")
-                        </button>
-                        <button class="peek-btn-options @(ArePeekOptionsModified ? "text-warning" : "")"
-                                @onclick="ShowPeekOptionsModal"
-                                @onclick:stopPropagation="true"
-                                disabled="@(!HasQueueOrSubscriptionSelected)"
-                                title="@(ArePeekOptionsModified ? "Peek with options (Active)" : "Peek with options")">
-                            <i class="bi bi-gear"></i>
-                        </button>
-                    </div>
-                    <button class="btn btn-action btn-secondary w-100 @(!HasQueueOrSubscriptionSelected || isViewingDLQ ? "disabled-grey" : "")"
-                            @onclick="ShowMonitorModal"
-                            disabled="@(!HasQueueOrSubscriptionSelected || isViewingDLQ)"
-                            title="@(isViewingDLQ ? "Monitoring not available for Dead Letter Queue" : "Monitor incoming messages")">
-                        <i class="bi bi-graph-up"></i> Monitor
-                    </button>
-                </div>
-
-                <!-- Dangerous Actions -->
-                <div class="action-btn-group">
-                    <div class="action-btn-group-title">Dangerous</div>
-                    <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession ? "disabled-grey" : "")"
-                            @onclick="() => PurgeMessages()"
-                            disabled="@(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession)"
-                            title="@(SelectedEntityRequiresSession ? "Purge not supported for session-enabled entities" : CurrentPurgeOperation != null ? "Purge already in progress" : "Purge all messages")">
-                        <i class="bi bi-trash"></i> Purge
-                    </button>
-                </div>
-            </div>
         </div>
         @if (!string.IsNullOrEmpty(errorMessage))
         {
@@ -409,7 +230,9 @@
 <PeekOptionsModal IsVisible="@showPeekOptionsModal"
                   OnClose="@(() => showPeekOptionsModal = false)"
                   InitialOptions="@lastPeekOptions"
-                  OnPeek="@(async (options) => await PeekWithOptions(options, append: false))" />
+                  MessageCount="@CurrentEntityMessageCount"
+                  OnPeek="@(async (options) => await PeekWithOptions(options, append: false))"
+                  OnBackgroundSearch="@StartBackgroundSearch" />
 
 <MessageMonitorModal IsVisible="@showMonitorModal"
                      NamespaceName="@NamespaceNameOnly"
@@ -495,7 +318,7 @@
     private bool ArePeekOptionsModified => lastPeekOptions != null && (
         lastPeekOptions.MaxCount != 50 ||
         lastPeekOptions.FromSequenceNumber != 0 ||
-        !string.IsNullOrEmpty(lastPeekOptions.BodyFilter) ||
+        lastPeekOptions.HasActiveFilter ||
         lastPeekOptions.PeekFromNewest
     );
 
@@ -545,18 +368,141 @@
 
     private string? _lastNamespace;
 
+    private long CurrentEntityMessageCount
+    {
+        get
+        {
+            if (selectedQueueName != null && queueDict.TryGetValue(selectedQueueName, out var queue))
+            {
+                return isViewingDLQ ? queue.DeadLetterMessageCount : queue.ActiveMessageCount;
+            }
+            else if (selectedSubscriptionName != null && subscriptionDict.TryGetValue(selectedSubscriptionName, out var sub))
+            {
+                return isViewingDLQ ? sub.DeadLetterMessageCount : sub.ActiveMessageCount;
+            }
+            return 0;
+        }
+    }
+
     protected override void OnInitialized()
     {
         ConfirmModal.OnChange += StateHasChanged;
         BackgroundPurge.OnOperationsChanged += StateHasChanged;
+        BackgroundSearch.OnViewResultsRequested += OnViewSearchResultsRequested;
     }
 
     public void Dispose()
     {
         ConfirmModal.OnChange -= StateHasChanged;
         BackgroundPurge.OnOperationsChanged -= StateHasChanged;
+        BackgroundSearch.OnViewResultsRequested -= OnViewSearchResultsRequested;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
+    }
+    
+    private async void OnViewSearchResultsRequested(SearchOperation operation)
+    {
+        try
+        {
+            if (operation.MatchingSequenceNumbers.Count == 0)
+            {
+                NotificationService.NotifyInfo("No matching messages found in this search.", "search-result");
+                return;
+            }
+
+            // Check if result matches current entity selection
+            bool match = false;
+            if (operation.EntityType == "queue" && selectedQueueName == operation.EntityPath) match = true;
+            if (operation.EntityType == "subscription" && 
+                selectedTopicName == operation.TopicName && 
+                selectedSubscriptionName == operation.SubscriptionName) match = true;
+                
+            if (!match)
+            {
+                NotificationService.NotifyWarning($"These search results are for {operation.EntityPath}. Please navigate to that entity first.", "search-mismatch");
+                return;
+            }
+            
+            if (operation.IsDeadLetter != isViewingDLQ)
+            {
+                 NotificationService.NotifyWarning($"Search results are from {(operation.IsDeadLetter ? "Dead Letter Queue" : "Active Queue")}. Please switch queues.", "search-dlq-mismatch");
+                 return;
+            }
+
+            isPeeking = true;
+            StateHasChanged();
+
+            // Load specific messages
+            List<ServiceBusMessage> loadedMessages;
+            var token = await AuthService.GetServiceBusTokenAsync();
+            
+            if (string.IsNullOrEmpty(token))
+            {
+                NotificationService.NotifyError("Service Bus token not available");
+                return;
+            }
+            
+            if (operation.EntityType == "queue")
+            {
+                loadedMessages = await JsInterop.PeekQueueMessagesBySequenceAsync(
+                    operation.NamespaceName, 
+                    operation.EntityPath, 
+                    token, 
+                    operation.MatchingSequenceNumbers.ToArray(), 
+                    operation.IsDeadLetter);
+            }
+            else
+            {
+                loadedMessages = await JsInterop.PeekSubscriptionMessagesBySequenceAsync(
+                    operation.NamespaceName, 
+                    operation.TopicName!, 
+                    operation.SubscriptionName!,
+                    token, 
+                    operation.MatchingSequenceNumbers.ToArray(), 
+                    operation.IsDeadLetter);
+            }
+            
+            peekedMessages = loadedMessages;
+            hasPeeked = true;
+            peekFromSequence = 0; // Reset as this is a specific set results
+            lastPeekOptions = null; // Clear standard peek options
+            
+            NotificationService.NotifySuccess($"Loaded {peekedMessages.Count} matching messages from search.", "search-loaded");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.NotifyError($"Failed to load search results: {ex.Message}");
+            Console.WriteLine(ex);
+        }
+        finally
+        {
+            isPeeking = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StartBackgroundSearch(PeekOptions options)
+    {
+        showPeekOptionsModal = false;
+        
+        var searchOptions = new BackgroundSearchOptions
+        {
+            NamespaceName = NamespaceNameOnly,
+            EntityType = selectedQueueName != null ? "queue" : "subscription",
+            EntityPath = selectedQueueName ?? $"{selectedTopicName}/Subscriptions/{selectedSubscriptionName}",
+            TopicName = selectedTopicName,
+            SubscriptionName = selectedSubscriptionName,
+            IsDeadLetter = isViewingDLQ,
+            TotalMessageCount = CurrentEntityMessageCount,
+            BodyFilter = options.BodyFilter,
+            MessageIdFilter = options.MessageIdFilter,
+            SubjectFilter = options.SubjectFilter,
+            MaxMatches = options.MaxCount
+        };
+        
+        await BackgroundSearch.StartSearchAsync(searchOptions);
+        
+        NotificationService.NotifySuccess("Background search started. You can monitor progress in 'Running Tasks'.", "search-started");
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1204,10 +1150,10 @@
 
             List<ServiceBusMessage> messages;
 
-            // If we have a body filter, we need to peek more messages and filter client-side
-            if (!string.IsNullOrWhiteSpace(options.BodyFilter))
+            // If we have any filter, we need to peek more messages and filter client-side
+            if (options.HasActiveFilter)
             {
-                var result = await PeekWithBodyFilter(token, options.BodyFilter, startSequence);
+                var result = await PeekWithFilters(token, options, startSequence);
                 messages = result.messages;
                 // Update peekFromSequence based on where the scan stopped
                 peekFromSequence = (int)result.nextSequence;
@@ -1287,7 +1233,7 @@
 
             if (messages.Count > 0)
             {
-                var filterMsg = !string.IsNullOrWhiteSpace(options.BodyFilter) ? $" matching '{options.BodyFilter}'" : "";
+                var filterMsg = options.HasActiveFilter ? $" matching filters" : "";
                 var suffix = append ? " more" : "";
                 var entityType = selectedQueueName != null ? "queue" : "subscription";
                 var entityName = selectedQueueName ?? $"{selectedTopicName}/Subscriptions/{selectedSubscriptionName}";
@@ -1369,7 +1315,7 @@
         }
     }
 
-    private async Task<(List<ServiceBusMessage> messages, long nextSequence)> PeekWithBodyFilter(string token, string bodyFilter, long startSequence)
+    private async Task<(List<ServiceBusMessage> messages, long nextSequence)> PeekWithFilters(string token, PeekOptions options, long startSequence)
     {
         var matchingMessages = new List<ServiceBusMessage>();
         var currentSequence = (int)startSequence;
@@ -1399,9 +1345,32 @@
                 break; // No more messages
             }
 
-            // Filter messages by body content
+            // Filter messages based on all active filters (all must match)
             var matches = batch.Where(m =>
-                m.Body?.Contains(bodyFilter, StringComparison.OrdinalIgnoreCase) == true).ToList();
+            {
+                // Body filter
+                if (!string.IsNullOrWhiteSpace(options.BodyFilter))
+                {
+                    if (m.Body?.Contains(options.BodyFilter, StringComparison.OrdinalIgnoreCase) != true)
+                        return false;
+                }
+                
+                // MessageId filter
+                if (!string.IsNullOrWhiteSpace(options.MessageIdFilter))
+                {
+                    if (m.MessageId?.Contains(options.MessageIdFilter, StringComparison.OrdinalIgnoreCase) != true)
+                        return false;
+                }
+                
+                // Subject filter
+                if (!string.IsNullOrWhiteSpace(options.SubjectFilter))
+                {
+                    if (m.Subject?.Contains(options.SubjectFilter, StringComparison.OrdinalIgnoreCase) != true)
+                        return false;
+                }
+                
+                return true;
+            }).ToList();
 
             matchingMessages.AddRange(matches);
 

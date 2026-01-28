@@ -107,6 +107,31 @@
                 return await ServiceBusAPI.purgeSubscription(namespace, topicName, subscriptionName, token, progressCallback, fromDeadLetter);
             }
         };
+
+        // Helper to start search with progress callback
+        window.startSearchWithProgress = async function (namespace, queueName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, type, bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches) {
+            const progressCallback = (scanned, matches, newMatches) =>
+                callbackRef.invokeMethodAsync('OnProgress', scanned, matches, newMatches);
+
+            if (type === 'queue') {
+                return await ServiceBusAPI.searchQueueMessages(
+                    namespace, queueName, token, fromDeadLetter,
+                    bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches,
+                    progressCallback
+                );
+            } else {
+                return await ServiceBusAPI.searchSubscriptionMessages(
+                    namespace, topicName, subscriptionName, token, fromDeadLetter,
+                    bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches,
+                    progressCallback
+                );
+            }
+        };
+
+        // Helper to await the promise property of a controller object
+        window.awaitControllerPromise = async function (controller) {
+            return await controller.promise;
+        };
     </script>
 
     <script>

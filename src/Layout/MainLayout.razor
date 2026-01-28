@@ -7,6 +7,8 @@
 @inject NavigationStateService NavState
 @inject AuthenticationStateProvider AuthStateProvider
 
+@inject BackgroundSearchService BackgroundSearch
+
 <CascadingValue Value="@_isInitialized" Name="LayoutInitialized">
     <AuthorizeView>
         <Authorized>
@@ -27,7 +29,7 @@
                 <div data-theme="@(_isDarkMode ? "dark" : "light")">
                     <BuildInfo />
                     <NotificationsSidebar />
-                    <TasksSidebar />
+                    <TasksSidebar OnViewSearchResults="@HandleViewSearchResults" />
                 </div>
 
                 <!-- Support Modal (rendered outside .page for proper z-index) -->
@@ -133,6 +135,11 @@
     private async Task ConfirmDeleteFolder()
     {
         await NavState.ConfirmDeleteFolderAsync();
+    }
+
+    private void HandleViewSearchResults(SearchOperation operation)
+    {
+        BackgroundSearch.RequestViewResults(operation);
     }
 
     private async void OnAuthStateChanged(Task<AuthenticationState> task)

@@ -1,0 +1,82 @@
+<div class="explorer-actions-sidebar">
+    <!-- Send + DLQ Toggle Row -->
+    <div class="send-dlq-row">
+        <button class="btn btn-action btn-primary send-btn @(!CanSend ? "disabled-grey" : "")"
+                @onclick="OnShowSendMessage"
+                disabled="@(!CanSend)"
+                title="Send a message">
+            <i class="bi bi-envelope-fill"></i> Send
+        </button>
+        <button class="dlq-toggle-btn @(IsViewingDLQ ? "active" : "") @(!HasQueueOrSubscriptionSelected ? "disabled-grey" : "")"
+                @onclick="OnToggleDLQ"
+                disabled="@(!HasQueueOrSubscriptionSelected)"
+                title="@(HasQueueOrSubscriptionSelected ? (IsViewingDLQ ? "Viewing Dead Letter Queue" : "Switch to Dead Letter Queue") : "Select a queue or subscription first")">
+            <span>DLQ</span>
+            <span class="dlq-checkbox @(IsViewingDLQ ? "checked" : "")">
+                @if (IsViewingDLQ)
+                {
+                    <i class="bi bi-check-square-fill"></i>
+                }
+                else
+                {
+                    <i class="bi bi-square"></i>
+                }
+            </span>
+        </button>
+    </div>
+
+    <!-- Read Actions -->
+    <div class="action-btn-group">
+        <div class="action-btn-group-title">Read</div>
+        <div class="peek-btn-combined @(!HasQueueOrSubscriptionSelected || IsPeeking ? "disabled" : "")">
+            <button class="peek-btn-main"
+                    @onclick="@(PeekedMessagesCount > 0 ? OnPeekNext : OnPeek)"
+                    disabled="@(!HasQueueOrSubscriptionSelected || IsPeeking)">
+                <i class="bi bi-search"></i> @(PeekedMessagesCount > 0 ? "Peek More" : "Peek")
+            </button>
+            <button class="peek-btn-options @(ArePeekOptionsModified ? "text-warning" : "")"
+                    @onclick="OnShowPeekOptions"
+                    @onclick:stopPropagation="true"
+                    disabled="@(!HasQueueOrSubscriptionSelected)"
+                    title="@(ArePeekOptionsModified ? "Peek with options (Active)" : "Peek with options")">
+                <i class="bi bi-gear"></i>
+            </button>
+        </div>
+        <button class="btn btn-action btn-secondary w-100 @(!HasQueueOrSubscriptionSelected || IsViewingDLQ ? "disabled-grey" : "")"
+                @onclick="OnShowMonitor"
+                disabled="@(!HasQueueOrSubscriptionSelected || IsViewingDLQ)"
+                title="@(IsViewingDLQ ? "Monitoring not available for Dead Letter Queue" : "Monitor incoming messages")">
+            <i class="bi bi-graph-up"></i> Monitor
+        </button>
+    </div>
+
+    <!-- Dangerous Actions -->
+    <div class="action-btn-group">
+        <div class="action-btn-group-title">Dangerous</div>
+        <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession ? "disabled-grey" : "")"
+                @onclick="OnPurge"
+                disabled="@(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession)"
+                title="@(SelectedEntityRequiresSession ? "Purge not supported for session-enabled entities" : CurrentPurgeOperation != null ? "Purge already in progress" : "Purge all messages")">
+            <i class="bi bi-trash"></i> Purge
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsViewingDLQ { get; set; }
+    [Parameter] public bool CanSend { get; set; }
+    [Parameter] public bool HasQueueOrSubscriptionSelected { get; set; }
+    [Parameter] public bool IsPeeking { get; set; }
+    [Parameter] public int PeekedMessagesCount { get; set; }
+    [Parameter] public bool ArePeekOptionsModified { get; set; }
+    [Parameter] public object? CurrentPurgeOperation { get; set; }
+    [Parameter] public bool SelectedEntityRequiresSession { get; set; }
+    
+    [Parameter] public EventCallback OnShowSendMessage { get; set; }
+    [Parameter] public EventCallback OnToggleDLQ { get; set; }
+    [Parameter] public EventCallback OnPeek { get; set; }
+    [Parameter] public EventCallback OnPeekNext { get; set; }
+    [Parameter] public EventCallback OnShowPeekOptions { get; set; }
+    [Parameter] public EventCallback OnShowMonitor { get; set; }
+    [Parameter] public EventCallback OnPurge { get; set; }
+}

@@ -26,8 +26,14 @@
                 <div class="modal-body">
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label for="maxCount" class="form-label">Max Messages</label>
-                            <input type="number" class="form-control no-spinners" id="maxCount" value="@maxCount" @oninput="OnMaxCountChanged" min="1" max="250">
+                            <label for="maxCount" class="form-label">
+                                Max Messages
+                                @if (HasMessageIdFilter)
+                                {
+                                    <span class="text-muted ms-1" style="font-size: 0.8em;">(1 for ID search)</span>
+                                }
+                            </label>
+                            <input type="number" class="form-control no-spinners" id="maxCount" value="@maxCount" @oninput="OnMaxCountChanged" min="1" max="250" disabled="@HasMessageIdFilter">
                             @if (validationError != null)
                             {
                                 <div class="invalid-feedback d-block">@validationError</div>
@@ -46,34 +52,82 @@
                     
                     <div class="mb-3">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="peekFromNewest" checked="@peekFromNewest" @onchange="OnPeekFromNewestChanged">
-                            <label class="form-check-label" for="peekFromNewest">
+                            <input class="form-check-input" type="checkbox" id="peekFromNewest" checked="@peekFromNewest" @onchange="OnPeekFromNewestChanged" disabled="@(!AllowReversePeek)">
+                            <label class="form-check-label @(!AllowReversePeek ? "text-muted" : "")" for="peekFromNewest">
                                 Reverse peek (LIFO)
-                                <i class="bi bi-info-circle text-muted" 
+                                @if (!AllowReversePeek)
+                                {
+                                    <span class="ms-1" style="font-size: 0.8em;">(Not available with search filters)</span>
+                                }
+                                <i class="bi bi-info-circle text-muted ms-1" 
                                    style="cursor: help;" 
                                    title="Attempts to peek the newest messages (LIFO - Last In First Out). Note: This is a best-effort calculation based on message counts."></i>
                             </label>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="bodyFilter" class="form-label">
-                            Find String in Body
-                            <i class="bi bi-info-circle text-muted" 
-                               style="cursor: help;" 
-                               title="Filters messages containing this text in the body. Will search through up to 10,000 messages to find matches. Leave empty to peek all messages."></i>
-                        </label>
-                        <input type="text" class="form-control" id="bodyFilter" value="@bodyFilter" @oninput="OnBodyFilterChanged" placeholder="Enter search text...">
+                    <!-- Search Filters Section -->
+                    <div class="card mb-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
+                        <div class="card-header py-2 d-flex align-items-center">
+                            <i class="bi bi-funnel me-2"></i>
+                            <span>Search Filters</span>
+                            <i class="bi bi-info-circle text-muted ms-2" 
+                               style="cursor: help; font-size: 0.85em;" 
+                               title="Filters are applied client-side by scanning through messages. All filters use case-insensitive partial matching."></i>
+                            @if (HasActiveFilters)
+                            {
+                                <span class="badge bg-primary ms-auto">@ActiveFilterCount active</span>
+                            }
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="mb-2">
+                                <label for="messageIdFilter" class="form-label small mb-1">Message ID</label>
+                                <input type="text" class="form-control form-control-sm" id="messageIdFilter" value="@messageIdFilter" @oninput="OnMessageIdFilterChanged" placeholder="Search by message ID...">
+                            </div>
+                            <div class="mb-2">
+                                <label for="subjectFilter" class="form-label small mb-1">Subject</label>
+                                <input type="text" class="form-control form-control-sm" id="subjectFilter" value="@subjectFilter" @oninput="OnSubjectFilterChanged" placeholder="Search by subject...">
+                            </div>
+                            <div>
+                                <label for="bodyFilter" class="form-label small mb-1">Body Content</label>
+                                <input type="text" class="form-control form-control-sm" id="bodyFilter" value="@bodyFilter" @oninput="OnBodyFilterChanged" placeholder="Search in message body...">
+                            </div>
+                        </div>
+                        
+                        @* Background search info for large message counts *@
+                        @if (ShouldShowBackgroundSearchOption)
+                        {
+                            <div class="card-footer bg-info bg-opacity-10 border-info border-opacity-25 py-2">
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-hourglass-split text-info me-2 mt-1"></i>
+                                    <div class="small">
+                                        <strong>Deep Search Mode</strong><br/>
+                                        This entity has <strong>@MessageCount.ToString("N0")</strong> messages. 
+                                        With filters active, the search will run in the background and scan up to 1M messages.
+                                        You can monitor progress in Running Tasks.
+                                    </div>
+                                </div>
+                            </div>
+                        }
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="Close">Cancel</button>
-                    <button type="button" class="btn btn-primary" @onclick="ExecutePeek" disabled="@(validationError != null)">
-                        <i class="bi bi-search"></i> Peek
-                    </button>
-                </div>
+                    @if (ShouldShowBackgroundSearchOption)
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="ExecuteBackgroundSearch" disabled="@(validationError != null || !HasActiveFilters)">
+                            <i class="bi bi-hourglass-split"></i> Start Deep Search
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="ExecutePeek" disabled="@(validationError != null)">
+                            <i class="bi bi-search"></i> Peek
+                        </button>
+                    }
             </div>
         </div>
+    </div>
     </div>
 }
 
@@ -81,14 +135,32 @@
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<PeekOptions> OnPeek { get; set; }
+    [Parameter] public EventCallback<PeekOptions> OnBackgroundSearch { get; set; }
     [Parameter] public PeekOptions? InitialOptions { get; set; }
+    [Parameter] public long MessageCount { get; set; } = 0;
+    
+    /// <summary>
+    /// Threshold above which we suggest background search when filters are active
+    /// </summary>
+    private const long BackgroundSearchThreshold = 10_000;
 
     private int maxCount = 50;
     private long fromSequenceNumber = 0;
     private string bodyFilter = "";
+    private string messageIdFilter = "";
+    private string subjectFilter = "";
     private bool peekFromNewest = false;
     private string? validationError = null;
     private bool mouseDownInContent = false;
+
+    private bool HasMessageIdFilter => !string.IsNullOrWhiteSpace(messageIdFilter);
+    private bool HasActiveFilters => !string.IsNullOrWhiteSpace(bodyFilter) || !string.IsNullOrWhiteSpace(messageIdFilter) || !string.IsNullOrWhiteSpace(subjectFilter);
+    private int ActiveFilterCount => (string.IsNullOrWhiteSpace(bodyFilter) ? 0 : 1) + (string.IsNullOrWhiteSpace(messageIdFilter) ? 0 : 1) + (string.IsNullOrWhiteSpace(subjectFilter) ? 0 : 1);
+    private bool ShouldShowBackgroundSearchOption => HasActiveFilters && MessageCount > BackgroundSearchThreshold;
+    
+    // Reverse peek (LIFO) is irrelevant/not supported when searching, as we scan from the start.
+    // Also, when filters are active (client-side scan), we generally scan forward.
+    private bool AllowReversePeek => !HasActiveFilters; 
 
     protected override void OnParametersSet()
     {
@@ -100,6 +172,8 @@
                 maxCount = InitialOptions.MaxCount;
                 fromSequenceNumber = InitialOptions.FromSequenceNumber;
                 bodyFilter = InitialOptions.BodyFilter;
+                messageIdFilter = InitialOptions.MessageIdFilter;
+                subjectFilter = InitialOptions.SubjectFilter;
                 peekFromNewest = InitialOptions.PeekFromNewest;
             }
             else
@@ -107,8 +181,23 @@
                 maxCount = 50;
                 fromSequenceNumber = 0;
                 bodyFilter = "";
+                messageIdFilter = "";
+                subjectFilter = "";
                 peekFromNewest = false;
             }
+            
+            // Re-validate LIFO constraint
+            if (!AllowReversePeek && peekFromNewest)
+            {
+                peekFromNewest = false;
+            }
+            
+            // If Message ID filter is active, force Max Count to 1
+            if (HasMessageIdFilter)
+            {
+                maxCount = 1;
+            }
+            
             validationError = null;
             mouseDownInContent = false;
         }
@@ -116,11 +205,13 @@
 
     private int GetFilterMaxMessages()
     {
-        return string.IsNullOrWhiteSpace(bodyFilter) ? maxCount : 50;
+        return HasActiveFilters ? 50 : maxCount;
     }
 
     private void OnMaxCountChanged(ChangeEventArgs e)
     {
+        if (HasMessageIdFilter) return;
+        
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
             maxCount = value;
@@ -131,7 +222,26 @@
     private void OnBodyFilterChanged(ChangeEventArgs e)
     {
         bodyFilter = e.Value?.ToString() ?? "";
+        if (!AllowReversePeek && peekFromNewest) peekFromNewest = false;
         ValidateMaxCount(); // Re-validate when filter changes
+    }
+
+    private void OnMessageIdFilterChanged(ChangeEventArgs e)
+    {
+        messageIdFilter = e.Value?.ToString() ?? "";
+        if (!AllowReversePeek && peekFromNewest) peekFromNewest = false;
+        
+        // Force MaxCount to 1 if Message ID filter is present
+        if (HasMessageIdFilter) maxCount = 1;
+        
+        ValidateMaxCount();
+    }
+
+    private void OnSubjectFilterChanged(ChangeEventArgs e)
+    {
+        subjectFilter = e.Value?.ToString() ?? "";
+        if (!AllowReversePeek && peekFromNewest) peekFromNewest = false;
+        ValidateMaxCount();
     }
 
     private void OnPeekFromNewestChanged(ChangeEventArgs e)
@@ -197,10 +307,29 @@
             MaxCount = maxCount,
             FromSequenceNumber = peekFromNewest ? 0 : fromSequenceNumber,  // Will be calculated later if peekFromNewest is true
             BodyFilter = bodyFilter?.Trim() ?? "",
+            MessageIdFilter = messageIdFilter?.Trim() ?? "",
+            SubjectFilter = subjectFilter?.Trim() ?? "",
             PeekFromNewest = peekFromNewest
         };
         
         await OnPeek.InvokeAsync(options);
+    }
+    
+    private async Task ExecuteBackgroundSearch()
+    {
+        if (!HasActiveFilters) return;
+        
+        var options = new PeekOptions
+        {
+            MaxCount = maxCount,
+            FromSequenceNumber = 0,
+            BodyFilter = bodyFilter?.Trim() ?? "",
+            MessageIdFilter = messageIdFilter?.Trim() ?? "",
+            SubjectFilter = subjectFilter?.Trim() ?? "",
+            PeekFromNewest = false
+        };
+        
+        await OnBackgroundSearch.InvokeAsync(options);
     }
 }
 

@@ -685,6 +685,21 @@ pre {
     color: var(--text-color);
 }
 
+.card-header {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.card-footer {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-top: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .card-header,
+[data-theme="dark"] .card-footer {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
 .list-group-item {
     background-color: var(--card-bg);
     border-color: var(--border-color);
@@ -923,6 +938,8 @@ code {
     gap: 0.25rem;
     min-width: 0;
     overflow: hidden;
+    flex: 1;
+    /* Allow to grow/shrink based on available space */
 }
 
 .entity-icons {

@@ -442,4 +442,82 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
+    // Background message search operations
+    
+    public async Task<IJSObjectReference> StartSearchQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
+    {
+        try
+        {
+            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "startSearchWithProgress",
+                namespaceName, queueName, null, null, token, callbackRef, fromDeadLetter, "queue",
+                bodyFilter ?? "", messageIdFilter ?? "", subjectFilter ?? "", maxMessages, maxMatches);
+            
+            return controller;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting queue search: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<IJSObjectReference> StartSearchSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
+    {
+        try
+        {
+            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
+                "startSearchWithProgress",
+                namespaceName, null, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription",
+                bodyFilter ?? "", messageIdFilter ?? "", subjectFilter ?? "", maxMessages, maxMatches);
+            
+            return controller;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting subscription search: {ex.Message}");
+            throw;
+        }
+    }
+
+    // Peek specific messages by sequence numbers
+    
+    public async Task<List<ServiceBusMessage>> PeekQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
+    {
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<JsonElement[]>(
+                "ServiceBusAPI.peekQueueMessagesBySequence",
+                namespaceName, queueName, token, sequenceNumbers, fromDeadLetter);
+            
+            return result.Select(SafeDeserializeMessage)
+                .OfType<ServiceBusMessage>()
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error peeking queue messages by sequence: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
+    {
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<JsonElement[]>(
+                "ServiceBusAPI.peekSubscriptionMessagesBySequence",
+                namespaceName, topicName, subscriptionName, token, sequenceNumbers, fromDeadLetter);
+            
+            return result.Select(SafeDeserializeMessage)
+                .OfType<ServiceBusMessage>()
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error peeking subscription messages by sequence: {ex.Message}");
+            throw;
+        }
+    }
+
 }
