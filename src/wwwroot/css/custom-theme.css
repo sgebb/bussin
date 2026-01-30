@@ -569,3 +569,82 @@ textarea {
 .toast.bg-info {
     background-color: var(--primary-color) !important;
 }
+
+/* Message List Preview Hover */
+.message-preview-container {
+    position: relative;
+    width: 100%;
+}
+
+.message-preview-line {
+    cursor: text;
+    display: block;
+    width: 100%;
+}
+
+.message-preview-tooltip {
+    display: none;
+    position: fixed;
+    /* Anchored to viewport/mouse */
+    top: calc(var(--mouse-y, 0px) + 15px);
+    left: calc(var(--mouse-x, 0px) + 15px);
+    z-index: 1050;
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    padding: 1rem;
+    border-radius: 1rem;
+    /* Fully rounded bubble */
+    width: auto;
+    min-width: 300px;
+    max-width: 500px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    /* Better wrapping */
+    max-height: 300px;
+    overflow-y: auto;
+    color: var(--text-color);
+    cursor: text;
+}
+
+.message-preview-line {
+    cursor: pointer;
+    /* Same as row */
+    display: block;
+    width: 100%;
+}
+
+.message-item {
+    cursor: pointer;
+}
+
+.message-preview-container:hover .message-preview-tooltip {
+    display: block;
+}
+
+/* Search Input in Message List Header */
+.message-search {
+    position: relative;
+    max-width: 250px;
+}
+
+.message-search .form-control {
+    padding-right: 2rem;
+}
+
+.message-search-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+mark {
+    background-color: rgba(245, 158, 11, 0.3);
+    /* Low opacity warning color */
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+}

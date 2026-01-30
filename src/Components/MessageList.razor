@@ -1,4 +1,6 @@
 ﻿@using Bussin.Models
+@using System.Text.RegularExpressions
+
 
 <div class="message-list">
     @if (Messages.Any())
@@ -6,45 +8,57 @@
         <!-- Sticky header for selection controls -->
         <div class="message-list-header">
             <div class="d-flex justify-content-between align-items-center">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="selectAll" 
-                           @onchange="ToggleSelectAll" checked="@allSelected">
-                    <label class="form-check-label fw-bold" for="selectAll">
-                        Select All (@SelectedMessages.Count selected)
-                    </label>
+                <div class="d-flex align-items-center">
+                    <div class="form-check me-3">
+                        <input class="form-check-input" type="checkbox" id="selectAll" 
+                               @onchange="ToggleSelectAll" checked="@allSelected">
+                        <label class="form-check-label fw-bold" for="selectAll">
+                            Select All (@SelectedMessages.Count)
+                        </label>
+                    </div>
                 </div>
                 
-                @if (SelectedMessages.Any())
-                {
-                    <div class="btn-group btn-group-sm me-2">
-                        <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@(IsProcessing || RequiresSession)" 
-                                title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete selected messages")">
-                            Delete (@SelectedMessages.Count)
-                        </button>
-                        @if (IsDLQ)
-                        {
-                            <button class="btn btn-success" @onclick="OnResubmitSelected" disabled="@IsProcessing">
-                                Resubmit (@SelectedMessages.Count)
+                <div class="d-flex align-items-center">
+                    @if (SelectedMessages.Any())
+                    {
+                        <div class="btn-group btn-group-sm me-2">
+                            <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@(IsProcessing || RequiresSession)" 
+                                    title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete selected messages")">
+                                Delete
                             </button>
-                        }
-                        else
-                        {
-                            <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@(IsProcessing || RequiresSession)"
-                                    title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
-                                Move to DLQ (@SelectedMessages.Count)
-                            </button>
-                        }
+                            @if (IsDLQ)
+                            {
+                                <button class="btn btn-success" @onclick="OnResubmitSelected" disabled="@IsProcessing">
+                                    Resubmit
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@(IsProcessing || RequiresSession)"
+                                        title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
+                                    To DLQ
+                                </button>
+                            }
+                        </div>
+                    }
+
+                    <div class="message-search me-2">
+                        <input type="text" class="form-control form-control-sm" 
+                               placeholder="Search messages..." 
+                               @bind="SearchTerm" 
+                               @bind:event="oninput" />
+                        <i class="bi bi-search message-search-icon big-icon" style="font-size: 0.8rem;"></i>
                     </div>
-                }
-                
-                <button class="btn btn-sm btn-outline-secondary" @onclick="OnClearMessagesClick" title="Clear all peeked messages">
-                    <i class="bi bi-trash"></i> Clear
-                </button>
+                    
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="OnClearMessagesClick" title="Clear all peeked messages">
+                        <i class="bi bi-trash"></i> Clear
+                    </button>
+                </div>
             </div>
         </div>
 
         <div class="list-group">
-            @foreach (var message in Messages)
+            @foreach (var message in DisplayedMessages)
             {
                 <div class="list-group-item message-item @(message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value) ? "selected" : "")"
                      @onclick="() => OnMessageClick(message)">
@@ -54,9 +68,9 @@
                                    checked="@(message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value))"
                                    @onchange="() => ToggleMessage(message.SequenceNumber)">
                         </div>
-                        <div class="flex-grow-1">
-                            <div class="d-flex justify-content-between">
-                                <h6 class="mb-1">
+                        <div class="flex-grow-1" style="min-width: 0;">
+                            <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                <h6 class="text-truncate pe-2 m-0 flex-grow-1" style="min-width: 0;">
                                     <span class="badge bg-secondary me-2">Seq: @message.SequenceNumber</span>
                                     @if (IsScheduledMessage(message))
                                     {
@@ -69,7 +83,7 @@
                                         <small class="text-muted">ID: @message.MessageId</small>
                                     }
                                 </h6>
-                                <small class="text-muted">
+                                <small class="text-muted flex-shrink-0 ms-2" style="white-space: nowrap;">
                                     @if (IsScheduledMessage(message))
                                     {
                                         <span class="text-info" title="Scheduled delivery time">
@@ -82,9 +96,16 @@
                                     }
                                 </small>
                             </div>
-                            <p class="mb-1 text-truncate">
-                                <small>@GetMessagePreview(message)</small>
-                            </p>
+                            <div class="message-preview-container" style="overflow: visible; width: 100%; max-width: 0; min-width: 100%;" 
+                                 onmouseenter="this.style.setProperty('--mouse-x', event.clientX + 'px'); this.style.setProperty('--mouse-y', event.clientY + 'px');">
+                                <p class="mb-1 text-truncate message-preview-line">
+                                    <small>@GetMessagePreview(message)</small>
+                                </p>
+                                <div class="message-preview-tooltip" 
+                                     @onclick:stopPropagation="true" 
+                                     @onmousedown:stopPropagation="true"
+                                     style="cursor: text;">@GetFullMessageBody(message)</div>
+                            </div>
                             @if (message.DeliveryCount > 0)
                             {
                                 <small class="text-warning">Delivery Count: @message.DeliveryCount</small>
@@ -114,6 +135,22 @@
     [Parameter] public EventCallback<List<long>> OnMoveToDLQMessages { get; set; }
     [Parameter] public EventCallback<string> OnScheduledMessageWarning { get; set; }
     [Parameter] public EventCallback OnClearMessages { get; set; }
+
+    private string SearchTerm { get; set; } = "";
+
+    private List<ServiceBusMessage> DisplayedMessages
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchTerm))
+                return Messages;
+            
+            return Messages
+                .Where(m => (m.Body?.ToString() ?? "").Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                            (m.MessageId ?? "").Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
 
     private HashSet<long> SelectedMessages { get; set; } = new();
     private bool allSelected = false;
@@ -219,14 +256,39 @@
         return (regularMessages, scheduledCount);
     }
 
-    private string GetMessagePreview(ServiceBusMessage message)
+    private MarkupString GetMessagePreview(ServiceBusMessage message)
     {
-        if (message.Body != null)
+        var bodyStr = message.Body?.ToString() ?? "";
+        
+        if (string.IsNullOrWhiteSpace(SearchTerm))
         {
-            var bodyStr = message.Body.ToString() ?? "";
-            return bodyStr.Length > 100 ? bodyStr.Substring(0, 100) + "..." : bodyStr;
+            // Just return encoded body, let CSS truncate
+            return (MarkupString)System.Net.WebUtility.HtmlEncode(bodyStr);
         }
-        return "(empty)";
+
+        // Contextual highlight
+        var idx = bodyStr.IndexOf(SearchTerm, StringComparison.OrdinalIgnoreCase);
+        if (idx == -1) return (MarkupString)System.Net.WebUtility.HtmlEncode(bodyStr); // fallback
+
+        const int ContextPadding = 50;
+        int start = Math.Max(0, idx - ContextPadding);
+        int length = Math.Min(bodyStr.Length - start, idx - start + SearchTerm.Length + ContextPadding);
+        
+        string substring = bodyStr.Substring(start, length);
+        string encodedSubstring = System.Net.WebUtility.HtmlEncode(substring);
+        string encodedTerm = System.Net.WebUtility.HtmlEncode(SearchTerm);
+        
+        string highlighted = Regex.Replace(encodedSubstring, Regex.Escape(encodedTerm), m => $"<mark>{m.Value}</mark>", RegexOptions.IgnoreCase);
+
+        if (start > 0) highlighted = "..." + highlighted;
+        if (start + length < bodyStr.Length) highlighted = highlighted + "...";
+        
+        return (MarkupString)highlighted;
+    }
+
+    private string GetFullMessageBody(ServiceBusMessage message)
+    {
+        return message.Body?.ToString() ?? "(empty)";
     }
 
     // Public method to clear selection (can be called from parent)
