@@ -14,6 +14,10 @@ public interface IServiceBusOperationsService
     // Send operations
     Task SendQueueMessageAsync(string namespaceName, string queueName, object messageBody, MessageProperties? properties = null);
     Task SendTopicMessageAsync(string namespaceName, string topicName, object messageBody, MessageProperties? properties = null);
+
+    // Batch Send operations
+    Task<BatchOperationResult> SendQueueMessagesBatchAsync(string namespaceName, string queueName, List<object> messages);
+    Task<BatchOperationResult> SendTopicMessagesBatchAsync(string namespaceName, string topicName, List<object> messages);
     
     // Purge operations
     Task<int> PurgeQueueAsync(string namespaceName, string queueName, bool fromDeadLetter = false);

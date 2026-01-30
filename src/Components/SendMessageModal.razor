@@ -1,3 +1,5 @@
+@using System.IO
+@using System.Text.Json
 @inject IMessageParsingService MessageParsingService
 
 @if (IsVisible)
@@ -10,6 +12,15 @@
                     <button type="button" class="btn-close" @onclick="OnClose"></button>
                 </div>
                 <div class="modal-body">
+                    <ul class="nav nav-tabs mb-3">
+                        <li class="nav-item">
+                            <button class="nav-link @(!isBatchMode ? "active" : "")" @onclick="() => isBatchMode = false">Single Message</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link @(isBatchMode ? "active" : "")" @onclick="() => isBatchMode = true">Batch Send</button>
+                        </li>
+                    </ul>
+
                     @if (!string.IsNullOrEmpty(validationError))
                     {
                         <div class="alert alert-danger mb-3">
@@ -17,7 +28,7 @@
                         </div>
                     }
 
-                    @if (RequiresSession && string.IsNullOrWhiteSpace(sessionId))
+                    @if (RequiresSession && string.IsNullOrWhiteSpace(sessionId) && !isBatchMode)
                     {
                         <div class="alert alert-warning mb-3 py-2">
                             <i class="bi bi-info-circle me-1"></i>
@@ -25,145 +36,199 @@
                         </div>
                     }
 
-                    <div class="mb-3">
-                        <label class="form-label">Message Body</label>
-                        <textarea class="form-control" rows="4" @bind="MessageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
-                        <small class="form-text text-muted">Enter plain text or valid JSON. Content type will be set automatically.</small>
-                    </div>
+                    @if (isBatchMode)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Upload File</label>
+                            <InputFile OnChange="@LoadFiles" class="form-control" accept=".json, .txt" />
+                            <div class="form-text">
+                                Supported format: A JSON array of messages (<code>.json</code> or <code>.txt</code>).
+                                <br />Each element in the array will be sent as a separate message body.
+                                <br />Example: <code>["Message 1", {"data": 123}, "Message 3"]</code>
+                            </div>
+                        </div>
 
-                    <!-- Broker Properties Accordion -->
-                    <div class="accordion mb-3" id="sendMessageAccordion">
-                        <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button @(showBrokerProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showBrokerProperties = !showBrokerProperties">
-                                    <small>Broker Properties</small>
-                                </button>
-                            </h2>
-                            @if (showBrokerProperties)
-                            {
-                                <div class="accordion-body py-2">
-                                    <div class="row g-2">
-                                        @if (RequiresSession)
-                                        {
+                        @if (batchMessages.Any())
+                        {
+                            <div class="card mb-3">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <span>Preview (@batchMessages.Count messages)</span>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearBatch">Clear</button>
+                                </div>
+                                <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;">
+                                    <table class="table table-sm table-striped mb-0" style="font-size: 0.85rem;">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 50px;">#</th>
+                                                <th>Message Body</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var (msg, index) in batchMessages.Select((m, i) => (m, i)).Take(10))
+                                            {
+                                                <tr>
+                                                    <td>@(index + 1)</td>
+                                                    <td class="text-truncate" style="max-width: 400px;" title="@msg.Body">
+                                                        @(msg.Body.Length > 100 ? msg.Body.Substring(0, 100) + "..." : msg.Body)
+                                                    </td>
+                                                </tr>
+                                            }
+                                            @if (batchMessages.Count > 10)
+                                            {
+                                                <tr>
+                                                    <td colspan="2" class="text-center text-muted">
+                                                        ... and @(batchMessages.Count - 10) more
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Message Body</label>
+                            <textarea class="form-control" rows="4" @bind="MessageBody" placeholder='Plain text or JSON: {"key": "value"}'></textarea>
+                            <small class="form-text text-muted">Enter plain text or valid JSON. Content type will be set automatically.</small>
+                        </div>
+
+                        <!-- Broker Properties Accordion -->
+                        <div class="accordion mb-3" id="sendMessageAccordion">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button @(showBrokerProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showBrokerProperties = !showBrokerProperties">
+                                        <small>Broker Properties</small>
+                                    </button>
+                                </h2>
+                                @if (showBrokerProperties)
+                                {
+                                    <div class="accordion-body py-2">
+                                        <div class="row g-2">
+                                            @if (RequiresSession)
+                                            {
+                                                <div class="col-md-6">
+                                                    <label class="form-label small mb-1">Session ID <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Required for session-enabled entities" />
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="col-md-6">
+                                                    <label class="form-label small mb-1">Session ID</label>
+                                                    <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Optional" />
+                                                </div>
+                                            }
                                             <div class="col-md-6">
-                                                <label class="form-label small mb-1">Session ID <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Required for session-enabled entities" />
+                                                <label class="form-label small mb-1">Message ID</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="messageId" placeholder="Auto-generated if empty" />
                                             </div>
-                                        }
-                                        else
-                                        {
                                             <div class="col-md-6">
-                                                <label class="form-label small mb-1">Session ID</label>
-                                                <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Optional" />
+                                                <label class="form-label small mb-1">Correlation ID</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="correlationId" />
                                             </div>
-                                        }
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">Message ID</label>
-                                            <input type="text" class="form-control form-control-sm" @bind="messageId" placeholder="Auto-generated if empty" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">Correlation ID</label>
-                                            <input type="text" class="form-control form-control-sm" @bind="correlationId" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">Subject / Label</label>
-                                            <input type="text" class="form-control form-control-sm" @bind="subject" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">Reply To</label>
-                                            <input type="text" class="form-control form-control-sm" @bind="replyTo" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">To</label>
-                                            <input type="text" class="form-control form-control-sm" @bind="to" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">Time to Live (seconds)</label>
-                                            <input type="number" class="form-control form-control-sm" @bind="ttlSeconds" min="0" placeholder="Default: entity setting" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">Content Type</label>
-                                            <input type="text" class="form-control form-control-sm" @bind="contentType" placeholder="Auto-detected" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1">Scheduled Enqueue (UTC)</label>
-                                            <input type="datetime-local" 
-                                                   class="form-control form-control-sm datetime-picker-enhanced" 
-                                                   @bind="scheduledEnqueueTime" 
-                                                   min="@GetMinDateTime()" />
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label small mb-1 d-flex align-items-center gap-1">
-                                                Relative Schedule
-                                                <span class="schedule-help-icon" title="Schedule relative to now. Examples: 5m (5 minutes), 2h (2 hours), 1d (1 day), 30s (30 seconds). Overrides the datetime field above if specified.">
-                                                    <i class="bi bi-question-circle"></i>
-                                                </span>
-                                            </label>
-                                            <input type="text" class="form-control form-control-sm" @bind="relativeScheduleTime" @bind:event="oninput" placeholder="e.g., 5m, 2h, 1d" />
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Subject / Label</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="subject" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Reply To</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="replyTo" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">To</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="to" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Time to Live (seconds)</label>
+                                                <input type="number" class="form-control form-control-sm" @bind="ttlSeconds" min="0" placeholder="Default: entity setting" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Content Type</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="contentType" placeholder="Auto-detected" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Scheduled Enqueue (UTC)</label>
+                                                <input type="datetime-local" 
+                                                       class="form-control form-control-sm datetime-picker-enhanced" 
+                                                       @bind="scheduledEnqueueTime" 
+                                                       min="@GetMinDateTime()" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1 d-flex align-items-center gap-1">
+                                                    Relative Schedule
+                                                    <span class="schedule-help-icon" title="Schedule relative to now. Examples: 5m (5 minutes), 2h (2 hours), 1d (1 day), 30s (30 seconds). Overrides the datetime field above if specified.">
+                                                        <i class="bi bi-question-circle"></i>
+                                                    </span>
+                                                </label>
+                                                <input type="text" class="form-control form-control-sm" @bind="relativeScheduleTime" @bind:event="oninput" placeholder="e.g., 5m, 2h, 1d" />
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            }
-                        </div>
+                                }
+                            </div>
 
-                        <div class="accordion-item">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button @(showCustomProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showCustomProperties = !showCustomProperties">
-                                    <small>Custom Properties (@customProperties.Count)</small>
-                                </button>
-                            </h2>
-                            @if (showCustomProperties)
-                            {
-                                <div class="accordion-body py-2">
-                                    @foreach (var prop in customProperties)
-                                    {
-                                        <div class="row g-2 mb-2 align-items-end">
-                                            <div class="col-4">
-                                                <input type="text" class="form-control form-control-sm" @bind="prop.Key" placeholder="Key" />
-                                            </div>
-                                            <div class="col-3">
-                                                <select class="form-select form-select-sm" @bind="prop.Type">
-                                                    <option value="string">String</option>
-                                                    <option value="number">Number</option>
-                                                    <option value="boolean">Boolean</option>
-                                                </select>
-                                            </div>
-                                            <div class="col-4">
-                                                @if (prop.Type == "boolean")
-                                                {
-                                                    <select class="form-select form-select-sm" @bind="prop.Value">
-                                                        <option value="true">true</option>
-                                                        <option value="false">false</option>
-                                                    </select>
-                                                }
-                                                else
-                                                {
-                                                    <input type="@(prop.Type == "number" ? "number" : "text")" class="form-control form-control-sm" @bind="prop.Value" placeholder="Value" />
-                                                }
-                                            </div>
-                                            <div class="col-1">
-                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCustomProperty(prop)">
-                                                    <i class="bi bi-x"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    }
-                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddCustomProperty">
-                                        <i class="bi bi-plus"></i> Add Property
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button @(showCustomProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showCustomProperties = !showCustomProperties">
+                                        <small>Custom Properties (@customProperties.Count)</small>
                                     </button>
-                                </div>
-                            }
+                                </h2>
+                                @if (showCustomProperties)
+                                {
+                                    <div class="accordion-body py-2">
+                                        @foreach (var prop in customProperties)
+                                        {
+                                            <div class="row g-2 mb-2 align-items-end">
+                                                <div class="col-4">
+                                                    <input type="text" class="form-control form-control-sm" @bind="prop.Key" placeholder="Key" />
+                                                </div>
+                                                <div class="col-3">
+                                                    <select class="form-select form-select-sm" @bind="prop.Type">
+                                                        <option value="string">String</option>
+                                                        <option value="number">Number</option>
+                                                        <option value="boolean">Boolean</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-4">
+                                                    @if (prop.Type == "boolean")
+                                                    {
+                                                        <select class="form-select form-select-sm" @bind="prop.Value">
+                                                            <option value="true">true</option>
+                                                            <option value="false">false</option>
+                                                        </select>
+                                                    }
+                                                    else
+                                                    {
+                                                        <input type="@(prop.Type == "number" ? "number" : "text")" class="form-control form-control-sm" @bind="prop.Value" placeholder="Value" />
+                                                    }
+                                                </div>
+                                                <div class="col-1">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCustomProperty(prop)">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddCustomProperty">
+                                            <i class="bi bi-plus"></i> Add Property
+                                        </button>
+                                    </div>
+                                }
+                            </div>
                         </div>
-                    </div>
+                    }
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
-                    <button type="button" class="btn btn-primary" @onclick="HandleSend" disabled="@(IsSending || (RequiresSession && string.IsNullOrWhiteSpace(sessionId)))">
+                    <button type="button" class="btn btn-primary" @onclick="HandleSend" disabled="@(IsSending || (RequiresSession && string.IsNullOrWhiteSpace(sessionId) && !isBatchMode) || (isBatchMode && !batchMessages.Any()))">
                         @if (IsSending)
                         {
                             <span class="spinner-border spinner-border-sm me-2"></span>
                         }
-                        Send
+                        @(isBatchMode ? $"Send {batchMessages.Count} Messages" : "Send")
                     </button>
                 </div>
             </div>
@@ -177,6 +242,10 @@
     [Parameter] public bool RequiresSession { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<SendMessageRequest> OnSend { get; set; }
+    [Parameter] public EventCallback<List<SendMessageRequest>> OnBatchSend { get; set; }
+
+    private bool isBatchMode = false;
+    private List<SendMessageRequest> batchMessages = new();
 
     private string messageBody = "";
     private string? validationError = null;
@@ -226,6 +295,8 @@
 
     private void ResetForm()
     {
+        isBatchMode = false;
+        batchMessages.Clear();
         messageBody = "";
         validationError = null;
         sessionId = "";
@@ -246,6 +317,16 @@
     private async Task HandleSend()
     {
         validationError = null;
+
+        if (isBatchMode)
+        {
+            if (batchMessages.Any())
+            {
+                await OnBatchSend.InvokeAsync(batchMessages);
+                ResetForm();
+            }
+            return;
+        }
 
         if (RequiresSession && string.IsNullOrWhiteSpace(sessionId))
         {
@@ -277,18 +358,12 @@
         }
         else if (scheduledEnqueueTime.HasValue)
         {
-            // Validate the datetime picker value
-            // The datetime-local input gives us local time, we need to treat it as UTC
             var scheduledUtc = scheduledEnqueueTime.Value;
-            
-            // If the time component is midnight (00:00:00), that's fine - user may have only specified date
-            // But we should validate it's not in the past
             if (scheduledUtc < DateTime.UtcNow)
             {
                 validationError = "Scheduled enqueue time cannot be in the past. Please select a future date/time.";
                 return;
             }
-            
             effectiveScheduledTime = scheduledUtc;
         }
 
@@ -310,6 +385,77 @@
 
         await OnSend.InvokeAsync(request);
         ResetForm();
+    }
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        validationError = null;
+        batchMessages.Clear();
+
+        try
+        {
+            var file = e.File;
+            if (file.Size > 5 * 1024 * 1024) // 5MB limit
+            {
+                validationError = "File is too large. Max 5MB.";
+                return;
+            }
+
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+            
+            ParseBatchContent(content);
+        }
+        catch (Exception ex)
+        {
+            validationError = $"Error reading file: {ex.Message}";
+        }
+    }
+
+    private void ParseBatchContent(string content)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(content);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                validationError = "File must contain a JSON array of messages.";
+                return;
+            }
+
+            foreach (var element in doc.RootElement.EnumerateArray())
+            {
+                var request = new SendMessageRequest();
+
+                // Treat the entire element as the body
+                if (element.ValueKind == JsonValueKind.String)
+                {
+                    request.Body = element.GetString() ?? "";
+                }
+                else
+                {
+                    // Serialize object/number/bool/array to string
+                    request.Body = element.ToString();
+                }
+
+                batchMessages.Add(request);
+            }
+        }
+        catch (JsonException)
+        {
+            validationError = "Invalid JSON format. File must contain a valid JSON array.";
+        }
+        catch (Exception ex)
+        {
+            validationError = $"Error parsing content: {ex.Message}";
+        }
+    }
+    
+    private void ClearBatch()
+    {
+        batchMessages.Clear();
+        validationError = null;
     }
 
     private Dictionary<string, object>? BuildCustomProperties()

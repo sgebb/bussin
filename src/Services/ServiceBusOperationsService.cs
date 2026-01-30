@@ -98,6 +98,38 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
+    public async Task<BatchOperationResult> SendQueueMessagesBatchAsync(string namespaceName, string queueName, List<object> messages)
+    {
+        try
+        {
+            var token = await GetTokenAsync();
+            await _jsInterop.SendQueueMessageBatchAsync(namespaceName, queueName, token, messages.ToArray());
+            _notificationService.NotifySuccess($"Batch of {messages.Count} messages sent successfully to queue '{queueName}'");
+            return new BatchOperationResult { SuccessCount = messages.Count };
+        }
+        catch (Exception ex)
+        {
+            _notificationService.NotifyError($"Failed to send batch: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<BatchOperationResult> SendTopicMessagesBatchAsync(string namespaceName, string topicName, List<object> messages)
+    {
+        try
+        {
+            var token = await GetTokenAsync();
+            await _jsInterop.SendTopicMessageBatchAsync(namespaceName, topicName, token, messages.ToArray());
+            _notificationService.NotifySuccess($"Batch of {messages.Count} messages sent successfully to topic '{topicName}'");
+            return new BatchOperationResult { SuccessCount = messages.Count };
+        }
+        catch (Exception ex)
+        {
+            _notificationService.NotifyError($"Failed to send batch: {ex.Message}");
+            throw;
+        }
+    }
+
     // Purge operations
     
     public async Task<int> PurgeQueueAsync(string namespaceName, string queueName, bool fromDeadLetter = false)

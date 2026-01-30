@@ -648,3 +648,78 @@ mark {
     padding: 0 2px;
     border-radius: 2px;
 }
+
+/* Tabs Dark Mode Fixes & Styling */
+.nav-tabs {
+    border-bottom-color: var(--border-color) !important;
+}
+
+.nav-tabs .nav-link {
+    color: var(--text-muted);
+    border-color: transparent;
+    padding: 0.25rem 0.75rem;
+    /* Shorter vertically */
+    font-size: 0.9rem;
+    background-color: transparent;
+    border-radius: 0.25rem 0.25rem 0 0;
+    margin-right: 2px;
+}
+
+/* Inactive tabs in dark mode - make them darker/subtle */
+[data-theme='dark'] .nav-tabs .nav-link {
+    background-color: rgba(0, 0, 0, 0.2);
+    /* Darker than surface */
+    color: var(--slate-400);
+}
+
+.nav-tabs .nav-link:hover {
+    color: var(--text-color);
+    background-color: var(--hover-bg);
+}
+
+.nav-tabs .nav-link.active {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    border-bottom-color: var(--surface-color) !important;
+    color: var(--primary-color) !important;
+    font-weight: 600;
+}
+
+/* Ensure active tab looks connected */
+[data-theme='dark'] .nav-tabs .nav-link.active {
+    background-color: var(--surface-color) !important;
+    color: var(--primary-color) !important;
+    border-bottom-color: var(--surface-color) !important;
+}
+
+/* Table Dark Mode Fixes */
+.table {
+    color: var(--text-color) !important;
+    --bs-table-color: var(--text-color);
+    --bs-table-bg: transparent;
+    --bs-table-border-color: var(--border-color);
+    --bs-table-striped-bg: var(--hover-bg);
+}
+
+.table> :not(caption)>*>* {
+    color: var(--text-color) !important;
+    /* Force text color on all cells */
+}
+
+[data-theme='dark'] .table-striped>tbody>tr:nth-of-type(odd)>* {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-color) !important;
+}
+
+/* Helper Text / Form Text Visibility */
+.form-text,
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+[data-theme='dark'] .form-text,
+[data-theme='dark'] .text-muted {
+    color: var(--slate-300) !important;
+    /* Lighter grey for better contrast on dark */
+    opacity: 0.9;
+}

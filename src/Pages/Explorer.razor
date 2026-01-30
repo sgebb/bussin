@@ -208,7 +208,8 @@
                   IsSending="@isSending"
                   RequiresSession="@SelectedEntityRequiresSession"
                   OnClose="@(() => showSendMessageModal = false)"
-                  OnSend="@SendMessage" />
+                  OnSend="@SendMessage" 
+                  OnBatchSend="@SendBatchMessages" />
 
 <MessageDetailModal IsVisible="@showMessageDetailModal"
                     Message="@selectedMessage"
@@ -1074,6 +1075,59 @@
             rawErrorMessage = ex.Message;
             errorMessage = FormatSendError(ex.Message);
             Console.WriteLine($"Send error: {ex}");
+        }
+        finally
+        {
+            isSending = false;
+        }
+    }
+
+    private async Task SendBatchMessages(List<SendMessageModal.SendMessageRequest> requests)
+    {
+        isSending = true;
+        errorMessage = null;
+
+        try
+        {
+            var batchObjects = new List<object>();
+
+            foreach (var req in requests)
+            {
+                var props = new MessageProperties
+                {
+                    MessageId = req.MessageId,
+                    CorrelationId = req.CorrelationId,
+                    Subject = req.Subject,
+                    ReplyTo = req.ReplyTo,
+                    To = req.To,
+                    SessionId = req.SessionId,
+                    ContentType = req.ContentType,
+                    TimeToLive = req.TimeToLiveSeconds.HasValue ? TimeSpan.FromSeconds(req.TimeToLiveSeconds.Value) : null,
+                    ApplicationProperties = req.CustomProperties,
+                    MessageAnnotations = req.ScheduledEnqueueTimeUtc.HasValue
+                        ? new Dictionary<string, object> { ["x-opt-scheduled-enqueue-time"] = DateTime.SpecifyKind(req.ScheduledEnqueueTimeUtc.Value, DateTimeKind.Utc) }
+                        : null
+                };
+
+                batchObjects.Add(new { body = req.Body, properties = props });
+            }
+
+            if (selectedQueueName != null)
+            {
+                await OperationsService.SendQueueMessagesBatchAsync(NamespaceNameOnly, selectedQueueName, batchObjects);
+            }
+            else if (selectedTopicName != null)
+            {
+                await OperationsService.SendTopicMessagesBatchAsync(NamespaceNameOnly, selectedTopicName, batchObjects);
+            }
+
+            showSendMessageModal = false;
+        }
+        catch (Exception ex)
+        {
+            rawErrorMessage = ex.Message;
+            errorMessage = FormatSendError(ex.Message);
+            Console.WriteLine($"Batch send error: {ex}");
         }
         finally
         {
