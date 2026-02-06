@@ -19,7 +19,7 @@
             <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="bi bi-gear"></i> Peek with Options
+                        <i class="bi bi-gear"></i> Advanced Peek
                     </h5>
                     <button type="button" class="btn-close" @onclick="Close"></button>
                 </div>
@@ -33,7 +33,7 @@
                                     <span class="text-muted ms-1" style="font-size: 0.8em;">(1 for ID search)</span>
                                 }
                             </label>
-                            <input type="number" class="form-control no-spinners" id="maxCount" value="@maxCount" @oninput="OnMaxCountChanged" min="1" max="250" disabled="@HasMessageIdFilter">
+                            <input type="number" class="form-control no-spinners" id="maxCount" value="@maxCount" @oninput="OnMaxCountChanged" min="1" max="10000" disabled="@(HasMessageIdFilter || isLiveMonitorMode)">
                             @if (validationError != null)
                             {
                                 <div class="invalid-feedback d-block">@validationError</div>
@@ -52,8 +52,8 @@
                     
                     <div class="mb-3">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="peekFromNewest" checked="@peekFromNewest" @onchange="OnPeekFromNewestChanged" disabled="@(!AllowReversePeek)">
-                            <label class="form-check-label @(!AllowReversePeek ? "text-muted" : "")" for="peekFromNewest">
+                            <input class="form-check-input" type="checkbox" id="peekFromNewest" checked="@peekFromNewest" @onchange="OnPeekFromNewestChanged" disabled="@(!AllowReversePeek || isLiveMonitorMode)">
+                            <label class="form-check-label @(!AllowReversePeek || isLiveMonitorMode ? "text-muted" : "")" for="peekFromNewest">
                                 Reverse peek (LIFO)
                                 @if (!AllowReversePeek)
                                 {
@@ -65,6 +65,31 @@
                             </label>
                         </div>
                     </div>
+
+                    @if (!IsViewingDLQ)
+                    {
+                        <!-- Live Monitor Mode -->
+                        <div class="card mb-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
+                            <div class="card-body py-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="liveMonitorMode" checked="@isLiveMonitorMode" @onchange="OnLiveMonitorModeChanged">
+                                    <label class="form-check-label" for="liveMonitorMode">
+                                        <i class="bi bi-broadcast text-success me-1"></i>
+                                        <strong>Live Monitor Mode</strong>
+                                        <i class="bi bi-info-circle text-muted ms-1" 
+                                           style="cursor: help; font-size: 0.85em;" 
+                                           title="Continuously peek messages in real-time as they arrive. Messages are not consumed or deleted."></i>
+                                    </label>
+                                </div>
+                                @if (isLiveMonitorMode)
+                                {
+                                    <small class="text-muted d-block mt-1 ms-4">
+                                        Peek messages in real-time as they arrive. Messages are not consumed.
+                                    </small>
+                                }
+                            </div>
+                        </div>
+                    }
 
                     <!-- Search Filters Section -->
                     <div class="card mb-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
@@ -113,7 +138,13 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="Close">Cancel</button>
-                    @if (ShouldShowBackgroundSearchOption)
+                    @if (isLiveMonitorMode)
+                    {
+                        <button type="button" class="btn btn-success" @onclick="StartLiveMonitor">
+                            <i class="bi bi-broadcast"></i> Start Live Monitor
+                        </button>
+                    }
+                    else if (ShouldShowBackgroundSearchOption)
                     {
                         <button type="button" class="btn btn-primary" @onclick="ExecuteBackgroundSearch" disabled="@(validationError != null || !HasActiveFilters)">
                             <i class="bi bi-hourglass-split"></i> Start Deep Search
@@ -136,8 +167,10 @@
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<PeekOptions> OnPeek { get; set; }
     [Parameter] public EventCallback<PeekOptions> OnBackgroundSearch { get; set; }
+    [Parameter] public EventCallback OnStartLiveMonitor { get; set; }
     [Parameter] public PeekOptions? InitialOptions { get; set; }
     [Parameter] public long MessageCount { get; set; } = 0;
+    [Parameter] public bool IsViewingDLQ { get; set; } = false;
     
     /// <summary>
     /// Threshold above which we suggest background search when filters are active
@@ -150,6 +183,7 @@
     private string messageIdFilter = "";
     private string subjectFilter = "";
     private bool peekFromNewest = false;
+    private bool isLiveMonitorMode = false;
     private string? validationError = null;
     private bool mouseDownInContent = false;
 
@@ -259,9 +293,9 @@
         {
             validationError = "Max messages must be at least 1";
         }
-        else if (maxCount > 250)
+        else if (maxCount > 10000)
         {
-            validationError = "Max messages must be 250 or less (Azure Service Bus limit)";
+            validationError = "Max messages must be 10,000 or less";
         }
         else
         {
@@ -293,13 +327,13 @@
     {
         // Validate maxCount
         ValidateMaxCount();
-        if (validationError != null)
+        if (validationError != null || isLiveMonitorMode)
         {
             return;
         }
         
         // Clamp values
-        maxCount = Math.Clamp(maxCount, 1, 250);
+        maxCount = Math.Clamp(maxCount, 1, 10000);
         fromSequenceNumber = Math.Max(0, fromSequenceNumber);
         
         var options = new PeekOptions
@@ -330,6 +364,22 @@
         };
         
         await OnBackgroundSearch.InvokeAsync(options);
+    }
+
+    private void OnLiveMonitorModeChanged(ChangeEventArgs e)
+    {
+        isLiveMonitorMode = (bool)(e.Value ?? false);
+        if (isLiveMonitorMode)
+        {
+            // Reset other options when enabling live monitor
+            peekFromNewest = false;
+        }
+    }
+
+    private async Task StartLiveMonitor()
+    {
+        await OnClose.InvokeAsync();
+        await OnStartLiveMonitor.InvokeAsync();
     }
 }
 

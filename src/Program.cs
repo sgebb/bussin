@@ -14,18 +14,15 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 
-// Simple detection of demo mode via URL
 bool isDemoMode = false;
 try 
 {
-    // We can't use NavigationManager yet as it's not built, but we can peek at the window location via a rough approach
-    // or by building a temporary provider.
     var tempProvider = builder.Services.BuildServiceProvider();
     var navMan = tempProvider.GetService<NavigationManager>();
     if (navMan != null)
     {
         var uri = navMan.Uri;
-        isDemoMode = uri.Contains("/demo") || uri.Contains("demo=true");
+        isDemoMode = uri.Contains("/demo");
     }
 }
 catch
@@ -50,6 +47,7 @@ if (isDemoMode)
     builder.Services.AddSingleton<IServiceBusJsInteropService>(sp => sp.GetRequiredService<DemoServiceBusJsInteropService>());
     builder.Services.AddSingleton<IAzureResourceService, DemoAzureResourceService>();
     builder.Services.AddScoped<IMetricsService, DemoMetricsService>();
+    builder.Services.AddSingleton<IPreferencesService, DemoPreferencesService>();
 }
 else
 {
@@ -70,18 +68,19 @@ else
     builder.Services.AddSingleton<IAzureResourceService, AzureResourceService>();
     builder.Services.AddScoped<IServiceBusJsInteropService, ServiceBusJsInteropService>();
     builder.Services.AddScoped<IMetricsService, MetricsService>();
+    builder.Services.AddScoped<IPreferencesService, PreferencesService>();
 }
 
 // Common Services
 builder.Services.AddSingleton<ServiceBusEntityCache>();
 builder.Services.AddScoped<IServiceBusOperationsService, ServiceBusOperationsService>();
-builder.Services.AddScoped<IPreferencesService, PreferencesService>();
 builder.Services.AddScoped<IMessageParsingService, MessageParsingService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddScoped<IConfirmModalService, ConfirmModalService>();
 builder.Services.AddScoped<NavigationStateService>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddSingleton<BackgroundPurgeService>();
+builder.Services.AddSingleton<BackgroundResubmitService>();
 builder.Services.AddSingleton<BackgroundSearchService>();
 
 await builder.Build().RunAsync();

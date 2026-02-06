@@ -11,6 +11,7 @@
 @inject NavigationStateService NavState
 @inject BackgroundPurgeService BackgroundPurge
 @inject BackgroundSearchService BackgroundSearch
+@inject BackgroundResubmitService BackgroundResubmit
 @inject INotificationService NotificationService
 @inject IConfirmModalService ConfirmModal
 @implements IDisposable
@@ -151,13 +152,14 @@
                                     PeekedMessagesCount="@peekedMessages.Count"
                                     ArePeekOptionsModified="@ArePeekOptionsModified"
                                     CurrentPurgeOperation="@CurrentPurgeOperation"
+                                    CurrentResubmitOperation="@CurrentResubmitOperation"
                                     SelectedEntityRequiresSession="@SelectedEntityRequiresSession"
                                     OnShowSendMessage="@ShowSendMessageModal"
                                     OnToggleDLQ="@ToggleDLQ"
                                     OnPeek="@PeekMessages"
                                     OnPeekNext="@PeekNext"
                                     OnShowPeekOptions="@ShowPeekOptionsModal"
-                                    OnShowMonitor="@ShowMonitorModal"
+                                    OnResubmitAll="@ResubmitAllMessages"
                                     OnPurge="@(() => PurgeMessages())" />
 
         </div>
@@ -232,8 +234,10 @@
                   OnClose="@(() => showPeekOptionsModal = false)"
                   InitialOptions="@lastPeekOptions"
                   MessageCount="@CurrentEntityMessageCount"
+                  IsViewingDLQ="@isViewingDLQ"
                   OnPeek="@(async (options) => await PeekWithOptions(options, append: false))"
-                  OnBackgroundSearch="@StartBackgroundSearch" />
+                  OnBackgroundSearch="@StartBackgroundSearch"
+                  OnStartLiveMonitor="@ShowMonitorModal" />
 
 <MessageMonitorModal IsVisible="@showMonitorModal"
                      NamespaceName="@NamespaceNameOnly"
@@ -389,6 +393,7 @@
     {
         ConfirmModal.OnChange += StateHasChanged;
         BackgroundPurge.OnOperationsChanged += StateHasChanged;
+        BackgroundResubmit.OnOperationsChanged += StateHasChanged;
         BackgroundSearch.OnViewResultsRequested += OnViewSearchResultsRequested;
     }
 
@@ -396,6 +401,7 @@
     {
         ConfirmModal.OnChange -= StateHasChanged;
         BackgroundPurge.OnOperationsChanged -= StateHasChanged;
+        BackgroundResubmit.OnOperationsChanged -= StateHasChanged;
         BackgroundSearch.OnViewResultsRequested -= OnViewSearchResultsRequested;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
@@ -909,6 +915,58 @@
         return new List<ServiceBusMessage>();
     }
 
+    /// <summary>
+    /// Peek messages iteratively to bypass Azure's 250 message AMQP limit.
+    /// For counts > 250, fetches in batches until reaching the desired count or running out of messages.
+    /// </summary>
+    private async Task<List<ServiceBusMessage>> PeekIterativeAsync(string token, int desiredCount, long startSequence)
+    {
+        const int batchSize = 250; // Azure AMQP limit
+        var allMessages = new List<ServiceBusMessage>();
+        var currentSequence = startSequence;
+        
+        while (allMessages.Count < desiredCount)
+        {
+            var remaining = desiredCount - allMessages.Count;
+            var fetchCount = Math.Min(remaining, batchSize);
+            
+            List<ServiceBusMessage> batch;
+            
+            if (selectedQueueName != null)
+            {
+                batch = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, fetchCount, (int)currentSequence, isViewingDLQ);
+            }
+            else if (selectedTopicName != null && selectedSubscriptionName != null)
+            {
+                batch = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, fetchCount, (int)currentSequence, isViewingDLQ);
+            }
+            else
+            {
+                break;
+            }
+            
+            if (batch.Count == 0)
+            {
+                // No more messages available
+                break;
+            }
+            
+            allMessages.AddRange(batch);
+            
+            // Update sequence for next batch
+            var maxSeq = batch.Max(m => m.SequenceNumber ?? 0);
+            currentSequence = maxSeq + 1;
+            
+            // If we got fewer messages than requested, we've reached the end
+            if (batch.Count < fetchCount)
+            {
+                break;
+            }
+        }
+        
+        return allMessages;
+    }
+
     private static string FormatPeekError(string errorMsg)
     {
         errorMsg = errorMsg.Replace("Peek failed: Peek failed:", "Peek failed:");
@@ -1008,6 +1066,67 @@
     private void ShowMonitorModal()
     {
         showMonitorModal = true;
+    }
+
+    private ResubmitOperation? CurrentResubmitOperation
+    {
+        get
+        {
+            var currentEntity = _state.GetEntityPath();
+            return BackgroundResubmit.ActiveOperations.FirstOrDefault(op =>
+                op.EntityPath == currentEntity);
+        }
+    }
+
+    private void ResubmitAllMessages()
+    {
+        if (!isViewingDLQ) return;
+        
+        resubmitRemoveFromDLQ = true;
+        isResubmitModal = true;
+        var entityName = _state.GetEntityPath();
+        
+        ConfirmModal.Show(
+            title: "Confirm Resubmit All",
+            message: $"Resubmit ALL messages from Dead Letter Queue?",
+            detail: "This will resubmit all messages from the DLQ back to the main queue/subscription. The operation runs in the background and may take a while for large queues. You can monitor progress in 'Running Tasks'.",
+            confirmText: "Resubmit All",
+            confirmClass: "btn-warning",
+            onConfirm: ExecuteResubmitAll
+        );
+    }
+
+    private async Task ExecuteResubmitAll()
+    {
+        ConfirmModal.IsProcessing = true;
+        errorMessage = null;
+
+        try
+        {
+            var entityType = _state.IsQueueSelected ? "queue" : "subscription";
+            var entityPath = _state.GetEntityPath();
+
+            await BackgroundResubmit.StartResubmitAsync(
+                NamespaceNameOnly,
+                entityType,
+                entityPath,
+                resubmitRemoveFromDLQ
+            );
+
+            peekedMessages.Clear();
+            peekFromSequence = 0;
+            ConfirmModal.Close();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to start resubmit: {ex.Message}";
+            Console.WriteLine($"Resubmit error: {ex}");
+        }
+        finally
+        {
+            ConfirmModal.IsProcessing = false;
+            isResubmitModal = false;
+        }
     }
 
     private void ShowReceiveAndLockModal()
@@ -1214,19 +1333,8 @@
             }
             else
             {
-                // Normal peek without filter
-                if (selectedQueueName != null)
-                {
-                    messages = await JsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, selectedQueueName, token, options.MaxCount, (int)startSequence, isViewingDLQ);
-                }
-                else if (selectedTopicName != null && selectedSubscriptionName != null)
-                {
-                    messages = await JsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, selectedTopicName, selectedSubscriptionName, token, options.MaxCount, (int)startSequence, isViewingDLQ);
-                }
-                else
-                {
-                    messages = new List<ServiceBusMessage>();
-                }
+                // Normal peek without filter - use iterative peek for counts > 250
+                messages = await PeekIterativeAsync(token, options.MaxCount, startSequence);
 
                 // For normal peek, we update peekFromSequence based on the messages found
                 if (messages.Any())

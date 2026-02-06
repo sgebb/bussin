@@ -38,21 +38,21 @@
                     @onclick="OnShowPeekOptions"
                     @onclick:stopPropagation="true"
                     disabled="@(!HasQueueOrSubscriptionSelected)"
-                    title="@(ArePeekOptionsModified ? "Peek with options (Active)" : "Peek with options")">
+                    title="@(ArePeekOptionsModified ? "Advanced Peek (Active)" : "Advanced Peek - includes filters and live monitor")">
                 <i class="bi bi-gear"></i>
             </button>
         </div>
-        <button class="btn btn-action btn-secondary w-100 @(!HasQueueOrSubscriptionSelected || IsViewingDLQ ? "disabled-grey" : "")"
-                @onclick="OnShowMonitor"
-                disabled="@(!HasQueueOrSubscriptionSelected || IsViewingDLQ)"
-                title="@(IsViewingDLQ ? "Monitoring not available for Dead Letter Queue" : "Monitor incoming messages")">
-            <i class="bi bi-graph-up"></i> Monitor
-        </button>
     </div>
 
-    <!-- Dangerous Actions -->
+    <!-- Modify Actions -->
     <div class="action-btn-group">
-        <div class="action-btn-group-title">Dangerous</div>
+        <div class="action-btn-group-title">Modify</div>
+        <button class="btn btn-action btn-warning w-100 @(!HasQueueOrSubscriptionSelected || !IsViewingDLQ || CurrentResubmitOperation != null || SelectedEntityRequiresSession ? "disabled-grey" : "")"
+                @onclick="OnResubmitAll"
+                disabled="@(!HasQueueOrSubscriptionSelected || !IsViewingDLQ || CurrentResubmitOperation != null || SelectedEntityRequiresSession)"
+                title="@(!IsViewingDLQ ? "Only available when viewing Dead Letter Queue" : SelectedEntityRequiresSession ? "Resubmit not supported for session-enabled entities" : CurrentResubmitOperation != null ? "Resubmit already in progress" : "Resubmit all messages from Dead Letter Queue")">
+            <i class="bi bi-arrow-repeat"></i> Resubmit All
+        </button>
         <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession ? "disabled-grey" : "")"
                 @onclick="OnPurge"
                 disabled="@(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession)"
@@ -70,6 +70,7 @@
     [Parameter] public int PeekedMessagesCount { get; set; }
     [Parameter] public bool ArePeekOptionsModified { get; set; }
     [Parameter] public object? CurrentPurgeOperation { get; set; }
+    [Parameter] public object? CurrentResubmitOperation { get; set; }
     [Parameter] public bool SelectedEntityRequiresSession { get; set; }
     
     [Parameter] public EventCallback OnShowSendMessage { get; set; }
@@ -77,6 +78,6 @@
     [Parameter] public EventCallback OnPeek { get; set; }
     [Parameter] public EventCallback OnPeekNext { get; set; }
     [Parameter] public EventCallback OnShowPeekOptions { get; set; }
-    [Parameter] public EventCallback OnShowMonitor { get; set; }
+    [Parameter] public EventCallback OnResubmitAll { get; set; }
     [Parameter] public EventCallback OnPurge { get; set; }
 }
