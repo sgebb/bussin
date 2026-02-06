@@ -6,7 +6,7 @@
                 <NotAuthorized>
                     @if (context.User.Identity?.IsAuthenticated != true)
                     {
-                        <RedirectToLogin />
+                        <Bussin.Components.Welcome />
                     }
                     else
                     {

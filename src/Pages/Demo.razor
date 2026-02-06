@@ -1,0 +1,14 @@
+@page "/demo"
+@inject NavigationManager Navigation
+
+<div class="demo-redirect-container" style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; background-color: #121212; color: #fff;">
+    <h1>Setting up Demo Mode...</h1>
+    <div class="loading-spinner"></div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo("/?demo=true", forceLoad: false);
+    }
+}

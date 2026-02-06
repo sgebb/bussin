@@ -1,3 +1,4 @@
+@using Bussin.Services.Demo
 @inject NavigationStateService NavState
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -56,10 +57,21 @@
     <!-- Fixed Bottom Section -->
     <div class="nav-footer">
         <div class="user-section-row">
-            <div class="user-section" @onclick="@(() => Navigation.NavigateTo("/user"))" style="cursor: pointer;">
-                <i class="bi bi-person-circle"></i>
-                <span class="ms-2">@userName</span>
-            </div>
+            @if (_isDemoMode)
+            {
+                <div class="user-section bg-danger text-white" @onclick="ExitDemoMode" style="cursor: pointer; justify-content: center;">
+                    <i class="bi bi-box-arrow-left"></i>
+                    <span class="ms-2">Exit Demo</span>
+                </div>
+            }
+            else
+            {
+                <div class="user-section" @onclick="@(() => Navigation.NavigateTo("/user"))" style="cursor: pointer;">
+                    <i class="bi bi-person-circle"></i>
+                    <span class="ms-2">@userName</span>
+                </div>
+            }
+            
             <div class="footer-icons">
                 <button class="footer-icon-btn" @onclick="NavState.ShowBuildModalDialog" title="Build Information">
                     <i class="bi bi-hammer"></i>
@@ -82,6 +94,7 @@
     private bool isCreatingFolder = false;
     private string newFolderName = "";
     private string userName = "User";
+    private bool _isDemoMode;
     
     // Drag and drop state
     private string? draggedNamespace = null;
@@ -94,10 +107,19 @@
     protected override async Task OnInitializedAsync()
     {
         NavState.OnChange += StateHasChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+        
+        // Detect demo mode by checking if the provider is our custom demo provider
+        _isDemoMode = AuthenticationStateProvider is DemoAuthenticationStateProvider;
         
         // Get authenticated user name
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         userName = authState.User.Identity?.Name?.Split('@')[0] ?? "User";
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        StateHasChanged();
     }
 
     private async Task OnDarkModeToggle()
@@ -105,9 +127,16 @@
         await OnToggleDarkMode.InvokeAsync();
     }
 
+    private void ExitDemoMode()
+    {
+        // Force full reload to verify auth check again in Program.cs
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
     public void Dispose()
     {
         NavState.OnChange -= StateHasChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 
     private string GetExplorerUrl(NamespaceConnection ns)

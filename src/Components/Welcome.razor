@@ -1,0 +1,85 @@
+@inject NavigationManager Navigation
+
+<div class="welcome-container">
+    <div class="welcome-card">
+        <div class="brand-section">
+            <h1>bussin</h1>
+            <p>The Service Bus Explorer that slaps.</p>
+        </div>
+        
+        <div class="actions-section">
+            <button class="btn btn-primary btn-lg w-100 mb-3" @onclick="NavigateToLogin">
+                <i class="bi bi-microsoft me-2"></i>Login with Microsoft
+            </button>
+            
+            <div class="divider">
+                <span>or</span>
+            </div>
+            
+            <button class="btn btn-outline-secondary w-100" @onclick="EnterDemoMode">
+                <i class="bi bi-play-fill me-2"></i>Try Demo Mode
+            </button>
+            
+            <p class="text-muted mt-4 small">
+                No account required for demo.
+            </p>
+        </div>
+        
+        <div class="security-section mt-3">
+            <SecurityInfoCard />
+        </div>
+    </div>
+</div>
+
+<style>
+    .welcome-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+    }
+    .welcome-card {
+        background-color: var(--card-bg);
+        padding: 3rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        text-align: center;
+        max-width: 550px;
+        width: 100%;
+        border: 1px solid var(--border-color);
+    }
+    .security-section {
+        text-align: left;
+    }
+    .divider {
+        display: flex;
+        align-items: center;
+        text-align: center;
+        margin: 1.5rem 0;
+        color: var(--muted-text);
+    }
+    .divider::before, .divider::after {
+        content: '';
+        flex: 1;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .divider span {
+        padding: 0 10px;
+        font-size: 0.9rem;
+    }
+</style>
+
+@code {
+    void NavigateToLogin()
+    {
+        Navigation.NavigateTo("authentication/login");
+    }
+
+    void EnterDemoMode()
+    {
+        // Force reload to ensure Program.cs runs and detects the demo URL
+        Navigation.NavigateTo("demo", forceLoad: true);
+    }
+}
