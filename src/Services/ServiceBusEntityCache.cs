@@ -66,4 +66,12 @@ public class ServiceBusEntityCache
     {
         _subscriptionCache[subscriptionKey] = subscriptions;
     }
+    public void Clear()
+    {
+        _namespacesCacheTime = null;
+        _namespacesCache.Clear();
+        _queueCache.Clear();
+        _topicCache.Clear();
+        _subscriptionCache.Clear();
+    }
 }

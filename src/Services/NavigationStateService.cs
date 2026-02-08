@@ -22,7 +22,10 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     public event Action? OnDeleteModalChange;
     public event Action? OnSupportModalChange;
 
-    public IReadOnlyList<Folder> Folders => _preferences?.Folders?.AsReadOnly() ?? new List<Folder>().AsReadOnly();
+    public IReadOnlyList<Folder> Folders => _preferences?.Folders?
+        .Where(f => f.TenantId == _preferences.SelectedTenantId)
+        .ToList().AsReadOnly() ?? new List<Folder>().AsReadOnly();
+
     public bool IsInitialized => _isInitialized;
 
     // Delete folder modal properties
@@ -34,20 +37,26 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     // Support modal properties
     public bool ShowSupportModal => _showSupportModal;
 
+    private string GetDefaultFolderId() => string.IsNullOrEmpty(_preferences.SelectedTenantId) 
+        ? DefaultFolderId 
+        : $"{DefaultFolderId}-{_preferences.SelectedTenantId}";
+
     public async Task InitializeAsync()
     {
         if (_isInitialized) return;
         
         _preferences = await preferencesService.LoadPreferencesAsync();
         
-        // Ensure default "Namespaces" folder exists
-        if (!_preferences.Folders.Any(f => f.Id == DefaultFolderId))
+        // Ensure default "Namespaces" folder exists for the current tenant
+        var currentDefaultId = GetDefaultFolderId();
+        if (!_preferences.Folders.Any(f => f.Id == currentDefaultId))
         {
             _preferences.Folders.Insert(0, new Folder
             {
-                Id = DefaultFolderId,
+                Id = currentDefaultId,
                 Name = DefaultFolderName,
-                IsExpanded = true
+                IsExpanded = true,
+                TenantId = _preferences.SelectedTenantId
             });
             await preferencesService.SavePreferencesAsync(_preferences);
         }
@@ -58,7 +67,9 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
 
     public bool IsFavorite(string fullyQualifiedNamespace)
     {
+        var currentTenantId = _preferences.SelectedTenantId;
         return _preferences.Folders
+            .Where(f => f.TenantId == currentTenantId)
             .SelectMany(f => f.Namespaces)
             .Any(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
     }
@@ -70,20 +81,24 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
             await InitializeAsync();
         }
         
-        var defaultFolder = _preferences.Folders.FirstOrDefault(f => f.Id == DefaultFolderId);
+        var currentDefaultId = GetDefaultFolderId();
+        var defaultFolder = _preferences.Folders.FirstOrDefault(f => f.Id == currentDefaultId);
+        
         if (defaultFolder == null)
         {
             defaultFolder = new Folder
             {
-                Id = DefaultFolderId,
+                Id = currentDefaultId,
                 Name = DefaultFolderName,
-                IsExpanded = true
+                IsExpanded = true,
+                TenantId = _preferences.SelectedTenantId
             };
             _preferences.Folders.Insert(0, defaultFolder);
         }
 
-        // Check if already exists
-        if (!defaultFolder.Namespaces.Any(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace))
+        // Check if already exists in any folder of this tenant
+        var currentTenantId = _preferences.SelectedTenantId;
+        if (!_preferences.Folders.Where(f => f.TenantId == currentTenantId).SelectMany(f => f.Namespaces).Any(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace))
         {
             defaultFolder.Namespaces.Add(new NamespaceConnection
             {
@@ -102,7 +117,8 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     {
         if (!_isInitialized || _preferences?.Folders == null) return;
         
-        foreach (var folder in _preferences.Folders)
+        var currentTenantId = _preferences.SelectedTenantId;
+        foreach (var folder in _preferences.Folders.Where(f => f.TenantId == currentTenantId))
         {
             var connection = folder.Namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
             if (connection != null)
@@ -139,7 +155,8 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         {
             Id = Guid.NewGuid().ToString(),
             Name = folderName,
-            IsExpanded = true
+            IsExpanded = true,
+            TenantId = _preferences.SelectedTenantId
         };
 
         _preferences.Folders.Add(newFolder);
@@ -155,29 +172,28 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         if (folderToDelete == null) return;
 
         // Don't allow deleting the default folder
-        if (folderToDelete.Id == DefaultFolderId) return;
+        var currentDefaultId = GetDefaultFolderId();
+        if (folderToDelete.Id == currentDefaultId) return;
 
-        // Move all namespaces from this folder to the default folder
-        var defaultFolder = _preferences.Folders.FirstOrDefault(f => f.Id == DefaultFolderId);
+        // Move all namespaces from this folder to the default folder of the same tenant
+        var defaultFolder = _preferences.Folders.FirstOrDefault(f => f.Id == currentDefaultId);
         if (defaultFolder == null)
         {
-            // Create default folder if it doesn't exist
             defaultFolder = new Folder
             {
-                Id = DefaultFolderId,
+                Id = currentDefaultId,
                 Name = DefaultFolderName,
-                IsExpanded = true
+                IsExpanded = true,
+                TenantId = _preferences.SelectedTenantId
             };
             _preferences.Folders.Add(defaultFolder);
         }
 
-        // Move namespaces
         foreach (var ns in folderToDelete.Namespaces.ToList())
         {
             defaultFolder.Namespaces.Add(ns);
         }
 
-        // Remove the folder
         _preferences.Folders.Remove(folderToDelete);
         
         await preferencesService.SavePreferencesAsync(_preferences);
@@ -188,7 +204,8 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     {
         if (!_isInitialized || _preferences?.Folders == null) return;
 
-        foreach (var folder in _preferences.Folders)
+        var currentTenantId = _preferences.SelectedTenantId;
+        foreach (var folder in _preferences.Folders.Where(f => f.TenantId == currentTenantId))
         {
             var connection = folder.Namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
             if (connection != null)
@@ -208,8 +225,8 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         NamespaceConnection? connectionToMove = null;
         Folder? sourceFolder = null;
 
-        // Find the namespace and its current folder
-        foreach (var folder in _preferences.Folders)
+        var currentTenantId = _preferences.SelectedTenantId;
+        foreach (var folder in _preferences.Folders.Where(f => f.TenantId == currentTenantId))
         {
             var connection = folder.Namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
             if (connection != null)
@@ -222,11 +239,9 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
 
         if (connectionToMove == null || sourceFolder == null) return;
 
-        // Find target folder
         var targetFolder = _preferences.Folders.FirstOrDefault(f => f.Id == targetFolderId);
         if (targetFolder == null) return;
 
-        // Move the namespace
         sourceFolder.Namespaces.Remove(connectionToMove);
         targetFolder.Namespaces.Add(connectionToMove);
 
@@ -238,7 +253,8 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     {
         if (!_isInitialized || _preferences?.Folders == null) return null;
 
-        foreach (var folder in _preferences.Folders)
+        var currentTenantId = _preferences.SelectedTenantId;
+        foreach (var folder in _preferences.Folders.Where(f => f.TenantId == currentTenantId))
         {
             if (folder.Namespaces.Any(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace))
             {
@@ -252,7 +268,9 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     {
         if (!_isInitialized || _preferences?.Folders == null) return null;
 
+        var currentTenantId = _preferences.SelectedTenantId;
         return _preferences.Folders
+            .Where(f => f.TenantId == currentTenantId)
             .SelectMany(f => f.Namespaces)
             .FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
     }
@@ -260,7 +278,10 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     public IEnumerable<Folder> GetChildFolders(string? parentId)
     {
         if (!_isInitialized || _preferences?.Folders == null) return Enumerable.Empty<Folder>();
-        return _preferences.Folders.Where(f => f.ParentId == parentId);
+        
+        var currentTenantId = _preferences.SelectedTenantId;
+        return _preferences.Folders
+            .Where(f => f.TenantId == currentTenantId && f.ParentId == parentId);
     }
 
     public IEnumerable<Folder> GetRootFolders()
@@ -277,7 +298,7 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     public async Task RenameFolderAsync(string folderId, string newName)
     {
         if (!_isInitialized || _preferences?.Folders == null) return;
-        if (folderId == DefaultFolderId) return;
+        if (folderId == GetDefaultFolderId()) return;
 
         var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
         if (folder != null)
@@ -291,7 +312,7 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     public async Task MoveFolderAsync(string folderId, string? targetParentId)
     {
         if (!_isInitialized || _preferences?.Folders == null) return;
-        if (folderId == DefaultFolderId) return;
+        if (folderId == GetDefaultFolderId()) return;
         if (folderId == targetParentId) return;
 
         var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
@@ -338,7 +359,6 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
 
     private void NotifyStateChanged() => OnChange?.Invoke();
 
-    // Delete folder modal methods
     public void ShowDeleteFolderConfirmation(string folderId, string folderName)
     {
         var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
@@ -369,7 +389,6 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         HideDeleteFolderModal();
     }
 
-    // Support modal methods
     public void ShowSupportModalDialog()
     {
         _showSupportModal = true;
@@ -382,7 +401,6 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         OnSupportModalChange?.Invoke();
     }
 
-    // Build info modal state
     private bool _showBuildModal = false;
     public bool ShowBuildModal => _showBuildModal;
     public event Action? OnBuildModalChange;
@@ -398,12 +416,10 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         _showBuildModal = false;
         OnBuildModalChange?.Invoke();
     }
+
     public async Task ReorderFolderAsync(string folderId, int newIndex)
     {
         if (!_isInitialized || _preferences?.Folders == null) return;
-        if (folderId == DefaultFolderId) return; // Can't move default folder? Maybe we should allow it.
-        // Let's assume default folder "Favorites" can be moved if user wants, or maybe kept at top?
-        // User said "reorderable items".
         
         var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
         if (folder != null)
@@ -426,10 +442,11 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     {
         if (!_isInitialized || _preferences?.Folders == null) return;
         
-        // Find source
         NamespaceConnection? connectionToMove = null;
         Folder? sourceFolder = null;
-        foreach (var f in _preferences.Folders)
+        var currentTenantId = _preferences.SelectedTenantId;
+
+        foreach (var f in _preferences.Folders.Where(f => f.TenantId == currentTenantId))
         {
             var conn = f.Namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
             if (conn != null)
@@ -445,19 +462,12 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         var targetFolder = _preferences.Folders.FirstOrDefault(f => f.Id == targetFolderId);
         if (targetFolder == null) return;
 
-        // If same folder, reorder
         if (sourceFolder == targetFolder)
         {
             var oldIndex = sourceFolder.Namespaces.IndexOf(connectionToMove);
             if (oldIndex > -1 && oldIndex != newIndex)
             {
                 sourceFolder.Namespaces.RemoveAt(oldIndex);
-                // Adjust index if we removed from before the insertion point
-                // Actually, RemoveAt shifts indices. 
-                // If moving down (old < new): insert at new-1?
-                // Visual DnD usually calculates "insert before".
-                // If I remove first, the list shrinks. 
-                
                 if (newIndex > sourceFolder.Namespaces.Count) newIndex = sourceFolder.Namespaces.Count;
                 if (newIndex < 0) newIndex = 0;
                 
@@ -468,9 +478,7 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         }
         else
         {
-            // Move to different folder at specific index
             sourceFolder.Namespaces.Remove(connectionToMove);
-            
             if (newIndex > targetFolder.Namespaces.Count) newIndex = targetFolder.Namespaces.Count;
             if (newIndex < 0) newIndex = 0;
             
@@ -479,4 +487,6 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
             NotifyStateChanged();
         }
     }
+
+    public string GetDefaultFolderIdValue() => GetDefaultFolderId();
 }

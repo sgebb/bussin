@@ -9,10 +9,11 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
     private readonly Dictionary<string, List<ServiceBusMessage>> _store = new();
     private readonly Random _random = new();
 
-    public IJSRuntime JSRuntime => null!; // Not used in demo mode
+    public IJSRuntime JSRuntime { get; }
 
-    public DemoServiceBusJsInteropService()
+    public DemoServiceBusJsInteropService(IJSRuntime jsRuntime)
     {
+        JSRuntime = jsRuntime;
         SeedData();
     }
 
@@ -133,16 +134,6 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
 
     public Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, MessageProperties? properties = null)
     {
-        // In reality, sending to a topic duplicates to subscriptions.
-        // For demo, we might need to find all subscriptions for this topic?
-        // Or just fail silently? 
-        // Better: Find keys in store that match this topic
-        
-        // This is tricky because we don't have a list of subscriptions easily available unless we hardcode logic or query the resource service.
-        // For simplicity, we just won't see the message appear unless we explicitly added some logic to copy it.
-        // But the user expects it to "appear to work".
-        // I'll try to find matching keys in _store.
-        
         var topicPart = $"{namespaceName}/topics/{topicName}/subscriptions/";
         var keys = _store.Keys.Where(k => k.StartsWith(topicPart) && !k.EndsWith("/$DeadLetterQueue")).ToList();
         
@@ -150,7 +141,6 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
         
         foreach (var key in keys)
         {
-            // Clone message?
              _store[key].Add(msg); // Shared reference is fine for demo
         }
         
@@ -174,7 +164,6 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
 
         foreach (var m in messages)
         {
-             // simplified handling of batch object
              _store[key].Add(CreateMessageFromPayload(m, null));
         }
         return Task.CompletedTask;
@@ -222,7 +211,6 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
 
     public Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens)
     {
-        // Find messages with these lock tokens and remove them
         int count = 0;
         foreach (var list in _store.Values)
         {
@@ -233,7 +221,6 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
 
     public Task<BatchOperationResult> AbandonMessagesAsync(string[] lockTokens)
     {
-        // Just clear the lock token
         foreach (var list in _store.Values)
         {
             foreach (var m in list.Where(m => lockTokens.Contains(m.LockToken)))
@@ -248,10 +235,6 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
     public Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null)
     {
         var successCount = 0;
-        // Move to DLQ
-        // We need to know which list they came from to move them to the corresponding DLQ
-        
-        // Inefficient lookup
         foreach (var key in _store.Keys.ToList())
         {
             if (key.EndsWith("/$DeadLetterQueue")) continue;
@@ -276,31 +259,34 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
         return Task.FromResult(new BatchOperationResult { SuccessCount = successCount });
     }
 
-    public Task<IJSObjectReference> StartMonitoringQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
+    public async Task<IJSObjectReference> StartMonitoringQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
     {
-        return Task.FromResult<IJSObjectReference>(new DemoJSObjectReference());
+        return await JSRuntime.InvokeAsync<IJSObjectReference>("createMockController", (object?)null);
     }
 
-    public Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
+    public async Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
     {
-        return Task.FromResult<IJSObjectReference>(new DemoJSObjectReference());
+        return await JSRuntime.InvokeAsync<IJSObjectReference>("createMockController", (object?)null);
     }
 
     public Task StopMonitoringAsync(IJSObjectReference monitorController) => Task.CompletedTask;
 
-    public Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
+    public async Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
     {
-        return Task.FromResult<IJSObjectReference>(new DemoJSObjectReference());
+        var count = await PurgeQueueAsync(namespaceName, queueName, token, fromDeadLetter);
+        callbackRef.Value.OnProgress(count);
+        return await JSRuntime.InvokeAsync<IJSObjectReference>("createMockController", count);
     }
 
-    public Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
+    public async Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
     {
-         return Task.FromResult<IJSObjectReference>(new DemoJSObjectReference());
+        var count = await PurgeSubscriptionAsync(namespaceName, topicName, subscriptionName, token, fromDeadLetter);
+        callbackRef.Value.OnProgress(count);
+        return await JSRuntime.InvokeAsync<IJSObjectReference>("createMockController", count);
     }
 
     public Task DeleteQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
     {
-        // TODO: Implement if needed
         return Task.CompletedTask;
     }
 
@@ -319,14 +305,36 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
         return Task.CompletedTask;
     }
 
-    public Task<IJSObjectReference> StartSearchQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
+    public async Task<IJSObjectReference> StartSearchQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
     {
-         return Task.FromResult<IJSObjectReference>(new DemoJSObjectReference());
+        var key = GetKey(namespaceName, queueName) + (fromDeadLetter ? "/$DeadLetterQueue" : "");
+        var msgs = _store.GetValueOrDefault(key, new List<ServiceBusMessage>());
+        var matches = msgs.Take(maxMatches).Select(m => m.SequenceNumber ?? 0L).ToArray();
+        
+        callbackRef.Value.OnProgress(msgs.Count, matches.Length, matches.Take(10).ToArray());
+
+        return await JSRuntime.InvokeAsync<IJSObjectReference>("createMockController", new SearchResult 
+        { 
+            ScannedCount = msgs.Count, 
+            MatchCount = matches.Length, 
+            MatchingSequenceNumbers = matches 
+        });
     }
 
-    public Task<IJSObjectReference> StartSearchSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
+    public async Task<IJSObjectReference> StartSearchSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
     {
-         return Task.FromResult<IJSObjectReference>(new DemoJSObjectReference());
+        var key = GetKey(namespaceName, topicName, subscriptionName) + (fromDeadLetter ? "/$DeadLetterQueue" : "");
+        var msgs = _store.GetValueOrDefault(key, new List<ServiceBusMessage>());
+        var matches = msgs.Take(maxMatches).Select(m => m.SequenceNumber ?? 0L).ToArray();
+        
+        callbackRef.Value.OnProgress(msgs.Count, matches.Length, matches.Take(10).ToArray());
+
+        return await JSRuntime.InvokeAsync<IJSObjectReference>("createMockController", new SearchResult 
+        { 
+            ScannedCount = msgs.Count, 
+            MatchCount = matches.Length, 
+            MatchingSequenceNumbers = matches 
+        });
     }
 
     public Task<List<ServiceBusMessage>> PeekQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
@@ -352,13 +360,4 @@ public class DemoServiceBusJsInteropService : IServiceBusJsInteropService
             DeliveryCount = 0
         };
     }
-}
-
-public class DemoJSObjectReference : IJSObjectReference
-{
-    public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) => ValueTask.FromResult(default(TValue)!);
-    public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args) => ValueTask.FromResult(default(TValue)!);
-    public ValueTask InvokeVoidAsync(string identifier, object?[]? args) => ValueTask.CompletedTask;
-    public ValueTask InvokeVoidAsync(string identifier, CancellationToken cancellationToken, object?[]? args) => ValueTask.CompletedTask;
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

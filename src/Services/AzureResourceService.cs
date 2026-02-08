@@ -250,4 +250,23 @@ public sealed class AzureResourceService : IAzureResourceService
             $"/subscriptions/{namespaceInfo.SubscriptionId}/resourceGroups/{namespaceInfo.ResourceGroup}/providers/Microsoft.ServiceBus/namespaces/{namespaceInfo.Name}");
         return await armClient.GetServiceBusNamespaceResource(resourceId).GetAsync();
     }
+
+    public async IAsyncEnumerable<TenantInfo> ListTenantsAsync(
+        TokenCredential credential, 
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // We don't cache tenants as this is a rare operation and the list is small
+        var armClient = new ArmClient(credential);
+        
+        await foreach (var tenant in armClient.GetTenants().GetAllAsync(cancellationToken))
+        {
+            yield return new TenantInfo
+            {
+                TenantId = tenant.Data.TenantId?.ToString() ?? "",
+                DisplayName = tenant.Data.DisplayName,
+                DefaultDomain = tenant.Data.DefaultDomain,
+                TenantType = tenant.Data.TenantType?.ToString()
+            };
+        }
+    }
 }

@@ -280,8 +280,8 @@
         
         if (dragItemType == DragItemType.Namespace && !string.IsNullOrEmpty(draggedNamespace))
         {
-            // If dropped on root, move to default "namespaces" folder
-            await NavState.MoveNamespaceToFolderAsync(draggedNamespace, "namespaces");
+            // If dropped on root, move to current tenant's default folder
+            await NavState.MoveNamespaceToFolderAsync(draggedNamespace, NavState.GetDefaultFolderIdValue());
         }
         else if (dragItemType == DragItemType.Folder && !string.IsNullOrEmpty(draggedFolderId))
         {
@@ -326,8 +326,8 @@
 
     private RenderFragment RenderFavoritesSection() => __builder =>
     {
-        // Get the default "Favorites" folder and show its namespaces directly
-        var defaultFolder = NavState.GetFolder("namespaces");
+        // Get the default folder for the current tenant
+        var defaultFolder = NavState.GetFolder(NavState.GetDefaultFolderIdValue());
         if (defaultFolder != null)
         {
             // Remove OrderBy to respect persisted order
@@ -367,9 +367,8 @@
             }
         }
         
-        // Now render other folders (not the default one)
-        // Folders are reorderable too
-        var otherFolders = NavState.GetRootFolders().Where(f => f.Id != "namespaces").ToList();
+        // Now render other root folders for this tenant
+        var otherFolders = NavState.GetRootFolders().Where(f => f.Id != NavState.GetDefaultFolderIdValue()).ToList();
         foreach (var folder in otherFolders)
         {
             __builder.AddContent(20, RenderFolder(folder, 0));

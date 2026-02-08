@@ -4,7 +4,6 @@
 @using System.Text.Json
 @inject IAuthenticationService AuthService
 @inject IAzureResourceService ResourceService
-@inject IAccessTokenProvider TokenProvider
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
 @inject IConfiguration Configuration
@@ -15,63 +14,109 @@
 <AuthorizeView>
     <Authorized>
         <div class="container-fluid p-4">
-            @if (!hasArmPermission && !isGrantingArmConsent)
+
+            @if (hasArmPermission)
             {
-                <div class="alert alert-warning">
-                    <h5><i class="bi bi-exclamation-triangle"></i> Permission Required</h5>
-                    <p class="mb-3">
-                        <strong>To see your Service Bus namespaces here, you need to grant Azure Management API permission.</strong>
-                        This allows bussin to read and list your Service Bus namespaces across your Azure subscriptions.
-                    </p>
-                    <p class="mb-3">
-                        <strong>What we use it for:</strong>
-                    </p>
-                    <ul class="mb-3">
-                        <li>List all Service Bus namespaces in your tenant</li>
-                        <li>Read queue/topic/subscription metadata (message counts, status, etc.)</li>
-                        <li>Nothing else - we never create, modify, or delete any Azure resources</li>
-                    </ul>
-                    @if (!string.IsNullOrEmpty(consentErrorMessage))
-                    {
-                        <div class="alert alert-danger mb-3">
-                            @consentErrorMessage
+                <div class="row justify-content-center mb-4">
+                    <div class="col-lg-8">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="position-relative flex-grow-1">
+                                <input type="text" class="form-control form-control-lg text-center" placeholder="Search namespaces..." 
+                                       @bind="searchTerm" @bind:event="oninput" />
+                                @if (isRefreshing)
+                                {
+                                    <div class="position-absolute top-50 end-0 translate-middle-y me-3">
+                                        <div class="spinner-border spinner-border-sm text-muted" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <a href="user" class="text-secondary text-decoration-none text-nowrap small" title="Can't find your namespace? Check your tenant settings.">
+                                <small><i class="bi bi-question-circle me-1"></i>Wrong Tenant?</small>
+                            </a>
                         </div>
-                    }
-                    <button class="btn btn-warning" @onclick="GrantArmConsent" disabled="@isGrantingArmConsent">
-                        <i class="bi bi-check-circle"></i> Grant Azure Management API Permission
-                    </button>
+                    </div>
                 </div>
             }
-            else if (isGrantingArmConsent)
+
+            @if ((!hasArmPermission || !hasSbPermission) && !isGrantingConsent)
             {
-                <div class="alert alert-info">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span>Opening consent popup...</span>
+                <div class="alert alert-warning border-warning shadow-sm">
+                    <h5 class="alert-heading d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock-fill"></i> Permission Required
+                    </h5>
+                    
+                    <p class="mb-3">
+                        <strong>bussin</strong> needs your permission to discover and manage your resources. 
+                        This is a secure <strong>client-side only</strong> app: all tokens stay in your browser, 
+                        and it cannot perform any actions unless you instigate them yourself.
+                    </p>
+                    <p class="small text-muted mb-4">
+                        Azure separates resource discovery from data operations, so we need consent for both:
+                    </p>
+                    
+                        <div class="list-group list-group-flush bg-transparent mb-4">
+                        <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
+                            <i class="bi @(hasArmPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
+                            <div>
+                                <h6 class="mb-0 @(hasArmPermission ? "text-success" : "")">Azure Management API</h6>
+                                <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to list your Service Bus namespaces so you can select them.</small>
+                                <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Resource Discovery & Enumeration</div>
+                            </div>
+                        </div>
+                        <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
+                            <i class="bi @(hasSbPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
+                            <div>
+                                <h6 class="mb-0 @(hasSbPermission ? "text-success" : "")">Service Bus Data Plane</h6>
+                                <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to peek, send, and monitor messages within your queues and topics.</small>
+                                <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Message Operations & Monitoring</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(consentErrorMessage))
+                    {
+                        <div class="alert alert-danger mb-3 py-2 small">
+                            <i class="bi bi-exclamation-octagon me-2"></i> @consentErrorMessage
+                        </div>
+                    }
+
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-warning px-4 fw-bold" @onclick="StartConsentFlow" disabled="@isGrantingConsent">
+                            <i class="bi bi-shield-shaded me-2"></i> Grant Required Permissions
+                        </button>
+                        @if (!string.IsNullOrEmpty(currentTenantId))
+                        {
+                            <button class="btn btn-outline-secondary px-3" @onclick="SwitchToHomeTenant">
+                                <i class="bi bi-house-door me-2"></i> Switch back to Home Tenant
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            else if (isGrantingConsent)
+            {
+                <div class="alert alert-info border-info shadow-sm">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div>
+                            <h6 class="mb-0 fw-bold">Authenticating...</h6>
+                            <span class="text-muted small">
+                                @if (!hasArmPermission) { <span>Step 1/2: Requesting Azure Management access. Please handle the popup window.</span> }
+                                else { <span>Step 2/2: Requesting Service Bus Data access. Second popup incoming...</span> }
+                            </span>
+                        </div>
                     </div>
                 </div>
             }
             
 
+            
             @if (hasArmPermission)
             {
-                <div class="row justify-content-center mb-4">
-                    <div class="col-lg-6">
-                        <div class="position-relative">
-                            <input type="text" class="form-control form-control-lg text-center" placeholder="Search namespaces..." 
-                                   @bind="searchTerm" @bind:event="oninput" />
-                            @if (isRefreshing)
-                            {
-                                <div class="position-absolute top-50 end-0 translate-middle-y me-3">
-                                    <div class="spinner-border spinner-border-sm text-muted" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-
                 @if (isRefreshing && namespaces.Count == 0)
                 {
                     <div class="text-center mb-3">
@@ -111,77 +156,35 @@
                 }
                 else if (!isRefreshing)
                 {
-                    @* No namespaces found - show helpful guidance *@
                     <div class="row justify-content-center">
                         <div class="col-lg-8">
-                            <div class="card border-info">
-                                <div class="card-header bg-info text-white">
-                                    <h5 class="mb-0"><i class="bi bi-search"></i> No Service Bus Namespaces Found</h5>
-                                </div>
-                                <div class="card-body">
-                                    <p class="card-text">We couldn't find any Service Bus namespaces in your Azure subscriptions. This could be because:</p>
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center p-5">
+                                    <i class="bi bi-search display-1 text-muted mb-4"></i>
+                                    <h4 class="mb-3">No Service Bus Namespaces Found</h4>
+                                    <p class="text-muted mb-4 lead">
+                                        We checked your subscriptions but couldn't find any Service Bus namespaces.
+                                    </p>
                                     
-                                    <div class="accordion accordion-flush" id="noNamespacesHelp">
-                                        <div class="accordion-item">
-                                            <h2 class="accordion-header">
-                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#noNsReason1">
-                                                    <i class="bi bi-collection me-2"></i> No namespaces exist in your subscriptions
-                                                </button>
-                                            </h2>
-                                            <div id="noNsReason1" class="accordion-collapse collapse" data-bs-parent="#noNamespacesHelp">
-                                                <div class="accordion-body">
-                                                    <p>If you haven't created any Service Bus namespaces yet, you'll need to create one in the Azure portal first.</p>
-                                                    <a href="https://portal.azure.com/#create/Microsoft.ServiceBus" target="_blank" class="btn btn-outline-primary btn-sm">
-                                                        <i class="bi bi-plus-circle"></i> Create Service Bus Namespace in Azure
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="accordion-item">
-                                            <h2 class="accordion-header">
-                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#noNsReason2">
-                                                    <i class="bi bi-shield-lock me-2"></i> Missing permissions to view namespaces
-                                                </button>
-                                            </h2>
-                                            <div id="noNsReason2" class="accordion-collapse collapse" data-bs-parent="#noNamespacesHelp">
-                                                <div class="accordion-body">
-                                                    <p>To list Service Bus namespaces, you need the <code>Microsoft.ServiceBus/namespaces/read</code> permission.</p>
-                                                    <p><strong>Required Azure RBAC role (at subscription or resource group level):</strong></p>
-                                                    <ul class="mb-3">
-                                                        <li><strong>Reader</strong> - Can view all resources</li>
-                                                        <li><strong>Contributor</strong> - Can manage all resources</li>
-                                                        <li><strong>Owner</strong> - Full access including role assignments</li>
-                                                    </ul>
-                                                    <div class="alert alert-warning mb-0">
-                                                        <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> Data plane roles like "Azure Service Bus Data Receiver" or "Azure Service Bus Data Sender" do <em>not</em> include permission to list namespaces. You need a Reader/Contributor role at the subscription or resource group level.
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="accordion-item">
-                                            <h2 class="accordion-header">
-                                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#noNsReason3">
-                                                    <i class="bi bi-building me-2"></i> Namespace is in a different Azure AD tenant
-                                                </button>
-                                            </h2>
-                                            <div id="noNsReason3" class="accordion-collapse collapse" data-bs-parent="#noNamespacesHelp">
-                                                <div class="accordion-body">
-                                                    <p>If the namespace belongs to a different Azure AD tenant, you'll need to sign out and sign in with an account from that tenant.</p>
-                                                    <a href="/user" class="btn btn-outline-secondary btn-sm">
-                                                        <i class="bi bi-person"></i> Go to Account Settings
-                                                    </a>
-                                                </div>
-                                            </div>
+                                    <div class="d-flex justify-content-center gap-3 mb-4">
+                                        <div class="text-start">
+                                            <h6 class="text-secondary"><i class="bi bi-question-circle me-2"></i>Common Reasons:</h6>
+                                            <ul class="text-muted small">
+                                                <li>You haven't created any namespaces yet.</li>
+                                                <li>You don't have the <code>Reader</code> role on the resource.</li>
+                                                <li>The namespace is in a different Azure AD tenant.</li>
+                                            </ul>
                                         </div>
                                     </div>
 
-                                    <hr />
-                                    <p class="mb-2"><i class="bi bi-lightbulb"></i> <strong>Tip:</strong> If you know your namespace URL, you can add it as a favorite and access it directly:</p>
-                                    <p class="text-muted small mb-0">
-                                        Navigate directly to: <code>/explorer?namespace=YOUR-NAMESPACE.servicebus.windows.net</code>
-                                    </p>
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <a href="https://portal.azure.com/#create/Microsoft.ServiceBus" target="_blank" class="btn btn-primary">
+                                            <i class="bi bi-plus-lg me-2"></i>Create Namespace
+                                        </a>
+                                        <a href="user" class="btn btn-outline-secondary">
+                                            <i class="bi bi-person-gear me-2"></i>Check Tenant
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -212,8 +215,12 @@
     private string searchTerm = "";
     private CancellationTokenSource? _loadCts;
     private bool hasArmPermission = false;
-    private bool isGrantingArmConsent = false;
+    private bool hasSbPermission = false;
+    private bool isGrantingConsent = false;
     private string? consentErrorMessage = null;
+
+    private string? currentTenantName;
+    private string? currentTenantId;
 
     private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
         string.IsNullOrWhiteSpace(searchTerm) 
@@ -228,8 +235,7 @@
         var isAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (isAuthenticated)
         {
-            // NavState is initialized by MainLayout, no need to duplicate
-            await CheckArmPermission();
+            await CheckPermissions();
             if (hasArmPermission)
             {
                 _ = LoadNamespacesAsync();
@@ -237,73 +243,112 @@
         }
     }
 
-    private async Task CheckArmPermission()
+    private async Task CheckPermissions()
     {
         try
         {
-            var result = await TokenProvider.RequestAccessToken(new AccessTokenRequestOptions
+            // Try to find the tenant name for the UI
+            currentTenantId = await AuthService.GetCurrentTenantIdAsync();
+            if (!string.IsNullOrEmpty(currentTenantId))
             {
-                Scopes = ["https://management.azure.com/user_impersonation"]
-            });
+                var homeCred = await AuthService.GetHomeTokenCredentialAsync();
+                if (homeCred != null)
+                {
+                    await foreach (var tenant in ResourceService.ListTenantsAsync(homeCred))
+                    {
+                        if (tenant.TenantId == currentTenantId)
+                        {
+                            currentTenantName = tenant.DisplayName;
+                            break;
+                        }
+                    }
+                }
+            }
 
-            hasArmPermission = result.Status != AccessTokenResultStatus.RequiresRedirect;
+            // Check Management API permission
+            var armCredential = await AuthService.GetTokenCredentialAsync();
+            hasArmPermission = armCredential != null;
+
+            // Check Service Bus data plane permission
+            var sbToken = await AuthService.GetServiceBusTokenAsync();
+            hasSbPermission = !string.IsNullOrEmpty(sbToken);
+            
+            Console.WriteLine($"DEBUG: Permissions checked - ARM: {hasArmPermission}, ServiceBus: {hasSbPermission}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error checking ARM permission: {ex.Message}");
+            Console.WriteLine($"Error checking permissions: {ex.Message}");
             hasArmPermission = false;
+            hasSbPermission = false;
         }
     }
 
-    private async Task GrantArmConsent()
+    private async Task SwitchToHomeTenant()
     {
-        isGrantingArmConsent = true;
+        await AuthService.SetTenantAsync(null);
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }
+
+    private async Task StartConsentFlow()
+    {
+        isGrantingConsent = true;
         consentErrorMessage = null;
         StateHasChanged();
 
         try
         {
-            var clientId = Configuration["AzureAd:ClientId"];
-            var authority = Configuration["AzureAd:Authority"];
+            var tenantId = await AuthService.GetCurrentTenantIdAsync();
+            var loginHint = await AuthService.GetUserNameAsync();
             
-            await JSRuntime.InvokeVoidAsync("eval", $@"
-                window.msalConfig = {{
-                    clientId: '{clientId}',
-                    authority: '{authority}'
-                }};
-            ");
-
-            var result = await JSRuntime.InvokeAsync<JsonElement>("msalHelper.acquireTokenPopup", 
-                "https://management.azure.com/user_impersonation");
-
-            if (result.TryGetProperty("success", out var success) && success.GetBoolean())
+            // 1. Management Consent
+            if (!hasArmPermission)
             {
-                Console.WriteLine("✓ ARM consent granted successfully - reloading page to refresh tokens");
-                Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
-                return;
+                Console.WriteLine("Requesting Management consent...");
+                var success = await AuthService.AcquireTokenPopupAsync("https://management.azure.com/user_impersonation", tenantId, loginHint);
+
+                if (!success)
+                {
+                    consentErrorMessage = "Management API consent was not granted. Please try again.";
+                    StateHasChanged();
+                    await Task.Delay(1000); 
+                    Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+                    return;
+                }
+                hasArmPermission = true;
+                StateHasChanged();
             }
-            else if (result.TryGetProperty("error", out var error))
+
+            // Give a generous delay to ensure the first window is fully closed and MSAL state is flushed
+            await Task.Delay(2500);
+
+            // 2. Service Bus Consent
+            if (!hasSbPermission)
             {
-                var errorMsg = error.GetString() ?? "Unknown error";
-                if (!errorMsg.Contains("user_cancelled"))
+                Console.WriteLine("Requesting Service Bus consent...");
+                var success = await AuthService.AcquireTokenPopupAsync("https://servicebus.azure.net/user_impersonation", tenantId, loginHint);
+
+                if (!success)
                 {
-                    consentErrorMessage = errorMsg;
-                    Console.WriteLine($"✗ Consent failed: {consentErrorMessage}");
+                    consentErrorMessage = "Service Bus API consent was not granted. Please try again.";
+                    StateHasChanged();
+                    await Task.Delay(1000);
+                    Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+                    return;
                 }
-                else
-                {
-                    Console.WriteLine("Consent cancelled by user");
-                }
+                hasSbPermission = true;
+                StateHasChanged();
             }
+
+            Console.WriteLine("✓ Consent acquired. Reloading dashboard...");
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }
         catch (Exception ex)
         {
-            consentErrorMessage = ex.Message;
-            Console.WriteLine($"✗ Error during consent: {ex}");
+            consentErrorMessage = $"An unexpected error occurred: {ex.Message}";
         }
         finally
         {
-            isGrantingArmConsent = false;
+            isGrantingConsent = false;
             StateHasChanged();
         }
     }

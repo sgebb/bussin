@@ -1,6 +1,7 @@
 using Azure.Core;
 using Bussin.Models;
 using Bussin.Services;
+using System.Runtime.CompilerServices;
 
 namespace Bussin.Services.Demo;
 
@@ -35,7 +36,7 @@ public class DemoAzureResourceService : IAzureResourceService
         };
     }
 
-    public async IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(TokenCredential credential, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(TokenCredential credential, CancellationToken cancellationToken = default)
     {
         foreach (var ns in _namespaces)
         {
@@ -45,7 +46,7 @@ public class DemoAzureResourceService : IAzureResourceService
         await Task.CompletedTask;
     }
 
-    public async IAsyncEnumerable<ServiceBusQueueInfo> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusQueueInfo> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested) yield break;
         if (namespaceInfo.Name == "bussin-demo-prod")
@@ -73,7 +74,7 @@ public class DemoAzureResourceService : IAzureResourceService
         };
     }
 
-    public async IAsyncEnumerable<ServiceBusTopicInfo> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusTopicInfo> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested) yield break;
         if (namespaceInfo.Name == "bussin-demo-prod")
@@ -88,7 +89,7 @@ public class DemoAzureResourceService : IAzureResourceService
         await Task.CompletedTask;
     }
 
-    public async IAsyncEnumerable<ServiceBusSubscriptionInfo> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusSubscriptionInfo> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName, CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested) yield break;
         if (namespaceInfo.Name == "bussin-demo-prod" && topicName == "order-events")
@@ -116,5 +117,11 @@ public class DemoAzureResourceService : IAzureResourceService
             ActiveMessageCount = _demoJsService.GetSubscriptionMessageCount(ns, topic, subName), 
             DeadLetterMessageCount = _demoJsService.GetSubscriptionDeadLetterCount(ns, topic, subName) 
         };
+    }
+
+    public async IAsyncEnumerable<TenantInfo> ListTenantsAsync(TokenCredential credential, CancellationToken cancellationToken = default)
+    {
+        yield return new TenantInfo { TenantId = "demo-tenant-id", DisplayName = "Demo Tenant", DefaultDomain = "demo.onmicrosoft.com", TenantType = "Demo" };
+        await Task.CompletedTask;
     }
 }

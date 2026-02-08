@@ -4,6 +4,7 @@ public sealed class AppPreferences
 {
     public List<Folder> Folders { get; set; } = new();
     public bool DarkMode { get; set; } = false;
+    public string? SelectedTenantId { get; set; }
 }
 
 public sealed class Folder
@@ -13,4 +14,5 @@ public sealed class Folder
     public List<NamespaceConnection> Namespaces { get; set; } = new();
     public bool IsExpanded { get; set; } = false;
     public string? ParentId { get; set; } = null;
+    public string? TenantId { get; set; }
 }

@@ -132,6 +132,14 @@
         window.awaitControllerPromise = async function (controller) {
             return await controller.promise;
         };
+
+        // Helper for Demo Mode to create a fake controller
+        window.createMockController = function (value) {
+            return {
+                promise: Promise.resolve(value),
+                stop: () => console.log('Mock controller stopped')
+            };
+        };
     </script>
 
     <script>

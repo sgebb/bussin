@@ -31,10 +31,14 @@
     --indigo-600: #4F46E5;
     --indigo-700: #4338CA;
 
-    --mocha-400: #A1887F;
-    --mocha-500: #8D6E63;
-    --mocha-600: #795548;
-    --mocha-700: #6D4C41;
+    --mocha-400: #94A3B8;
+    /* Slate-400 */
+    --mocha-500: #64748B;
+    /* Slate-500 */
+    --mocha-600: #475569;
+    /* Slate-600 */
+    --mocha-700: #334155;
+    /* Slate-700 */
 
     --red-500: #EF4444;
     --red-600: #DC2626;
@@ -722,4 +726,41 @@ mark {
     color: var(--slate-300) !important;
     /* Lighter grey for better contrast on dark */
     opacity: 0.9;
+}
+
+/* Dropdown Menu - Dark Mode */
+[data-theme='dark'] .dropdown-menu {
+    background-color: var(--surface-color);
+    border-color: var(--border-color);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .dropdown-item {
+    color: var(--text-color);
+}
+
+[data-theme='dark'] .dropdown-item:hover,
+[data-theme='dark'] .dropdown-item:focus {
+    background-color: var(--hover-bg);
+    color: var(--text-color);
+}
+
+[data-theme='dark'] .dropdown-header {
+    color: var(--slate-400);
+}
+
+[data-theme='dark'] .dropdown-divider {
+    border-top-color: var(--border-color);
+}
+
+/* Ensure muted text inside active items is readable (light mode & dark mode) */
+.dropdown-item.active .text-muted,
+.dropdown-item:active .text-muted {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+[data-theme='dark'] .dropdown-item.active,
+[data-theme='dark'] .dropdown-item:active {
+    background-color: var(--primary-color);
+    color: #FFFFFF;
 }
