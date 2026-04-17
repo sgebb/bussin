@@ -8,13 +8,14 @@ Price:              $0
 Redistribution 
 Price:              Contact Licensor
 Additional Use 
-Grant:              Usage of the Software to manage any Service Bus 
-                    environment (including production) is permitted when 
-                    accessed via bussin.dev. 
-                    
-                    Commercial redistribution, rebranding, or internal 
-                    hosting for organizational use is prohibited without 
-                    a commercial license from the Licensor.
+Grant:              
+    1. Usage of the Software's standard functionality via bussin.dev 
+       is always permitted at no cost.
+    2. Use of features explicitly marked as "Pro" or "Premium" in the 
+       user interface may require a commercial license.
+    3. Commercial redistribution, rebranding, or hosting this 
+       software as a service by third parties is strictly prohibited.
+
 Change Date:        2029-01-01
 Change License:     Apache License, Version 2.0
 
