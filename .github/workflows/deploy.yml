@@ -1,0 +1,89 @@
+﻿name: Deploy to GitHub Pages
+
+env:
+  PUBLISH_DIR: src/bin/Release/net10.0/publish/wwwroot
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client-js/package-lock.json
+
+      - name: Build client-js
+        run: |
+          cd client-js
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish app
+        run: dotnet publish src/Bussin.csproj -c Release
+
+      - name: Generate build info
+        run: |
+          COMMIT_HASH=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          
+          cat > ${{ env.PUBLISH_DIR }}/buildinfo.json << EOF
+          {
+            "commitHash": "$COMMIT_HASH",
+            "commitShort": "$COMMIT_SHORT",
+            "buildTime": "$BUILD_TIME",
+            "branch": "$BRANCH",
+            "repository": "${{ github.repository }}",
+            "verifyUrl": "https://github.com/${{ github.repository }}/commit/$COMMIT_HASH"
+          }
+          EOF
+          
+          sed -i "s|</body>|<script>console.log('Build Info: Commit $COMMIT_SHORT built at $BUILD_TIME'); console.log('Verify at: https://github.com/${{ github.repository }}/commit/$COMMIT_HASH');</script></body>|" ${{ env.PUBLISH_DIR }}/index.html
+
+      - name: Add .nojekyll
+        run: touch ${{ env.PUBLISH_DIR }}/.nojekyll
+
+      - name: Copy index.html to 404.html for SPA routing
+        run: cp ${{ env.PUBLISH_DIR }}/index.html ${{ env.PUBLISH_DIR }}/404.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.PUBLISH_DIR }}
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

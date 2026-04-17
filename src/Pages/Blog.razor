@@ -1,0 +1,110 @@
+@page "/blog"
+@layout BlogLayout
+@inject HttpClient Http
+
+<PageTitle>Bussin Blog | Azure Service Bus Guides &amp; Tips</PageTitle>
+
+<div class="blog-page">
+    <header class="site-header">
+        <div class="header-brand">
+            <a href="/" class="brand-root"><strong>bussin</strong></a><span class="header-sep">/</span><a href="/blog" class="header-section">blog</a>
+        </div>
+        <span class="header-spacer"></span>
+        <a href="/" class="header-cta">Open Bussin ↗</a>
+    </header>
+
+    <main class="blog-main">
+        <div class="page-title">
+            <h1>Bussin Blog</h1>
+            <p>Guides and deep dives on Azure Service Bus</p>
+        </div>
+
+        <div class="post-grid">
+            @if (articles == null)
+            {
+                @for (int i = 0; i < 6; i++)
+                {
+                    <div class="post-card skeleton" style="height: 200px; background: #eee; border-radius: 14px;"></div>
+                }
+            }
+            else
+            {
+                @foreach (var article in articles)
+                {
+                    <a href="/blog/@article.Slug" class="post-card @(article.Featured ? "featured" : "")">
+                        <span class="post-tag">@article.Tag</span>
+                        <h2>@article.Title</h2>
+                        <p>@article.Description</p>
+                        <span class="post-meta">@article.Date</span>
+                    </a>
+                }
+            }
+        </div>
+    </main>
+
+    <footer class="blog-footer">
+        <p>Bussin is free and open source — <a href="https://github.com/sgebb/bussin" target="_blank" rel="noopener">view on GitHub</a></p>
+    </footer>
+</div>
+
+<style>
+    .blog-page { all: initial; display: flex; flex-direction: column; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; color: #0f172a; line-height: 1.6; }
+    .blog-page *, .blog-page *::before, .blog-page *::after { box-sizing: border-box; }
+
+    /* ── Fixed header ── */
+    .site-header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 52px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; padding: 0 1.5rem; gap: 1.25rem; }
+    .brand-root { color: #0d6efd; text-decoration: none !important; }
+    .brand-root strong { color: #0d6efd; }
+    .header-sep { color: #d1d5db; margin: 0 0.2rem; font-weight: 300; }
+    .header-section { color: #6b7280; font-weight: 500; text-decoration: none !important; }
+    .header-section:hover { color: #0f172a; }
+    .header-spacer { flex: 1; }
+    .header-cta { flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: #fff !important; background: #0f172a; padding: 0.45rem 1rem; border-radius: 6px; text-decoration: none !important; letter-spacing: 0.01em; transition: background 0.15s; }
+    .header-cta:hover { background: #0d6efd !important; }
+
+    /* ── Content ── */
+    .blog-main { max-width: 1000px; margin: 0 auto; padding: 72px 2rem 4rem; width: 100%; }
+    .page-title { margin-bottom: 2rem; }
+    .page-title h1 { font-size: 1.75rem; font-weight: 900; letter-spacing: -0.03em; color: #0f172a; margin: 0 0 0.2rem; }
+    .page-title p { font-size: 0.9rem; color: #64748b; margin: 0; }
+
+    /* ── Grid ── */
+    .post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.25rem; }
+    .post-card { display: flex; flex-direction: column; background: #fff; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 1.5rem; text-decoration: none !important; color: inherit; transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s; }
+    .post-card:hover { border-color: #0d6efd; box-shadow: 0 6px 24px rgba(13,110,253,0.1); transform: translateY(-2px); }
+    .post-card.featured { border-color: #bfdbfe; background: #f0f7ff; }
+    .post-tag { display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #0d6efd; background: #eff6ff; padding: 0.18rem 0.5rem; border-radius: 99px; margin-bottom: 0.75rem; width: fit-content; }
+    .post-card h2 { font-size: 1.05rem; font-weight: 700; color: #0f172a; margin: 0 0 0.5rem; line-height: 1.35; }
+    .post-card p { font-size: 0.875rem; color: #475569; margin: 0 0 1rem; flex-grow: 1; line-height: 1.6; }
+    .post-meta { font-size: 0.75rem; color: #94a3b8; font-weight: 500; margin-top: auto; }
+
+    /* ── Footer ── */
+    .blog-footer { text-align: center; padding: 2rem; color: #94a3b8; font-size: 0.8rem; border-top: 1px solid #e2e8f0; margin-top: auto; }
+    .blog-footer a { color: #64748b; }
+
+    .skeleton {
+        animation: skeleton-loading 1s linear infinite alternate;
+    }
+
+    @@keyframes skeleton-loading {
+        0% { background-color: #f1f5f9; }
+        100% { background-color: #e2e8f0; }
+    }
+</style>
+
+@code {
+    private List<BlogArticle>? articles;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try 
+        {
+            // Use a cache-busting timestamp to ensure the user gets latest content
+            articles = await Http.GetFromJsonAsync<List<BlogArticle>>($"blog/data/articles.json?v={DateTime.Now.Ticks}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading articles: {ex.Message}");
+        }
+    }
+}

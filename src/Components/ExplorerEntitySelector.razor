@@ -1,0 +1,165 @@
+@using Bussin.Models
+
+<div class="explorer-entities">
+    <div class="explorer-entities-grid-3col">
+        <!-- Queues Column -->
+        <div class="entity-column">
+            <div class="entity-column-header">
+                <i class="bi bi-list-ul"></i> Queues (@Queues.Count)
+            </div>
+            <div class="entity-list-scroll entity-list-grid">
+                @foreach (var queue in Queues)
+                {
+                    <div class="entity-item @(SelectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" 
+                         @onclick="() => OnQueueSelected.InvokeAsync(queue.Name)" title="@queue.Name">
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <span class="entity-name-with-icons">
+                                <span class="text-truncate">@queue.Name</span>
+                                <span class="entity-icons">
+                                    @if (queue.Status != "Active")
+                                    {
+                                        <i class="bi bi-pause-circle" title="Status: @queue.Status"></i>
+                                    }
+                                    @if (queue.RequiresSession)
+                                    {
+                                        <i class="bi bi-person-badge" title="Session-enabled"></i>
+                                    }
+                                    @if (queue.EnablePartitioning)
+                                    {
+                                        <i class="bi bi-grid-3x3" title="Partitioned"></i>
+                                    }
+                                    @if (queue.RequiresDuplicateDetection)
+                                    {
+                                        <i class="bi bi-copy" title="Duplicate detection enabled"></i>
+                                    }
+                                    @if (!string.IsNullOrEmpty(queue.ForwardTo))
+                                    {
+                                        <i class="bi bi-arrow-right-circle" title="Forwards to: @queue.ForwardTo"></i>
+                                    }
+                                    @if (queue.ScheduledMessageCount > 0)
+                                    {
+                                        <i class="bi bi-clock" title="@queue.ScheduledMessageCount scheduled message(s)"></i>
+                                    }
+                                </span>
+                            </span>
+                            @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0 || queue.ScheduledMessageCount > 0)
+                            {
+                                <span class="badge bg-secondary" title="Active (Scheduled) / Dead-lettered">
+                                    @queue.ActiveMessageCount
+                                    @if (queue.ScheduledMessageCount > 0)
+                                    {
+                                        <span class="text-info fw-bold">(@queue.ScheduledMessageCount)</span>
+                                    }
+                                    / <span class="text-dlq-orange fw-bold">@queue.DeadLetterMessageCount</span>
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Topics Column -->
+        <div class="entity-column">
+            <div class="entity-column-header">
+                <i class="bi bi-broadcast"></i> Topics (@Topics.Count)
+            </div>
+            <div class="entity-list-scroll entity-list-grid">
+                @foreach (var topic in Topics)
+                {
+                    <div class="entity-item @(SelectedTopicName == topic.Name ? "active" : "")" 
+                         @onclick="() => OnTopicSelected.InvokeAsync(topic.Name)" title="@topic.Name">
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <span class="entity-name-with-icons">
+                                <span class="text-truncate">@topic.Name</span>
+                                <span class="entity-icons">
+                                    @if (topic.ScheduledMessageCount > 0)
+                                    {
+                                        <i class="bi bi-clock" title="@topic.ScheduledMessageCount scheduled message(s)"></i>
+                                    }
+                                </span>
+                            </span>
+                            @if (topic.ScheduledMessageCount > 0)
+                            {
+                                <span class="badge bg-info" title="Scheduled messages">
+                                    <i class="bi bi-clock"></i> @topic.ScheduledMessageCount
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Subscriptions Column -->
+        <div class="entity-column">
+            <div class="entity-column-header">
+                <i class="bi bi-envelope"></i> Subscriptions (@Subscriptions.Count)
+            </div>
+            <div class="entity-list-scroll entity-list-grid">
+                @if (IsLoadingSubscriptions)
+                {
+                    <div class="text-center p-2">
+                        <div class="spinner-border spinner-border-sm"></div>
+                    </div>
+                }
+                else if (SelectedTopicName == null)
+                {
+                    <div class="text-center p-3 text-muted small">
+                        Select a topic
+                    </div>
+                }
+                else
+                {
+                    @foreach (var sub in Subscriptions)
+                    {
+                        <div class="entity-item @(SelectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" 
+                             @onclick="() => OnSubscriptionSelected.InvokeAsync(sub.Name)" title="@sub.Name">
+                            <div class="d-flex justify-content-between align-items-center w-100">
+                                <span class="entity-name-with-icons">
+                                    <span class="text-truncate">@sub.Name</span>
+                                    <span class="entity-icons">
+                                        @if (sub.Status != "Active")
+                                        {
+                                            <i class="bi bi-pause-circle" title="Status: @sub.Status"></i>
+                                        }
+                                        @if (sub.RequiresSession)
+                                        {
+                                            <i class="bi bi-person-badge" title="Session-enabled"></i>
+                                        }
+                                        @if (!string.IsNullOrEmpty(sub.ForwardTo))
+                                        {
+                                            <i class="bi bi-arrow-right-circle" title="Forwards to: @sub.ForwardTo"></i>
+                                        }
+                                    </span>
+                                </span>
+                                @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
+                                {
+                                    <span class="badge bg-secondary" title="Active / Dead-lettered">
+                                        @sub.ActiveMessageCount / <span class="text-dlq-orange fw-bold">@sub.DeadLetterMessageCount</span>
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<ServiceBusQueueInfo> Queues { get; set; } = new();
+    [Parameter] public List<ServiceBusTopicInfo> Topics { get; set; } = new();
+    [Parameter] public List<ServiceBusSubscriptionInfo> Subscriptions { get; set; } = new();
+    
+    [Parameter] public string? SelectedQueueName { get; set; }
+    [Parameter] public string? SelectedTopicName { get; set; }
+    [Parameter] public string? SelectedSubscriptionName { get; set; }
+    
+    [Parameter] public bool IsLoadingSubscriptions { get; set; }
+    
+    [Parameter] public EventCallback<string> OnQueueSelected { get; set; }
+    [Parameter] public EventCallback<string> OnTopicSelected { get; set; }
+    [Parameter] public EventCallback<string> OnSubscriptionSelected { get; set; }
+}

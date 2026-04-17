@@ -1,0 +1,103 @@
+@* Reusable confirmation modal *@
+@if (IsVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnBackdropClick">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Title</h5>
+                    <button type="button" class="btn-close" @onclick="Cancel" disabled="@IsProcessing"></button>
+                </div>
+                <div class="modal-body">
+                    <p>@Message</p>
+                    @if (!string.IsNullOrEmpty(DetailMessage))
+                    {
+                        <small class="text-muted">@DetailMessage</small>
+                    }
+                    @if (ChildContent != null)
+                    {
+                        <div class="mt-3">
+                            @ChildContent
+                        </div>
+                    }
+                    @if (ProgressCount.HasValue)
+                    {
+                        <div class="mt-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Progress:</strong>
+                                <span class="badge bg-primary">@ProgressCount messages deleted</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" 
+                                     style="width: 100%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Cancel">
+                        @(IsProcessing && ProgressCount.HasValue ? "Stop" : CancelButtonText)
+                    </button>
+                    @if (OnAlternativeConfirm.HasDelegate && !IsProcessing && !string.IsNullOrEmpty(AlternativeConfirmButtonText))
+                    {
+                        <button type="button" class="btn @AlternativeConfirmButtonClass" @onclick="AlternativeConfirm">
+                            @AlternativeConfirmButtonText
+                        </button>
+                    }
+                    <button type="button" class="btn @ConfirmButtonClass" @onclick="Confirm" disabled="@IsProcessing">
+                        @if (IsProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status">
+                                <span class="visually-hidden">Processing...</span>
+                            </span>
+                        }
+                        @ConfirmButtonText
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string Title { get; set; } = "Confirm Action";
+    [Parameter] public string Message { get; set; } = "Are you sure you want to proceed?";
+    [Parameter] public string? DetailMessage { get; set; }
+    [Parameter] public string ConfirmButtonText { get; set; } = "Confirm";
+    [Parameter] public string CancelButtonText { get; set; } = "Cancel";
+    [Parameter] public string ConfirmButtonClass { get; set; } = "btn-primary";
+    [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public int? ProgressCount { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    
+    [Parameter] public string AlternativeConfirmButtonText { get; set; } = "Alternative";
+    [Parameter] public string AlternativeConfirmButtonClass { get; set; } = "btn-secondary";
+    [Parameter] public EventCallback OnAlternativeConfirm { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private async Task Confirm()
+    {
+        await OnConfirm.InvokeAsync();
+    }
+    
+    private async Task AlternativeConfirm()
+    {
+        await OnAlternativeConfirm.InvokeAsync();
+    }
+
+    private async Task Cancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+
+    private async Task OnBackdropClick()
+    {
+        if (!IsProcessing)
+        {
+            await Cancel();
+        }
+    }
+}

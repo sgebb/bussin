@@ -1,0 +1,65 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security & Permissions: How Bussin Handles Your Data | Bussin Blog</title>
+    <meta name="description" content="A detailed look at the zero-backend architecture, consent flows, and why your credentials never leave your browser.">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; color: #0f172a; line-height: 1.6; padding-top: 52px; }
+        a { color: #0d6efd; }
+        a:hover { text-decoration: underline; }
+        .site-header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 52px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; padding: 0 1.5rem; gap: 1.25rem; }
+        .brand-root { color: #0d6efd; text-decoration: none !important; font-weight: 800; }
+        .brand-root strong { color: #0d6efd; }
+        .header-sep { color: #d1d5db; margin: 0 0.2rem; font-weight: 300; }
+        .header-section { color: #6b7280; font-weight: 500; text-decoration: none !important; }
+        .header-section:hover { color: #0f172a; }
+        .header-back { font-size: 0.8rem; color: #6b7280; text-decoration: none !important; font-weight: 500; flex-shrink: 0; }
+        .header-back:hover { color: #0f172a; }
+        .header-spacer { flex: 1; }
+        .header-cta { flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: #fff !important; background: #0f172a; padding: 0.45rem 1rem; border-radius: 6px; text-decoration: none !important; letter-spacing: 0.01em; transition: background 0.15s; }
+        .header-cta:hover { background: #0d6efd !important; }
+        article { max-width: 800px; margin: 0 auto; padding: 2.5rem 2rem 5rem; }
+        .tag { display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #0d6efd; background: #eff6ff; padding: 0.18rem 0.5rem; border-radius: 99px; margin-bottom: 1.1rem; }
+        h1 { font-size: 2.25rem; font-weight: 900; color: #0f172a; line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 1rem; }
+        .lead { font-size: 1.1rem; color: #475569; line-height: 1.7; margin-bottom: 2.5rem; padding-bottom: 2rem; border-bottom: 1px solid #e2e8f0; }
+        h2 { font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 2.25rem 0 0.65rem; }
+        h3 { font-size: 1.1rem; font-weight: 700; color: #0f172a; margin: 1.5rem 0 0.5rem; }
+        p { font-size: 1rem; color: #334155; line-height: 1.75; margin-bottom: 1.1rem; }
+        ul, ol { color: #334155; font-size: 1rem; line-height: 1.75; padding-left: 1.5rem; margin-bottom: 1.25rem; }
+        li { margin-bottom: 0.35rem; }
+        strong { color: #0f172a; }
+        code { background: #f1f5f9; color: #0f172a; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.875em; font-family: monospace; }
+        .callout { background: #f0f7ff; border-left: 3px solid #0d6efd; border-radius: 6px; padding: 1rem 1.25rem; margin: 1.75rem 0; color: #1e3a5f; font-size: 0.95rem; line-height: 1.65; }
+        .tool-box { background: #fff; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.25rem; }
+        .tool-box.recommended { border-color: #bfdbfe; background: #f0f7ff; }
+        .site-footer { background: #fff; border-top: 1px solid #e2e8f0; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .site-footer a.back { font-size: 0.85rem; color: #64748b; text-decoration: none; font-weight: 500; }
+        .site-footer a.back:hover { color: #0f172a; }
+        .site-footer a.cta { font-size: 0.8rem; font-weight: 700; color: #fff !important; background: #0f172a; padding: 0.4rem 0.9rem; border-radius: 6px; text-decoration: none !important; transition: background 0.15s; }
+        .site-footer a.cta:hover { background: #0d6efd !important; }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-brand">
+            <a href="/" class="brand-root"><strong>bussin</strong></a><span class="header-sep">/</span><a href="/blog/index.html" class="header-section">blog</a>
+        </div>
+        <a href="/blog/index.html" class="header-back">â† All articles</a>
+        <span class="header-spacer"></span>
+        <a href="/" class="header-cta">Open Bussin â†—</a>
+    </header>
+    <article>
+        <span class="tag">Security</span>
+        <h1>Security & Permissions: How Bussin Handles Your Data</h1>
+        <p class="lead">A detailed look at the zero-backend architecture, consent flows, and why your credentials never leave your browser.</p>
+        <h2>The Short Answer</h2><p>Your credentials never touch Bussin's infrastructure. There is no Bussin server. When you use Bussin, your browser talks directly to Microsoft and Azure.</p><h2>Zero-Backend Architecture</h2><p>Bussin is a <strong>Blazor WebAssembly</strong> application â€” it compiles to JavaScript and runs entirely inside your browser. There's no API server, no message proxy, no database. The app is just static files served from a CDN.</p><p>This means:</p><ul><li>No Bussin server can log your messages</li><li>No credentials are stored server-side</li><li>There is no account system â€” Bussin doesn't know who you are</li></ul><h2>How Authentication Works</h2><p>Bussin uses <strong>MSAL.js</strong> (Microsoft Authentication Library) to authenticate you via Entra ID. Here's the flow:</p><ol><li>You click <em>Sign in with Microsoft</em></li><li>Your browser redirects to <code>login.microsoftonline.com</code> â€” Microsoft's servers</li><li>You authenticate with your Microsoft account (MFA applies as normal)</li><li>Microsoft returns an OAuth 2.0 access token to your browser</li><li>That token is stored in your browser's session storage only</li></ol><p>Bussin receives the token but never transmits it to any external server. It uses it to sign API calls sent directly to Azure.</p><h2>What Permissions Are Requested?</h2><p>Bussin requests two OAuth scopes:</p><ul><li><strong><code>https://servicebus.azure.net/user_impersonation</code></strong> â€” the Azure Service Bus Data Plane API. This lets Bussin peek, send, and manage messages in namespaces you already have access to.</li><li><strong><code>https://management.azure.com/user_impersonation</code></strong> â€” the Azure Management API. This lets Bussin discover your namespaces automatically, so you don't have to type connection strings.</li></ul><p>Both use your existing Azure RBAC permissions. Bussin cannot access any resource you wouldn't already have access to in the Azure Portal.</p><h2>AMQP over WebSockets</h2><p>After authentication, message operations use the <strong>Rhea</strong> AMQP library to open a secure WebSocket connection to your Service Bus namespace. The connection goes from your browser directly to <code>&lt;namespace&gt;.servicebus.windows.net</code> â€” no intermediary.</p><h2>Revoking Access</h2><p>You can revoke Bussin's consent at any time from <a href='https://myapplications.microsoft.com/' target='_blank'>myapplications.microsoft.com</a> under <em>Apps &amp; Services</em>.</p><div class='callout'><strong>ðŸ” Open Source</strong><br>You don't have to take our word for it. Bussin is fully open source. You can inspect the authentication code and message handling on <a href='https://github.com/sgebb/bussin' target='_blank'>GitHub</a>.</div>
+    </article>
+    <footer class="site-footer">
+        <a href="/blog/index.html" class="back">â† All articles</a>
+        <a href="/" class="cta">Open Bussin â†’</a>
+    </footer>
+</body>
+</html>

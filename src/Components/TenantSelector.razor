@@ -1,0 +1,149 @@
+@using Bussin.Models
+@using Bussin.Services
+@inject IAzureResourceService ResourceService
+@inject IAuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject ServiceBusEntityCache EntityCache
+
+@code {
+    private List<TenantInfo> tenants = new();
+    private bool isLoading = false;
+    private string? currentTenantId;
+    private TenantInfo? currentTenant => tenants.FirstOrDefault(t => t.TenantId == currentTenantId);
+
+    private bool showDropdown = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentTenantId = await AuthService.GetCurrentTenantIdAsync();
+        // Load initial list silently to populate display name
+        await LoadTenantsAsync(silent: true);
+    }
+
+    private async Task ToggleDropdown()
+    {
+        showDropdown = !showDropdown;
+        if (showDropdown && tenants.Count == 0 && !isLoading)
+        {
+            await LoadTenantsAsync();
+        }
+    }
+
+    private async Task LoadTenantsAsync(bool silent = false)
+    {
+        if (!silent) isLoading = true;
+        tenants.Clear();
+        try
+        {
+            // Always list tenants using the home credential to ensure we can switch
+            // even if the current tenant context is broken
+            var credential = await AuthService.GetHomeTokenCredentialAsync();
+            if (credential != null)
+            {
+                await foreach (var tenant in ResourceService.ListTenantsAsync(credential))
+                {
+                    tenants.Add(tenant);
+                    if (!silent) StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading tenants: {ex.Message}");
+        }
+        finally
+        {
+            if (!silent) 
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SelectTenant(string? tenantId)
+    {
+        showDropdown = false;
+        if (currentTenantId == tenantId) return;
+
+        // Clear resource cache when switching tenants
+        EntityCache.Clear();
+
+        await AuthService.SetTenantAsync(tenantId);
+        
+        // Force login flow to ensure tokens are acquired for the new tenant
+        Navigation.NavigateTo("authentication/login");
+    }
+}
+@inject INotificationService NotificationService
+
+<div class="tenant-selector">
+    <div class="dropdown @(showDropdown ? "show" : "")">
+        <button class="btn btn-outline-secondary btn-sm dropdown-toggle d-flex align-items-center gap-2" type="button" @onclick="ToggleDropdown" @onclick:stopPropagation="true" aria-expanded="@(showDropdown ? "true" : "false")">
+            <i class="bi bi-buildings"></i> 
+            <span class="text-truncate" style="max-width: 200px;">
+                @if (string.IsNullOrEmpty(currentTenantId))
+                {
+                    <span>Default Directory</span>
+                }
+                else
+                {
+                    <span>@(currentTenant?.DisplayName ?? currentTenantId)</span>
+                }
+            </span>
+            @if (isLoading)
+            {
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            }
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow @(showDropdown ? "show" : "")" style="max-height: 400px; overflow-y: auto; width: 300px; display: @(showDropdown ? "block" : "none");">
+            <li>
+                <h6 class="dropdown-header">Switch Directory</h6>
+            </li>
+            <li>
+                <button class="dropdown-item @(string.IsNullOrEmpty(currentTenantId) ? "active" : "")" @onclick="() => SelectTenant(null)">
+                    <div class="d-flex w-100 justify-content-between align-items-center">
+                        <div>
+                            <strong>Default Directory</strong>
+                            <div class="small text-muted">Home Tenant</div>
+                        </div>
+                        @if (string.IsNullOrEmpty(currentTenantId))
+                        {
+                            <i class="bi bi-check-lg"></i>
+                        }
+                    </div>
+                </button>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            
+            @if (tenants.Count > 0)
+            {
+                <li class="dropdown-header small text-muted text-uppercase mt-2 mb-1">Available Tenants</li>
+                @foreach (var tenant in tenants)
+                {
+                    <li>
+                        <button class="dropdown-item @(currentTenantId == tenant.TenantId ? "active" : "")" @onclick="() => SelectTenant(tenant.TenantId)">
+                            <div class="d-flex w-100 justify-content-between align-items-center">
+                                <div class="text-truncate pe-2">
+                                    <strong>@(tenant.DisplayName ?? "Unnamed Tenant")</strong>
+                                    <div class="small text-muted text-truncate">@tenant.DefaultDomain</div>
+                                    <div class="small text-muted code-font text-truncate" style="font-size: 0.75em;">@tenant.TenantId</div>
+                                </div>
+                                @if (currentTenantId == tenant.TenantId)
+                                {
+                                    <i class="bi bi-check-lg"></i>
+                                }
+                            </div>
+                        </button>
+                    </li>
+                }
+            }
+            else if (!isLoading)
+            {
+                <li class="px-3 py-2 text-muted small text-center">
+                    <i class="bi bi-info-circle me-1"></i> No other tenants found
+                </li>
+            }
+        </ul>
+    </div>
+</div>

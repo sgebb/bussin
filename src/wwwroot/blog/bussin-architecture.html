@@ -1,0 +1,62 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inside Bussin: Architecture & Open Source | Bussin Blog</title>
+    <meta name="description" content="How a Blazor WASM + Rhea AMQP app talks directly to Azure from the browser. With links to the GitHub source.">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; color: #0f172a; line-height: 1.6; padding-top: 52px; }
+        a { color: #0d6efd; }
+        a:hover { text-decoration: underline; }
+        .site-header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 52px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; padding: 0 1.5rem; gap: 1.25rem; }
+        .header-brand { font-size: 0.95rem; font-weight: 800; color: #0f172a; text-decoration: none !important; letter-spacing: -0.03em; flex-shrink: 0; }
+        .header-brand strong { color: #0d6efd; }
+        .header-sep { color: #d1d5db; margin: 0 0.2rem; font-weight: 300; }
+        .header-section { color: #6b7280; font-weight: 500; }
+        .header-back { font-size: 0.8rem; color: #6b7280; text-decoration: none !important; font-weight: 500; flex-shrink: 0; }
+        .header-back:hover { color: #0f172a; }
+        .header-spacer { flex: 1; }
+        .header-cta { flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: #fff !important; background: #0f172a; padding: 0.45rem 1rem; border-radius: 6px; text-decoration: none !important; letter-spacing: 0.01em; transition: background 0.15s; }
+        .header-cta:hover { background: #0d6efd !important; }
+        article { max-width: 800px; margin: 0 auto; padding: 2.5rem 2rem 5rem; }
+        .tag { display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #0d6efd; background: #eff6ff; padding: 0.18rem 0.5rem; border-radius: 99px; margin-bottom: 1.1rem; }
+        h1 { font-size: 2.25rem; font-weight: 900; color: #0f172a; line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 1rem; }
+        .lead { font-size: 1.1rem; color: #475569; line-height: 1.7; margin-bottom: 2.5rem; padding-bottom: 2rem; border-bottom: 1px solid #e2e8f0; }
+        h2 { font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 2.25rem 0 0.65rem; }
+        h3 { font-size: 1.1rem; font-weight: 700; color: #0f172a; margin: 1.5rem 0 0.5rem; }
+        p { font-size: 1rem; color: #334155; line-height: 1.75; margin-bottom: 1.1rem; }
+        ul, ol { color: #334155; font-size: 1rem; line-height: 1.75; padding-left: 1.5rem; margin-bottom: 1.25rem; }
+        li { margin-bottom: 0.35rem; }
+        strong { color: #0f172a; }
+        code { background: #f1f5f9; color: #0f172a; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.875em; font-family: monospace; }
+        .callout { background: #f0f7ff; border-left: 3px solid #0d6efd; border-radius: 6px; padding: 1rem 1.25rem; margin: 1.75rem 0; color: #1e3a5f; font-size: 0.95rem; line-height: 1.65; }
+        .tool-box { background: #fff; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.25rem; }
+        .tool-box.recommended { border-color: #bfdbfe; background: #f0f7ff; }
+        .site-footer { background: #fff; border-top: 1px solid #e2e8f0; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .site-footer a.back { font-size: 0.85rem; color: #64748b; text-decoration: none; font-weight: 500; }
+        .site-footer a.back:hover { color: #0f172a; }
+        .site-footer a.cta { font-size: 0.8rem; font-weight: 700; color: #fff !important; background: #0f172a; padding: 0.4rem 0.9rem; border-radius: 6px; text-decoration: none !important; transition: background 0.15s; }
+        .site-footer a.cta:hover { background: #0d6efd !important; }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <a href="/blog/index.html" class="header-brand"><strong>bussin</strong><span class="header-sep">/</span><span class="header-section">blog</span></a>
+        <a href="/blog/index.html" class="header-back">â† All articles</a>
+        <span class="header-spacer"></span>
+        <a href="/" class="header-cta">Open Bussin â†—</a>
+    </header>
+    <article>
+        <span class="tag">Architecture</span>
+        <h1>Inside Bussin: Architecture & Open Source</h1>
+        <p class="lead">How a Blazor WASM + Rhea AMQP app talks directly to Azure from the browser. With links to the GitHub source.</p>
+        <h2>The Core Constraint: Browsers Can't Open TCP Sockets</h2><p>Azure Service Bus uses AMQP 1.0 over TCP â€” a binary protocol that browsers can't speak natively. The classic desktop Service Bus Explorer solves this by running as a native Windows process. Bussin takes a different approach: <strong>AMQP over WebSockets</strong>.</p><p>Azure Service Bus exposes a WebSocket endpoint that acts as a tunnel for AMQP frames. Browsers are very capable of WebSocket connections, which means a properly tunneled AMQP client can run entirely in a browser.</p><h2>The Stack</h2><ul><li><strong>Blazor WebAssembly (.NET 10)</strong> â€” the app compiles to WASM and runs in the browser. All UI and business logic lives here.</li><li><strong>Rhea</strong> â€” a Node.js AMQP 1.0 library that works in the browser via Webpack. Bussin calls it via JS Interop from Blazor.</li><li><strong>MSAL.js</strong> â€” Microsoft's authentication library, also invoked via JS Interop, handles token acquisition.</li><li><strong>Azure Management REST API</strong> â€” called directly with <code>HttpClient</code> to list namespaces and entities.</li></ul><h2>Data Flow</h2><ol><li>User authenticates â†’ MSAL returns tokens â†’ stored in browser session</li><li>Blazor calls ARM REST API to discover namespaces and queue/topic lists</li><li>For message operations, Blazor invokes JS Interop â†’ Rhea opens WSS connection to Service Bus</li><li>Messages are peeked/sent/purged directly from the browser</li></ol><h2>Open Source</h2><p>Bussin is open source under the MIT license. You can browse the source, report issues, or contribute on GitHub:</p><ul><li><a href='https://github.com/sgebb/bussin' target='_blank'>github.com/sgebb/bussin</a></li></ul><div class='callout'><strong>Interested in contributing?</strong><br>The codebase is a clean Blazor WASM project. Issues labelled <em>good first issue</em> are a great place to start.</div>
+    </article>
+    <footer class="site-footer">
+        <a href="/blog/index.html" class="back">â† All articles</a>
+        <a href="/" class="cta">Open Bussin â†’</a>
+    </footer>
+</body>
+</html>

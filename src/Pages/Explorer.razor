@@ -1,0 +1,322 @@
+@page "/explorer"
+@using Microsoft.AspNetCore.Authorization
+@using Azure.Core
+@attribute [Authorize]
+@inject ExplorerViewModel VM
+@implements IDisposable
+
+<PageTitle>Explorer - bussin</PageTitle>
+
+<div class="explorer-layout">
+    <!-- Section 1: Restructured Header -->
+    <div class="explorer-header">
+        <div class="explorer-header-left">
+            @if (VM.IsEditingDisplayName)
+            {
+                <div class="namespace-edit-section">
+                    <div class="namespace-edit-wrapper" data-value="@VM.EditDisplayName">
+                        <input type="text" class="form-control namespace-rename-input"
+                               @bind="VM.EditDisplayName"
+                               @bind:event="oninput"
+                               @onkeydown="HandleRenameKeyDown"
+                               @onblur="VM.CancelRename"
+                               @ref="renameInputRef" />
+                    </div>
+                    <button class="btn btn-sm btn-success" @onmousedown="VM.SaveDisplayNameAsync" @onmousedown:preventDefault="true" disabled="@string.IsNullOrWhiteSpace(VM.EditDisplayName)">
+                        <i class="bi bi-check-lg"></i>
+                    </button>
+                    <button class="btn btn-sm btn-secondary" @onmousedown="VM.CancelRename" @onmousedown:preventDefault="true">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="namespace-title-section">
+                    <div class="namespace-title-row">
+                        <h1 class="explorer-namespace-title @(VM.IsFavorite ? "editable" : "")" 
+                            @onclick="@(VM.IsFavorite ? VM.StartRename : (Action)(() => {}))"
+                            title="@(VM.IsFavorite ? "Click to rename" : VM.DisplayName)">
+                            @VM.DisplayName
+                        </h1>
+                        <button class="namespace-action-btn favorite-toggle-btn @(VM.IsFavorite ? "favorited" : "not-favorited")"
+                                @onclick="VM.ToggleFavoriteAsync"
+                                title="@(VM.IsFavorite ? "Remove from favorites" : "Add to favorites")">
+                            <i class="bi @(VM.IsFavorite ? "bi-star-fill" : "bi-star")"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+            <div class="namespace-fqdn-below">
+                @NamespaceParam
+            </div>
+        </div>
+        <div class="explorer-header-right">
+            <div class="header-action-buttons">
+                @if (VM.IsLoadingEntities)
+                {
+                    <div class="spinner-border spinner-border-sm text-muted" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                }
+                else
+                {
+                    <button class="namespace-action-btn refresh-btn" @onclick="VM.RefreshEntitiesAsync" title="Refresh queues and topics">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                }
+                <button class="namespace-action-btn stats-btn" @onclick="() => VM.ShowStatsModal = true" title="Statistics">
+                    <i class="bi bi-bar-chart-line"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 2: Compact Entity Selector (3 Columns) -->
+    @if (VM.Queues.Count > 0 || VM.Topics.Count > 0)
+    {
+        <ExplorerEntitySelector Queues="@VM.Queues"
+                                Topics="@VM.Topics"
+                                Subscriptions="@VM.Subscriptions"
+                                SelectedQueueName="@VM.State.SelectedQueueName"
+                                SelectedTopicName="@VM.State.SelectedTopicName"
+                                SelectedSubscriptionName="@VM.State.SelectedSubscriptionName"
+                                IsLoadingSubscriptions="@VM.IsLoadingSubscriptions"
+                                OnQueueSelected="@VM.SelectQueue"
+                                OnTopicSelected="@VM.SelectTopicAsync"
+                                OnSubscriptionSelected="@VM.SelectSubscription" />
+
+    }
+
+    <!-- Section 3: Messages (Takes Majority of Space) -->
+    <div class="explorer-messages">
+        <div class="explorer-messages-header">
+            <!-- Header removed - just the message list -->
+        </div>
+
+        <div class="explorer-messages-content">
+            <div class="explorer-messages-main">
+                @if (VM.SelectedEntityRequiresSession)
+                {
+                    <div class="session-warning-banner">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <span><strong>Session-enabled.</strong> Send requires Session ID. Delete/Purge not supported.</span>
+                    </div>
+                }
+
+                <div class="explorer-messages-list">
+                    @if (VM.PeekedMessages.Count > 0)
+                    {
+                        <MessageList @ref="_messageListRef"
+                                     Messages="@VM.PeekedMessages"
+                                     IsDLQ="@VM.State.IsViewingDLQ"
+                                     IsProcessing="@VM.IsProcessingBatch"
+                                     RequiresSession="@VM.SelectedEntityRequiresSession"
+                                     OnMessageSelected="@VM.ShowMessageDetail"
+                                     OnDeleteMessages="@VM.DeleteMessages"
+                                     OnResubmitMessages="@VM.ResubmitMessages"
+                                     OnMoveToDLQMessages="@VM.MoveToDLQMessages"
+                                     OnScheduledMessageWarning="@VM.ShowScheduledMessageWarning"
+                                     OnClearMessages="@VM.ClearPeekedMessages" />
+                    }
+                    else if (VM.State.SelectedQueueName != null || VM.State.SelectedSubscriptionName != null)
+                    {
+                        <div class="text-center text-muted p-4">
+                            <p>@(VM.HasPeeked ? "No messages found" : "Click 'Peek' to load messages")</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted p-4">
+                            <p>Select a queue or topic subscription to view messages</p>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <ExplorerActionsSidebar IsViewingDLQ="@VM.State.IsViewingDLQ"
+                                    CanSend="@VM.CanSend"
+                                    HasQueueOrSubscriptionSelected="@VM.HasQueueOrSubscriptionSelected"
+                                    IsPeeking="@VM.IsPeeking"
+                                    PeekedMessagesCount="@VM.PeekedMessages.Count"
+                                    ArePeekOptionsModified="@VM.ArePeekOptionsModified"
+                                    CurrentPurgeOperation="@VM.CurrentPurgeOperation"
+                                    CurrentResubmitOperation="@VM.CurrentResubmitOperation"
+                                    SelectedEntityRequiresSession="@VM.SelectedEntityRequiresSession"
+                                    OnShowSendMessage="@(() => VM.ShowSendMessageModal = true)"
+                                    OnToggleDLQ="@VM.ToggleDLQ"
+                                    OnPeek="@(() => VM.PeekMessagesAsync())"
+                                    OnPeekNext="@(() => VM.PeekMessagesAsync(append: true))"
+                                    OnShowPeekOptions="@(() => VM.ShowPeekOptionsModal = true)"
+                                    OnResubmitAll="@VM.ResubmitAllMessages"
+                                    OnPurge="@(() => VM.PurgeMessages())" />
+
+        </div>
+        @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+        {
+            @if (PermissionErrorHelper.IsPermissionError(VM.RawErrorMessage ?? ""))
+            {
+                var permissionType = PermissionErrorHelper.GetPermissionType(VM.RawErrorMessage ?? "");
+                var roles = PermissionErrorHelper.GetRecommendedRoles(permissionType);
+                <div class="alert alert-warning alert-dismissible mt-2">
+                    <button type="button" class="btn-close" @onclick="VM.ClearError"></button>
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-shield-exclamation me-2 fs-5"></i>
+                        <div>
+                            <strong>@VM.ErrorMessage</strong>
+                            <div class="mt-2">
+                                <small>To perform this operation, you need one of these Azure RBAC roles:</small>
+                                <ul class="mb-2 mt-1">
+                                    @foreach (var role in roles)
+                                    {
+                                        <li><code>@role</code></li>
+                                    }
+                                </ul>
+                            </div>
+                            <details class="mt-2">
+                                <summary class="text-muted" style="cursor: pointer; font-size: 0.8rem;">
+                                    <i class="bi bi-code-slash me-1"></i>Technical details
+                                </summary>
+                                <pre class="mt-1 p-2 bg-dark text-light rounded" style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto;">@VM.RawErrorMessage</pre>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-danger alert-dismissible alert-sm mt-2" style="max-height: 120px; overflow-y: auto;">
+                    <button type="button" class="btn-close" @onclick="VM.ClearError"></button>
+                    <strong>Error:</strong> @VM.ErrorMessage
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<!-- Modals -->
+<SendMessageModal IsVisible="@VM.ShowSendMessageModal"
+                  IsSending="@VM.IsSending"
+                  RequiresSession="@VM.SelectedEntityRequiresSession"
+                  OnClose="@(() => VM.ShowSendMessageModal = false)"
+                  OnSend="@VM.SendMessageAsync" 
+                  OnBatchSend="@VM.SendBatchMessagesAsync" />
+
+<MessageDetailModal IsVisible="@VM.ShowMessageDetailModal"
+                    Message="@VM.SelectedMessage"
+                    IsDLQ="@VM.State.IsViewingDLQ"
+                    IsProcessing="@VM.IsProcessingBatch"
+                    RequiresSession="@VM.SelectedEntityRequiresSession"
+                    OnClose="@VM.CloseMessageDetail"
+                    OnDelete="@VM.DeleteSingleMessage"
+                    OnResubmit="@VM.ResubmitSingleMessage"
+                    OnMoveToDLQ="@VM.MoveToDLQSingleMessage" />
+
+<PeekLockModal IsVisible="@VM.ShowPeekLockModal"
+               IsProcessing="@VM.IsPeeking"
+               InitialCount="@VM.PeekLockCount"
+               InitialDuration="@VM.PeekLockDuration"
+               OnClose="@(() => VM.ShowPeekLockModal = false)"
+               OnPeekLock="@VM.PeekLockMessagesWithSettings" />
+
+<PeekOptionsModal IsVisible="@VM.ShowPeekOptionsModal"
+                  OnClose="@(() => VM.ShowPeekOptionsModal = false)"
+                  InitialOptions="@VM.LastPeekOptions"
+                  MessageCount="@VM.CurrentEntityMessageCount"
+                  IsViewingDLQ="@VM.State.IsViewingDLQ"
+                  OnPeek="@(async (options) => await VM.PeekWithOptionsAsync(options, append: false))"
+                  OnBackgroundSearch="@VM.StartBackgroundSearchAsync"
+                  OnStartLiveMonitor="@(() => VM.ShowMonitorModal = true)" />
+
+<MessageMonitorModal IsVisible="@VM.ShowMonitorModal"
+                     NamespaceName="@VM.NamespaceNameOnly"
+                     QueueName="@VM.State.SelectedQueueName"
+                     TopicName="@VM.State.SelectedTopicName"
+                     SubscriptionName="@VM.State.SelectedSubscriptionName"
+                     OnClose="@(() => VM.ShowMonitorModal = false)" />
+
+<ReceiveAndLockModal IsVisible="@VM.ShowReceiveAndLockModal"
+                     OnClose="@(() => VM.ShowReceiveAndLockModal = false)"
+                     OnLockMessages="@VM.LockMessagesForModalAsync" />
+
+<ConfirmModal IsVisible="@VM.ConfirmModalVisible"
+              Title="@VM.ConfirmModalTitle"
+              Message="@VM.ConfirmModalMessage"
+              DetailMessage="@VM.ConfirmModalDetailMessage"
+              ConfirmButtonText="@VM.ConfirmModalConfirmButtonText"
+              ConfirmButtonClass="@VM.ConfirmModalConfirmButtonClass"
+              AlternativeConfirmButtonText="@VM.ConfirmModalAlternativeButtonText"
+              AlternativeConfirmButtonClass="@VM.ConfirmModalAlternativeButtonClass"
+              IsProcessing="@VM.ConfirmModalIsProcessing"
+              ProgressCount="@VM.ConfirmModalProgressCount"
+              OnConfirm="@VM.OnConfirmModalConfirmAsync"
+              OnAlternativeConfirm="@VM.OnConfirmModalAlternativeConfirmAsync"
+              OnCancel="@VM.OnConfirmModalCancelAsync">
+    @if (VM.IsResubmitModal)
+    {
+        <div class="resubmit-delete-option mt-3 p-3 rounded">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="removeFromDlq" @bind="VM.ResubmitRemoveFromDLQ">
+                <label class="form-check-label" for="removeFromDlq">
+                    <strong>Delete from Dead Letter Queue after resubmit</strong>
+                    <small class="d-block text-muted">This will permanently remove the message from the DLQ</small>
+                </label>
+            </div>
+        </div>
+    }
+</ConfirmModal>
+
+<StatsModal IsVisible="@VM.ShowStatsModal"
+            NamespaceInfo="@VM.State.CurrentNamespace"
+            Queues="@VM.Queues"
+            Topics="@VM.Topics"
+            OnClose="@(() => VM.ShowStatsModal = false)" />
+
+@code {
+    [SupplyParameterFromQuery(Name = "namespace")]
+    public string? NamespaceParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "rg")]
+    public string? ResourceGroupParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "sub")]
+    public string? SubscriptionIdParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "name")]
+    public string? NameParam { get; set; }
+
+    private ElementReference renameInputRef;
+    private MessageList? _messageListRef;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await VM.InitializeAsync(NamespaceParam, ResourceGroupParam, SubscriptionIdParam, NameParam);
+    }
+
+    protected override void OnInitialized()
+    {
+        VM.OnChange += StateHasChanged;
+        VM.OnClearSelectionRequested = () => 
+        {
+            if (_messageListRef != null) 
+                _messageListRef.ClearSelection();
+            return Task.CompletedTask;
+        };
+        VM.OnFocusRenameInputRequested = async () =>
+        {
+            await Task.Delay(10); // Wait for render
+            try { await renameInputRef.FocusAsync(); } catch { }
+        };
+    }
+
+    private async Task HandleRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await VM.SaveDisplayNameAsync();
+        else if (e.Key == "Escape") VM.CancelRename();
+    }
+
+    public void Dispose()
+    {
+        VM.OnChange -= StateHasChanged;
+    }
+}

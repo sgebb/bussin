@@ -1,0 +1,130 @@
+@* Entity selection panel for queues, topics, and subscriptions *@
+<div class="row g-2">
+    <!-- Queues -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-1 px-2">
+                <small class="fw-bold">Queues (@Queues.Count)</small>
+            </div>
+            <div class="entity-list-scroll">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Active</th>
+                            <th>DLQ</th>
+                            <th>Scheduled</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var queue in Queues)
+                        {
+                            <tr class="@(SelectedQueueName == queue.Name ? "table-active" : "")" 
+                                @onclick="() => OnQueueSelected.InvokeAsync(queue.Name)" 
+                                style="cursor: pointer;">
+                                <td><small>@queue.Name</small></td>
+                                <td><small>@queue.ActiveMessageCount</small></td>
+                                <td><small class="@(queue.DeadLetterMessageCount > 0 ? "text-danger fw-bold" : "")">@queue.DeadLetterMessageCount</small></td>
+                                <td><small>@queue.ScheduledMessageCount</small></td>
+                                <td><small>@queue.Status</small></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Topics -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-1 px-2">
+                <small class="fw-bold">Topics (@Topics.Count)</small>
+            </div>
+            <div class="entity-list-scroll">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Subs</th>
+                            <th>Scheduled</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var topic in Topics)
+                        {
+                            <tr class="@(SelectedTopicName == topic.Name ? "table-active" : "")" 
+                                @onclick="() => OnTopicSelected.InvokeAsync(topic.Name)" 
+                                style="cursor: pointer;">
+                                <td><small>@topic.Name</small></td>
+                                <td><small>@topic.SubscriptionCount</small></td>
+                                <td><small>@topic.ScheduledMessageCount</small></td>
+                                <td><small>@topic.Status</small></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subscriptions -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header py-1 px-2">
+                <small class="fw-bold">Subscriptions (@Subscriptions.Count)</small>
+            </div>
+            <div class="entity-list-scroll">
+                @if (SelectedTopicName == null)
+                {
+                    <small class="text-muted p-2 d-block">Select a topic</small>
+                }
+                else if (IsLoadingSubscriptions)
+                {
+                    <div class="p-2"><div class="spinner-border spinner-border-sm"></div></div>
+                }
+                else
+                {
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Active</th>
+                                <th>DLQ</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sub in Subscriptions)
+                            {
+                                <tr class="@(SelectedSubscriptionName == sub.Name ? "table-active" : "")" 
+                                    @onclick="() => OnSubscriptionSelected.InvokeAsync(sub.Name)" 
+                                    style="cursor: pointer;">
+                                    <td><small>@sub.Name</small></td>
+                                    <td><small>@sub.ActiveMessageCount</small></td>
+                                    <td><small class="@(sub.DeadLetterMessageCount > 0 ? "text-danger fw-bold" : "")">@sub.DeadLetterMessageCount</small></td>
+                                    <td><small>@sub.Status</small></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<ServiceBusQueueInfo> Queues { get; set; } = new();
+    [Parameter] public List<ServiceBusTopicInfo> Topics { get; set; } = new();
+    [Parameter] public List<ServiceBusSubscriptionInfo> Subscriptions { get; set; } = new();
+    [Parameter] public string? SelectedQueueName { get; set; }
+    [Parameter] public string? SelectedTopicName { get; set; }
+    [Parameter] public string? SelectedSubscriptionName { get; set; }
+    [Parameter] public bool IsLoadingSubscriptions { get; set; }
+    [Parameter] public EventCallback<string> OnQueueSelected { get; set; }
+    [Parameter] public EventCallback<string> OnTopicSelected { get; set; }
+    [Parameter] public EventCallback<string> OnSubscriptionSelected { get; set; }
+}

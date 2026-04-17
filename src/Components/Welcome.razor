@@ -1,0 +1,209 @@
+@inject NavigationManager Navigation
+@inject IAuthenticationService AuthService
+@inject IJSRuntime JS
+
+<div class="welcome-container">
+    <div class="welcome-card">
+
+        <div class="brand-section">
+            <div class="brand-logo">
+                <img src="favicon.svg" width="52" height="52" alt="Bussin logo" />
+            </div>
+            <h1 class="brand-name">bussin</h1>
+            <p class="lead">Modern Azure Service Bus Explorer — runs free in your browser</p>
+        </div>
+
+        <div class="actions-section">
+            <button class="btn btn-primary btn-lg w-100 mb-3 py-3 fw-bold login-btn" @onclick="NavigateToLogin">
+                <i class="bi bi-microsoft me-2"></i>Sign in with Microsoft
+            </button>
+
+            <div class="divider">
+                <span>or</span>
+            </div>
+
+            <button class="btn btn-outline-secondary w-100 py-2 demo-btn" @onclick="EnterDemoMode">
+                <i class="bi bi-play-circle me-2"></i>
+                Run Demo — no login required
+            </button>
+        </div>
+
+        <div class="features-section mt-5 pt-4 border-top">
+            <h2 class="h5 mb-4 text-secondary">Why Bussin? It's 100% free.</h2>
+            <div class="feature-list text-start">
+                <div class="feature-item">
+                    <i class="bi bi-lightning-charge text-warning"></i>
+                    <div>
+                        <strong>Works in any browser</strong>
+                        <span class="text-muted">No installation, no plugins. Just open and connect.</span>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <i class="bi bi-shield-check text-success"></i>
+                    <div>
+                        <strong>Zero-backend security</strong>
+                        <span class="text-muted">Your data goes directly to Azure — never through Bussin.</span>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <i class="bi bi-gear-wide-connected text-primary"></i>
+                    <div>
+                        <strong>Full message control</strong>
+                        <span class="text-muted">Peek, send, purge, resubmit — everything you need.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="security-link-section mt-4 pt-4 border-top">
+            <a href="/blog/security-architecture" class="security-link">
+                <i class="bi bi-shield-lock me-2"></i>
+                How does Bussin handle my credentials and permissions?
+                <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+        </div>
+
+        <div class="blog-cta mt-4 pt-3 border-top text-center">
+            <span class="blog-label">From the blog</span>
+            <a href="/blog" class="blog-link">
+                <i class="bi bi-journal-richtext me-1"></i>
+                Azure Service Bus Guides, Tips &amp; Best Practices
+                <i class="bi bi-chevron-right ms-1 small"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+    .welcome-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 2rem;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+    }
+    .welcome-card {
+        background-color: var(--card-bg);
+        padding: 3rem;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        text-align: center;
+        max-width: 620px;
+        width: 100%;
+        border: 1px solid var(--border-color);
+    }
+
+    /* Brand / Logo */
+    .brand-section { margin-bottom: 2rem; }
+    .brand-logo {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 1rem;
+        filter: drop-shadow(0 4px 12px rgba(13,110,253,0.4));
+    }
+    .brand-name {
+        font-size: 2.8rem;
+        font-weight: 900;
+        letter-spacing: -0.04em;
+        color: var(--text-color);
+        margin-bottom: 0.5rem;
+    }
+    .lead { font-size: 1rem; color: var(--muted-text); }
+
+    /* Buttons */
+    .login-btn { font-size: 1.05rem; letter-spacing: 0.01em; }
+    .demo-btn { font-size: 0.95rem; }
+
+    /* Divider */
+    .divider {
+        display: flex;
+        align-items: center;
+        text-align: center;
+        margin: 1.25rem 0;
+        color: var(--muted-text);
+    }
+    .divider::before, .divider::after {
+        content: '';
+        flex: 1;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .divider span { padding: 0 10px; font-size: 0.85rem; }
+
+    /* Feature list */
+    .feature-list { display: flex; flex-direction: column; gap: 1rem; }
+    .feature-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        background: rgba(0,0,0,0.04);
+    }
+    .feature-item i { font-size: 1.25rem; margin-top: 0.1rem; flex-shrink: 0; }
+    .feature-item div { display: flex; flex-direction: column; }
+    .feature-item strong { font-size: 0.9rem; margin-bottom: 0.1rem; }
+    .feature-item span { font-size: 0.82rem; }
+
+    /* Security link */
+    .security-link-section { text-align: left; }
+    .security-link {
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        color: var(--text-color);
+        font-size: 0.9rem;
+        font-weight: 500;
+        padding: 0.85rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        transition: all 0.2s;
+        background: rgba(0,0,0,0.02);
+    }
+    .security-link:hover {
+        border-color: #0d6efd;
+        color: #0d6efd;
+        background: rgba(13,110,253,0.04);
+    }
+    .security-link i:first-child { color: #198754; }
+
+    /* Blog CTA */
+    .blog-cta { }
+    .blog-label {
+        display: block;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted-text);
+        margin-bottom: 0.5rem;
+    }
+    .blog-link {
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #0d6efd;
+        text-decoration: none;
+        padding: 0.4rem 0.75rem;
+        border-radius: 8px;
+        transition: background 0.2s;
+    }
+    .blog-link:hover {
+        background: rgba(13,110,253,0.08);
+        text-decoration: none;
+        color: #0a58ca;
+    }
+</style>
+
+@code {
+    async Task NavigateToLogin()
+    {
+        await AuthService.LoginWithRedirectAsync(new[] { "https://servicebus.azure.net/user_impersonation" });
+    }
+
+    void EnterDemoMode()
+    {
+        Navigation.NavigateTo("demo", forceLoad: true);
+    }
+}

@@ -1,0 +1,106 @@
+@using Bussin.Models
+@using Azure.Core
+
+@if (IsVisible)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="Close">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-bar-chart-line me-2"></i>
+                        Message Statistics
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Single dropdown with optgroups -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">View statistics for:</label>
+                        <select class="form-select" @bind="selectedValue" @bind:after="OnSelectionChanged">
+                            <option value="namespace:">Entire Namespace</option>
+                            
+                            @if (Queues.Any())
+                            {
+                                <optgroup label="Queues">
+                                    @foreach (var queue in Queues.OrderBy(q => q.Name))
+                                    {
+                                        <option value="queue:@queue.Name">@queue.Name</option>
+                                    }
+                                </optgroup>
+                            }
+                            
+                            @if (Topics.Any())
+                            {
+                                <optgroup label="Topics">
+                                    @foreach (var topic in Topics.OrderBy(t => t.Name))
+                                    {
+                                        <option value="topic:@topic.Name">@topic.Name</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Stats Panel with key to force re-render -->
+                    <StatsPanel @key="statsPanelKey"
+                                NamespaceInfo="@NamespaceInfo"
+                                EntityName="@GetEntityName()"
+                                EntityType="@GetEntityType()"
+                                AutoLoad="true" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public ServiceBusNamespaceInfo? NamespaceInfo { get; set; }
+    [Parameter] public List<ServiceBusQueueInfo> Queues { get; set; } = new();
+    [Parameter] public List<ServiceBusTopicInfo> Topics { get; set; } = new();
+
+    private string selectedValue = "namespace:";
+    private int statsPanelKey = 0;
+
+    private void OnSelectionChanged()
+    {
+        // Increment key to force StatsPanel to re-create and auto-load
+        statsPanelKey++;
+    }
+
+    private string? GetEntityName()
+    {
+        if (string.IsNullOrEmpty(selectedValue) || selectedValue == "namespace:")
+            return null;
+        
+        // Format is "type:name"
+        var parts = selectedValue.Split(':', 2);
+        return parts.Length == 2 ? parts[1] : null;
+    }
+
+    private string? GetEntityType()
+    {
+        if (string.IsNullOrEmpty(selectedValue) || selectedValue == "namespace:")
+            return null;
+        
+        // Format is "type:name"
+        var parts = selectedValue.Split(':', 2);
+        if (parts.Length == 2 && !string.IsNullOrEmpty(parts[1]))
+        {
+            return parts[0]; // "queue" or "topic"
+        }
+        return null;
+    }
+
+    private async Task Close()
+    {
+        selectedValue = "namespace:";
+        statsPanelKey = 0;
+        await OnClose.InvokeAsync();
+    }
+}

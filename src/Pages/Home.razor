@@ -1,0 +1,422 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using Microsoft.JSInterop
+@using System.Text.Json
+@inject IAuthenticationService AuthService
+@inject IAzureResourceService ResourceService
+@inject NavigationManager Navigation
+@inject NavigationStateService NavState
+@inject IConfiguration Configuration
+@inject IJSRuntime JSRuntime
+
+<PageTitle>bussin</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="container-fluid p-4">
+
+            @if (hasArmPermission)
+            {
+                <div class="row justify-content-center mb-4">
+                    <div class="col-lg-8">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="position-relative flex-grow-1">
+                                <input type="text" class="form-control form-control-lg text-center" placeholder="Search namespaces..." 
+                                       @bind="searchTerm" @bind:event="oninput" />
+                                @if (isRefreshing)
+                                {
+                                    <div class="position-absolute top-50 end-0 translate-middle-y me-3">
+                                        <div class="spinner-border spinner-border-sm text-muted" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <a href="user" class="text-secondary text-decoration-none text-nowrap small" title="Can't find your namespace? Check your tenant settings.">
+                                <small><i class="bi bi-question-circle me-1"></i>Wrong Tenant?</small>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if ((!hasArmPermission || !hasSbPermission) && !isGrantingConsent)
+            {
+                <div class="alert alert-warning border-warning shadow-sm">
+                    <h5 class="alert-heading d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock-fill"></i> Permission Required
+                    </h5>
+                    
+                    <p class="mb-3">
+                        <strong>bussin</strong> needs your permission to discover and manage your resources. 
+                        This is a secure <strong>client-side only</strong> app: all tokens stay in your browser, 
+                        and it cannot perform any actions unless you instigate them yourself.
+                    </p>
+                    <p class="small text-muted mb-4">
+                        Azure separates resource discovery from data operations, so we need consent for both:
+                    </p>
+                    
+                        <div class="list-group list-group-flush bg-transparent mb-4">
+                        <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
+                            <i class="bi @(hasArmPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
+                            <div>
+                                <h6 class="mb-0 @(hasArmPermission ? "text-success" : "")">Azure Management API</h6>
+                                <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to list your Service Bus namespaces so you can select them.</small>
+                                <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Resource Discovery & Enumeration</div>
+                            </div>
+                        </div>
+                        <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
+                            <i class="bi @(hasSbPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
+                            <div>
+                                <h6 class="mb-0 @(hasSbPermission ? "text-success" : "")">Service Bus Data Plane</h6>
+                                <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to peek, send, and monitor messages within your queues and topics.</small>
+                                <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Message Operations & Monitoring</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(consentErrorMessage))
+                    {
+                        <div class="alert alert-danger mb-3 py-2 small">
+                            <i class="bi bi-exclamation-octagon me-2"></i> @consentErrorMessage
+                        </div>
+                    }
+
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-warning px-4 fw-bold" @onclick="StartConsentFlow" disabled="@isGrantingConsent">
+                            <i class="bi bi-shield-shaded me-2"></i> Grant Required Permissions
+                        </button>
+                        @if (!string.IsNullOrEmpty(currentTenantId))
+                        {
+                            <button class="btn btn-outline-secondary px-3" @onclick="SwitchToHomeTenant">
+                                <i class="bi bi-house-door me-2"></i> Switch back to Home Tenant
+                            </button>
+                        }
+                    </div>
+
+                    <div class="mt-4 pt-3 border-top border-warning-subtle text-muted small">
+                        <i class="bi bi-lightbulb text-warning me-1"></i>
+                        <strong>Stuck here after granting access?</strong> Sometimes the authentication cache gets out of sync (like after a password change). 
+                        Try <a href="user" class="text-decoration-none fw-bold text-primary">logging out and back in</a> to resolve it.
+                    </div>
+                </div>
+            }
+            else if (isGrantingConsent)
+            {
+                <div class="alert alert-info border-info shadow-sm">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div>
+                            <h6 class="mb-0 fw-bold">Authenticating...</h6>
+                            <span class="text-muted small">
+                                @if (!hasArmPermission) { <span>Step 1/2: Requesting Azure Management access. Please handle the popup window.</span> }
+                                else { <span>Step 2/2: Requesting Service Bus Data access. Second popup incoming...</span> }
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            }
+            
+
+            
+            @if (hasArmPermission)
+            {
+                @if (isRefreshing && namespaces.Count == 0)
+                {
+                    <div class="text-center mb-3">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (namespaces.Count > 0)
+                {
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
+                        @foreach (var ns in FilteredNamespaces)
+                        {
+                            <div class="col-md-4 mb-3">
+                                <div class="card h-100 namespace-card" style="cursor: pointer;">
+                                    <button class="favorite-btn @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "favorited" : "not-favorited")" 
+                                            @onclick="async () => await ToggleFavorite(ns.FullyQualifiedNamespace)" 
+                                            @onclick:stopPropagation="true"
+                                            title="@(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "Remove from favorites" : "Add to favorites")">
+                                        <i class="bi @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "bi-star-fill" : "bi-star")"></i>
+                                    </button>
+                                    <div class="card-body" @onclick="() => NavigateToExplorer(ns)">
+                                        <h5 class="card-title">@ns.Name</h5>
+                                        <p class="card-text">
+                                            <small class="text-muted">
+                                                <strong>Subscription:</strong> @ns.SubscriptionName<br />
+                                                <strong>Resource Group:</strong> @ns.ResourceGroup<br />
+                                                <strong>Location:</strong> @ns.Location<br />
+                                                <strong>Tenant:</strong> @ns.TenantId
+                                            </small>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (!isRefreshing)
+                {
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center p-5">
+                                    <i class="bi bi-search display-1 text-muted mb-4"></i>
+                                    <h4 class="mb-3">No Service Bus Namespaces Found</h4>
+                                    <p class="text-muted mb-4 lead">
+                                        We checked your subscriptions but couldn't find any Service Bus namespaces.
+                                    </p>
+                                    
+                                    <div class="d-flex justify-content-center gap-3 mb-4">
+                                        <div class="text-start">
+                                            <h6 class="text-secondary"><i class="bi bi-question-circle me-2"></i>Common Reasons:</h6>
+                                            <ul class="text-muted small">
+                                                <li>You haven't created any namespaces yet.</li>
+                                                <li>You don't have the <code>Reader</code> role on the resource.</li>
+                                                <li>The namespace is in a different Azure AD tenant.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <a href="https://portal.azure.com/#create/Microsoft.ServiceBus" target="_blank" class="btn btn-primary">
+                                            <i class="bi bi-plus-lg me-2"></i>Create Namespace
+                                        </a>
+                                        <a href="user" class="btn btn-outline-secondary">
+                                            <i class="bi bi-person-gear me-2"></i>Check Tenant
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-3">
+                    <strong>Error:</strong> @errorMessage
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <Welcome />
+    </NotAuthorized>
+</AuthorizeView>
+
+<BuildInfo />
+
+@code {
+    private Dictionary<string, ServiceBusNamespaceInfo> namespaceDict = new();
+    private List<ServiceBusNamespaceInfo> namespaces => namespaceDict.Values.OrderBy(ns => ns.Name).ToList();
+    private bool isRefreshing = false;
+    private string? errorMessage;
+    private string searchTerm = "";
+    private CancellationTokenSource? _loadCts;
+    private bool hasArmPermission = false;
+    private bool hasSbPermission = false;
+    private bool isGrantingConsent = false;
+    private string? consentErrorMessage = null;
+
+    private string? currentTenantName;
+    private string? currentTenantId;
+
+    private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
+        string.IsNullOrWhiteSpace(searchTerm) 
+            ? namespaces 
+            : namespaces.Where(ns => 
+                ns.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (ns.SubscriptionName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                ns.ResourceGroup.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            await CheckPermissions();
+            if (hasArmPermission)
+            {
+                _ = LoadNamespacesAsync();
+            }
+        }
+    }
+
+    private async Task CheckPermissions()
+    {
+        try
+        {
+            // Try to find the tenant name for the UI
+            currentTenantId = await AuthService.GetCurrentTenantIdAsync();
+            if (!string.IsNullOrEmpty(currentTenantId))
+            {
+                var homeCred = await AuthService.GetHomeTokenCredentialAsync();
+                if (homeCred != null)
+                {
+                    await foreach (var tenant in ResourceService.ListTenantsAsync(homeCred))
+                    {
+                        if (tenant.TenantId == currentTenantId)
+                        {
+                            currentTenantName = tenant.DisplayName;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Check Management API permission
+            var armCredential = await AuthService.GetTokenCredentialAsync();
+            hasArmPermission = armCredential != null;
+
+            // Check Service Bus data plane permission
+            var sbToken = await AuthService.GetServiceBusTokenAsync();
+            hasSbPermission = !string.IsNullOrEmpty(sbToken);
+            
+            Console.WriteLine($"DEBUG: Permissions checked - ARM: {hasArmPermission}, ServiceBus: {hasSbPermission}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking permissions: {ex.Message}");
+            hasArmPermission = false;
+            hasSbPermission = false;
+        }
+    }
+
+    private async Task SwitchToHomeTenant()
+    {
+        await AuthService.SetTenantAsync(null);
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }
+
+    private async Task StartConsentFlow()
+    {
+        isGrantingConsent = true;
+        consentErrorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var tenantId = await AuthService.GetCurrentTenantIdAsync();
+            var loginHint = await AuthService.GetUserNameAsync();
+            
+            // 1. Management Consent
+            if (!hasArmPermission)
+            {
+                Console.WriteLine("Requesting Management consent...");
+                var success = await AuthService.AcquireTokenPopupAsync("https://management.azure.com/user_impersonation", tenantId, loginHint);
+
+                if (!success)
+                {
+                    consentErrorMessage = "Management API consent was not granted. Please try again.";
+                    StateHasChanged();
+                    await Task.Delay(1000); 
+                    Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+                    return;
+                }
+                hasArmPermission = true;
+                StateHasChanged();
+            }
+
+            // Give a generous delay to ensure the first window is fully closed and MSAL state is flushed
+            await Task.Delay(2500);
+
+            // 2. Service Bus Consent
+            if (!hasSbPermission)
+            {
+                Console.WriteLine("Requesting Service Bus consent...");
+                var success = await AuthService.AcquireTokenPopupAsync("https://servicebus.azure.net/user_impersonation", tenantId, loginHint);
+
+                if (!success)
+                {
+                    consentErrorMessage = "Service Bus API consent was not granted. Please try again.";
+                    StateHasChanged();
+                    await Task.Delay(1000);
+                    Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+                    return;
+                }
+                hasSbPermission = true;
+                StateHasChanged();
+            }
+
+            Console.WriteLine("✓ Consent acquired. Reloading dashboard...");
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            consentErrorMessage = $"An unexpected error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isGrantingConsent = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadNamespacesAsync()
+    {
+        _loadCts?.Cancel();
+        _loadCts = new CancellationTokenSource();
+        var ct = _loadCts.Token;
+
+        isRefreshing = true;
+        errorMessage = null;
+
+        try
+        {
+            var credential = await AuthService.GetTokenCredentialAsync();
+            if (credential == null)
+            {
+                errorMessage = "Failed to get authentication token";
+                isRefreshing = false;
+                return;
+            }
+
+            await foreach (var ns in ResourceService.ListServiceBusNamespacesAsync(credential, ct))
+            {
+                if (ct.IsCancellationRequested) break;
+                namespaceDict[ns.Name] = ns;
+                StateHasChanged();
+            }
+            
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load namespaces: {ex.Message}";
+        }
+        finally
+        {
+            isRefreshing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NavigateToExplorer(ServiceBusNamespaceInfo ns)
+    {
+        var url = $"explorer?namespace={Uri.EscapeDataString(ns.FullyQualifiedNamespace)}&rg={Uri.EscapeDataString(ns.ResourceGroup)}&sub={Uri.EscapeDataString(ns.SubscriptionId)}&name={Uri.EscapeDataString(ns.Name)}";
+        Navigation.NavigateTo(url);
+    }
+
+    private async Task ToggleFavorite(string fullyQualifiedNamespace)
+    {
+        var ns = namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
+        if (ns == null) return;
+
+        if (NavState.IsFavorite(fullyQualifiedNamespace))
+        {
+            await NavState.RemoveFromFavoritesAsync(fullyQualifiedNamespace);
+        }
+        else
+        {
+            var displayName = ns.Name.Replace(".servicebus.windows.net", "");
+            await NavState.AddToFavoritesAsync(fullyQualifiedNamespace, ns.ResourceGroup, ns.SubscriptionId, displayName);
+        }
+    }
+}
