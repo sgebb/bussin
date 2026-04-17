@@ -1,72 +1,56 @@
-# bussin
+# 🚌 Bussin: The Modern Azure Service Bus Explorer
 
-Bussin is a client-side Azure Service Bus explorer. It runs entirely in your browser (no backend) and can be installed as a PWA.
+**Bussin** is a high-performance, client-side Azure Service Bus explorer. It runs entirely in your browser as a Progressive Web App (PWA), offering a secure and private way to manage your messaging infrastructure without any backend proxy or intermediate servers.
 
-## Use
+[![Use Bussin](https://img.shields.io/badge/Use%20Bussin-bussin.dev-blueviolet?style=for-the-badge)](https://bussin.dev/)
 
-https://bussin.dev/
+---
 
-## How it works
+## 🚀 Key Features
 
-- **UI**: Blazor WebAssembly
-- **Auth**: MSAL (Entra)
-- **Resource discovery**: Azure Management API (ARM) to enumerate subscriptions/namespaces/entities
-- **Message/data-plane operations**: direct AMQP-over-WebSockets from the browser (via the bundled `client-js` library)
+- **Direct AMQP Operations**: Fast and reliable message operations (Send, Receive, Peek, Purge).
+- **Dead-letter Management**: Easily inspect and resubmit dead-lettered messages.
+- **Privacy-First Architecture**: Your data never leaves your browser. Bussin communicates directly with Azure APIs.
+- **Zero Installation**: Access it via [bussin.dev](https://bussin.dev/) or install it as a PWA for offline-enabled access.
+- **Entra ID (Azure AD) Integration**: Secure authentication using your existing Azure identity and RBAC roles.
+- **Resource Discovery**: Automatic enumeration of subscriptions, namespaces, and entities.
 
-## Permissions and access
+## 🛠 Why Bussin?
 
-Bussin uses your Entra (Azure AD) identity. What you can do in the app is limited by what you're allowed to do in Azure.
+If you are looking for an **Azure Service Bus Explorer alternative** that is cross-platform and web-native, Bussin is built for you:
 
-- **Azure AD delegated permission: Azure Management API**
-  - **Used for**: listing subscriptions, finding Service Bus namespaces, and reading entity metadata.
-- **Azure AD delegated permission: Azure Service Bus**
-  - **Used for**: acquiring tokens for Service Bus data-plane operations (send/receive/peek/dead-letter/purge, etc.).
+- **No Backend**: Unlike other web-based explorers, Bussin has no backend. Your Service Bus connection strings or tokens are never sent to a third-party server.
+- **Modern UI**: A clean, responsive interface built with Blazor WebAssembly and Bootstrap 5.
+- **Dev-Focused**: Designed for developers who need to quickly debug queues and topics without the bloat of traditional desktop clients.
 
-The app uses a two-step consent flow (ARM first, then Service Bus) because these are separate resources.
+## 🔒 Permissions & Security
 
-You also need Azure RBAC roles on the namespaces you want to use:
+Bussin respects your Azure RBAC configuration. It uses two-step delegated consent:
+1. **Azure Management API**: To list namespaces and entities.
+2. **Azure Service Bus**: For data-plane operations (Peek, Send, etc.).
 
-- **Azure Service Bus Data Receiver**
-  - **Used for**: peeking/receiving messages.
-- **Azure Service Bus Data Sender**
-  - **Used for**: sending messages.
-- **Azure Service Bus Data Owner**
-  - **Used for**: full message operations (including destructive actions like delete/purge/dead-letter management).
+*Required Roles:* Azure Service Bus Data Owner, Receiver, or Sender.
 
-## Build verification
-
-Deployments include a `buildinfo.json` file in the published site and log the commit/build time in the browser console.
-
-## Development (optional)
+## 🏗 Development
 
 Requirements:
-
 - .NET 10 SDK
 - Node.js 20+
 
-Build steps (same as CI):
-
 ```bash
-cd client-js
-npm ci
-npm run build
+# Build client-side AMQP library
+cd client-js && npm ci && npm run build
 
-dotnet publish src/Bussin.csproj -c Release
+# Build Blazor WASM app
+cd ../src && dotnet publish -c Release
 ```
 
-## License
+## 📜 License
 
 Business Source License 1.1 (BSL) - See [LICENSE](LICENSE) file for details.
-Free to use (including production) via [bussin.dev](https://bussin.dev/).
-Commercial redistribution or rebranding is strictly prohibited.
+- **Standard functionality** is always free via [bussin.dev](https://bussin.dev/).
+- **Commercial redistribution** or rebranding is strictly prohibited.
 
-## Tech Stack
+---
 
-- [Blazor WebAssembly](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor) - .NET running in the browser
-- [rhea](https://github.com/amqp/rhea) - AMQP 1.0 client for JavaScript
-- [MSAL.js](https://github.com/AzureAD/microsoft-authentication-library-for-js) - Microsoft Authentication Library
-- [Bootstrap 5](https://getbootstrap.com/) - UI framework
-
-## Disclaimer
-
-This is a community tool and is not officially supported by Microsoft. Use at your own risk.
+*Disclaimer: Bussin is a community tool and is not officially supported by Microsoft. Use at your own risk.*
