@@ -1,4 +1,4 @@
-﻿using Bussin.Models;
+using Bussin.Models;
 
 namespace Bussin.Services;
 
@@ -173,17 +173,34 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         try
         {
             var token = await GetTokenAsync();
-            // Peek first to find the position of our target messages
-            // This tells us how many messages are ahead of our targets
-            var peeked = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, 100, 0, fromDeadLetter);
-            
-            // Find the index of the last message we need
             var maxSeq = sequenceNumbers.Max();
-            var lastTargetIndex = peeked.FindLastIndex(m => m.SequenceNumber == maxSeq);
             
-            // Lock up to and including that position (plus a small buffer)
-            var countToLock = lastTargetIndex >= 0 ? lastTargetIndex + 1 : sequenceNumbers.Length;
-            var lockedMessages = await _jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 5, fromDeadLetter, countToLock);
+            int itemsToLock = 0;
+            int peekSequence = 0;
+            
+            while (true)
+            {
+                var peeked = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, 250, peekSequence, fromDeadLetter);
+                if (peeked.Count == 0)
+                {
+                    break;
+                }
+                
+                var lastInBatch = peeked.Last();
+                if ((lastInBatch.SequenceNumber ?? 0) >= maxSeq)
+                {
+                    var exactIndex = peeked.FindLastIndex(m => m.SequenceNumber == maxSeq);
+                    itemsToLock += (exactIndex >= 0 ? exactIndex + 1 : peeked.Count);
+                    break;
+                }
+                
+                itemsToLock += peeked.Count;
+                peekSequence = (int)(lastInBatch.SequenceNumber ?? 0) + 1;
+            }
+            
+            if (itemsToLock <= 0) itemsToLock = sequenceNumbers.Length;
+            
+            var lockedMessages = await _jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 10, fromDeadLetter, itemsToLock);
             return lockedMessages;
         }
         catch (Exception ex)
@@ -198,16 +215,34 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         try
         {
             var token = await GetTokenAsync();
-            // Peek first to find the position of our target messages
-            var peeked = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 100, 0, fromDeadLetter);
-            
-            // Find the index of the last message we need
             var maxSeq = sequenceNumbers.Max();
-            var lastTargetIndex = peeked.FindLastIndex(m => m.SequenceNumber == maxSeq);
             
-            // Lock up to and including that position
-            var countToLock = lastTargetIndex >= 0 ? lastTargetIndex + 1 : sequenceNumbers.Length;
-            var lockedMessages = await _jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 5, fromDeadLetter, countToLock);
+            int itemsToLock = 0;
+            int peekSequence = 0;
+            
+            while (true)
+            {
+                var peeked = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 250, peekSequence, fromDeadLetter);
+                if (peeked.Count == 0)
+                {
+                    break;
+                }
+                
+                var lastInBatch = peeked.Last();
+                if ((lastInBatch.SequenceNumber ?? 0) >= maxSeq)
+                {
+                    var exactIndex = peeked.FindLastIndex(m => m.SequenceNumber == maxSeq);
+                    itemsToLock += (exactIndex >= 0 ? exactIndex + 1 : peeked.Count);
+                    break;
+                }
+                
+                itemsToLock += peeked.Count;
+                peekSequence = (int)(lastInBatch.SequenceNumber ?? 0) + 1;
+            }
+            
+            if (itemsToLock <= 0) itemsToLock = sequenceNumbers.Length;
+            
+            var lockedMessages = await _jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 10, fromDeadLetter, itemsToLock);
             return lockedMessages;
         }
         catch (Exception ex)
@@ -368,11 +403,11 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             List<ServiceBusMessage> allMessages;
             if (queueName != null)
             {
-                allMessages = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, 100, 0, fromDeadLetter);
+                allMessages = await _jsInterop.PeekQueueMessagesBySequenceAsync(namespaceName, queueName, token, sequenceNumbers, fromDeadLetter);
             }
             else
             {
-                allMessages = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, token, 100, 0, fromDeadLetter);
+                allMessages = await _jsInterop.PeekSubscriptionMessagesBySequenceAsync(namespaceName, topicName!, subscriptionName!, token, sequenceNumbers, fromDeadLetter);
             }
             
             var messagesToResend = allMessages.Where(m => sequenceNumbers.Contains(m.SequenceNumber ?? -1)).ToList();

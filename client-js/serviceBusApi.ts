@@ -1294,18 +1294,31 @@ async function peekMessagesBySequence(
 
         const messages: ServiceBusMessage[] = [];
 
-        // Peek messages around each sequence number
-        for (const seqNum of sequenceNumbers) {
-            try {
-                const peeked = await managementClient.peekMessages(seqNum, 1);
-                if (peeked.length > 0) {
-                    const msg = parseServiceBusMessage(peeked[0]);
-                    if (msg.sequenceNumber === seqNum) {
-                        messages.push(msg);
+        // Fetch messages concurrently in chunks to dramatically improve speed
+        const chunkSize = 50;
+        for (let i = 0; i < sequenceNumbers.length; i += chunkSize) {
+            const chunk = sequenceNumbers.slice(i, i + chunkSize);
+            
+            const promises = chunk.map(async (seqNum) => {
+                try {
+                    const peeked = await managementClient.peekMessages(seqNum, 1);
+                    if (peeked.length > 0) {
+                        const msg = parseServiceBusMessage(peeked[0]);
+                        if (msg.sequenceNumber === seqNum) {
+                            return msg;
+                        }
                     }
+                } catch {
+                    // Message may have been deleted, skip
                 }
-            } catch {
-                // Message may have been deleted, skip
+                return null;
+            });
+            
+            const results = await Promise.all(promises);
+            for (const msg of results) {
+                if (msg) {
+                    messages.push(msg);
+                }
             }
         }
 

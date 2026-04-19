@@ -87,8 +87,14 @@ export class ManagementClient {
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
 
-            // Set up receiver for response
+            const messageId = `peek-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
             const responseHandler = (context: any) => {
+                // Ensure this response is actually for our specific request
+                if (context.message.correlation_id !== messageId) {
+                    return;
+                }
+
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
 
@@ -142,7 +148,7 @@ export class ManagementClient {
                 application_properties: {
                     operation: 'com.microsoft:peek-message'
                 },
-                message_id: `peek-${Date.now()}`
+                message_id: messageId
             };
 
             this.sender!.send(request);
@@ -166,8 +172,11 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
+            const messageId = `delete-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
             const responseHandler = (context: any) => {
+                if (context.message.correlation_id !== messageId) return;
+
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
 
@@ -196,7 +205,7 @@ export class ManagementClient {
                 application_properties: {
                     operation: 'com.microsoft:receive-by-sequence-number'
                 },
-                message_id: `delete-${Date.now()}`
+                message_id: messageId
             };
 
             this.sender!.send(request);
@@ -219,8 +228,11 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
+            const messageId = `lock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
             const responseHandler = (context: any) => {
+                if (context.message.correlation_id !== messageId) return;
+
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
 
@@ -268,7 +280,7 @@ export class ManagementClient {
                 application_properties: {
                     operation: 'com.microsoft:receive-by-sequence-number'
                 },
-                message_id: `lock-${Date.now()}`
+                message_id: messageId
             };
 
             this.sender!.send(request);
@@ -290,8 +302,11 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
+            const messageId = `disposition-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
             const responseHandler = (context: any) => {
+                if (context.message.correlation_id !== messageId) return;
+
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
 
@@ -324,7 +339,7 @@ export class ManagementClient {
                 application_properties: {
                     operation: 'com.microsoft:update-disposition'
                 },
-                message_id: `disposition-${Date.now()}`
+                message_id: messageId
             };
 
             this.sender!.send(request);
@@ -350,8 +365,11 @@ export class ManagementClient {
 
         return new Promise((resolve, reject) => {
             const replyTo = this.replyTo!;
+            const messageId = `purge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
             const responseHandler = (context: any) => {
+                if (context.message.correlation_id !== messageId) return;
+
                 const statusCode = context.message.application_properties?.statusCode;
                 const statusDescription = context.message.application_properties?.statusDescription;
 
@@ -385,7 +403,7 @@ export class ManagementClient {
                 application_properties: {
                     operation: 'com.microsoft:purge-messages'
                 },
-                message_id: `purge-${Date.now()}`
+                message_id: messageId
             };
 
             this.sender!.send(request);
