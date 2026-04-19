@@ -67,9 +67,18 @@ export class MessageSender {
             throw new Error('Sender not opened. Call open() first.');
         }
 
-        for (const msg of messages) {
-            const amqpMessage = this.createAmqpMessage(msg.body, msg.properties);
-            await this.dispatchMessage(amqpMessage);
+        const chunkSize = 500;
+        for (let i = 0; i < messages.length; i += chunkSize) {
+            const chunk = messages.slice(i, i + chunkSize);
+            const promises = chunk.map(msg => {
+                const amqpMessage = this.createAmqpMessage(msg.body, msg.properties);
+                return this.dispatchMessage(amqpMessage);
+            });
+            await Promise.all(promises);
+            // tiny delay to prevent slamming the broker
+            if (i + chunkSize < messages.length) {
+                await new Promise(r => setTimeout(r, 50));
+            }
         }
     }
 
@@ -212,12 +221,39 @@ export class MessageSender {
 
             const sendHandler = () => {
                 if (settled) return;
-                settled = true;
                 try {
-                    this.sender!.send(message);
-                    resolve();
+                    const delivery = this.sender!.send(message);
+                    
+                    // We must wait for the broker to acknowledge the message,
+                    // otherwise closing the connection drops it from the local buffer.
+                    this.sender!.on('accepted', (context: any) => {
+                        if (context.delivery === delivery && !settled) {
+                            settled = true;
+                            resolve();
+                        }
+                    });
+                    
+                    this.sender!.on('rejected', (context: any) => {
+                        if (context.delivery === delivery && !settled) {
+                            settled = true;
+                            const error = context?.delivery?.remote_state?.error;
+                            const errorMsg = this.extractErrorMessage(error) || 'Message rejected by broker';
+                            reject(new Error(errorMsg));
+                        }
+                    });
+                    
+                    this.sender!.on('released', (context: any) => {
+                        if (context.delivery === delivery && !settled) {
+                            settled = true;
+                            reject(new Error('Message released by broker'));
+                        }
+                    });
+
                 } catch (err) {
-                    reject(err);
+                    if (!settled) {
+                        settled = true;
+                        reject(err);
+                    }
                 }
             };
 
@@ -242,12 +278,10 @@ export class MessageSender {
             // Check if already sendable
             if (this.sender!.sendable()) {
                 sendHandler();
-                return;
+            } else {
+                this.sender!.once('sendable', sendHandler);
             }
 
-            console.log(`[MessageSender] Waiting for sendable state on ${this.entityPath}...`);
-
-            this.sender!.once('sendable', sendHandler);
             this.sender!.once('sender_error', errorHandler);
             this.sender!.once('sender_close', closeHandler);
 
