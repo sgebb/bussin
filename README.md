@@ -8,12 +8,31 @@
 
 ## 🚀 Key Features
 
-- **Direct AMQP Operations**: Fast and reliable message operations (Send, Receive, Peek, Purge).
-- **Dead-letter Management**: Easily inspect and resubmit dead-lettered messages.
+### Background Operations & Purge
+Execute massive, connection-safe bulk actions in the background without locking your UI.
+![Background Purge](src/wwwroot/blog/gif/backgroud-purge.gif)
+
+### Massive Batch Transmissions
+Stream tens of thousands of payloads instantly utilizing concurrent AMQP pipelining.
+![15k Batch Send](src/wwwroot/blog/gif/batch-send-15k.gif)
+
+### Bulletproof Bulk Management
+Resubmit or delete precise combinations of active and dead-letter messages with zero data-loss through automated dynamic depth-locking.
+![Bulk Move & Resubmit](src/wwwroot/blog/gif/bulk-operations-movetodlq-resubmit.gif)
+
+### Seamless Organization
+Instantly navigate across multiple Entra ID environments using intuitive folder nesting and active searching.
+![Namespace Organization](src/wwwroot/blog/gif/namespace-filter-and-folder-organize.gif)
+
+### Deep Content Inspection
+Search deep into queues visually using advanced property and body pattern matching.
+![Peek & Deep Search](src/wwwroot/blog/gif/peak-filter-deepsearch.gif)
+
+---
+
 - **Privacy-First Architecture**: Your data never leaves your browser. Bussin communicates directly with Azure APIs.
 - **Zero Installation**: Access it via [bussin.dev](https://bussin.dev/) or install it as a PWA for offline-enabled access.
 - **Entra ID (Azure AD) Integration**: Secure authentication using your existing Azure identity and RBAC roles.
-- **Resource Discovery**: Automatic enumeration of subscriptions, namespaces, and entities.
 
 ## 🛠 Why Bussin?
 
