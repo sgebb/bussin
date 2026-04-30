@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Bussin.Models;
 
@@ -48,6 +48,9 @@ public class ServiceBusMessage
     
     [JsonPropertyName("applicationProperties")]
     public Dictionary<string, object>? ApplicationProperties { get; set; }
+
+    [JsonPropertyName("messageAnnotations")]
+    public Dictionary<string, object>? MessageAnnotations { get; set; }
     
     [JsonPropertyName("properties")]
     public Dictionary<string, object>? Properties { get; set; }

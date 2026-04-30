@@ -108,7 +108,6 @@ public sealed class ExplorerViewModel : IDisposable
     public bool IsResubmitModal { get; set; }
 
     private CancellationTokenSource? _loadCts;
-    private string? _lastNamespace;
     private string? _loadedSubscriptionsForTopic;
 
     // Computed

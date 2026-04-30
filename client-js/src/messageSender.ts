@@ -7,7 +7,6 @@ import type { ServiceBusConnection } from './connection.js';
 import type { MessageProperties } from './types.js';
 import type { Sender } from 'rhea';
 import { message as rheaMessage } from 'rhea';
-import { Buffer } from 'buffer';
 
 /**
  * Message Sender - for sending messages
@@ -75,7 +74,6 @@ export class MessageSender {
                 return this.dispatchMessage(amqpMessage);
             });
             await Promise.all(promises);
-            // tiny delay to prevent slamming the broker
             if (i + chunkSize < messages.length) {
                 await new Promise(r => setTimeout(r, 50));
             }
@@ -83,69 +81,56 @@ export class MessageSender {
     }
 
     private createAmqpMessage(body: string | null | undefined, properties: MessageProperties): any {
-        const messageId = properties.message_id || properties.messageId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const textBody = this.normalizeBodyToString(body);
-        const encodedBody = Buffer.from(textBody, 'utf8');
-        const contentType = properties.content_type || properties.contentType || 'text/plain; charset=utf-8';
-
+        const encoder = new TextEncoder();
+        const encodedBody = encoder.encode(textBody);
+        
+        // AMQP standard properties
         const message: any = {
             body: rheaMessage.data_section(encodedBody),
-            content_type: contentType,
-            message_id: messageId,
+            message_id: properties.message_id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            content_type: properties.content_type || 'text/plain; charset=utf-8',
             creation_time: new Date(),
-            ...properties
         };
 
-        // Map session_id to AMQP group_id
-        if (properties.session_id) {
-            message.group_id = properties.session_id;
-        }
+        // Map standard AMQP fields
+        if (properties.correlation_id) message.correlation_id = properties.correlation_id;
+        if (properties.subject) message.subject = properties.subject;
+        if (properties.reply_to) message.reply_to = properties.reply_to;
+        if (properties.to) message.to = properties.to;
+        if (properties.time_to_live) message.ttl = properties.time_to_live;
+        if (properties.group_id) message.group_id = properties.group_id;
+        if (properties.session_id) message.group_id = properties.session_id; // Mapping session_id to AMQP group_id
 
-        // Map other broker properties
-        if (properties.correlation_id) {
-            message.correlation_id = properties.correlation_id;
-        }
-        if (properties.subject) {
-            message.subject = properties.subject;
-        }
-        if (properties.reply_to) {
-            message.reply_to = properties.reply_to;
-        }
-        if (properties.to) {
-            message.to = properties.to;
-        }
-        if (properties.time_to_live) {
-            message.ttl = properties.time_to_live;
-        }
-
-        // Handle message_annotations - convert scheduled enqueue time to Date
+        // Handle message_annotations (broker-specific metadata)
         if (properties.message_annotations) {
             const annotations: Record<string, any> = { ...properties.message_annotations };
             const scheduledTime = annotations['x-opt-scheduled-enqueue-time'];
             if (scheduledTime) {
-                // Convert to Date object if it's a string or already a Date-like value
-                if (typeof scheduledTime === 'string') {
-                    annotations['x-opt-scheduled-enqueue-time'] = new Date(scheduledTime);
-                } else if (typeof scheduledTime === 'number') {
-                    // If it's already a timestamp in ms, convert to Date
+                // Ensure it's a Date object if provided as string or number
+                if (typeof scheduledTime === 'string' || typeof scheduledTime === 'number') {
                     annotations['x-opt-scheduled-enqueue-time'] = new Date(scheduledTime);
                 }
             }
             message.message_annotations = annotations;
         }
 
-        // Add bussin.dev origin marker to application properties
-        // Using x-bussin- prefix to avoid conflicts with other applications
-        const existingAppProps = properties.application_properties || {};
-        message.application_properties = {
-            ...existingAppProps,
+        // Handle application_properties (custom metadata)
+        const appProps: Record<string, any> = { 
+            ...(properties.application_properties || {}),
             'x-bussin-sent-via': 'bussin.dev',
             'x-bussin-sent-at': new Date().toISOString()
         };
 
-        // Clean up camelCase duplicates
-        delete message.contentType;
-        delete message.messageId;
+        // Harvest any other custom properties provided at top level that aren't AMQP reserved fields
+        const reservedFields = ['message_id', 'correlation_id', 'subject', 'content_type', 'reply_to', 'to', 'time_to_live', 'group_id', 'session_id', 'message_annotations', 'application_properties'];
+        for (const key of Object.keys(properties)) {
+            if (!reservedFields.includes(key)) {
+                appProps[key] = properties[key];
+            }
+        }
+
+        message.application_properties = appProps;
 
         return message;
     }
@@ -193,7 +178,7 @@ export class MessageSender {
 
     private async dispatchMessage(message: any): Promise<void> {
         const maxAttempts = 3;
-        const baseTimeout = 10000; // Increased to 10 seconds
+        const baseTimeout = 10000;
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {

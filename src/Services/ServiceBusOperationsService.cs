@@ -481,9 +481,6 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
 
     private static MessageProperties CreateResendProperties(ServiceBusMessage msg)
     {
-        // Always use the decoded body approach - don't try to preserve original binary format
-        // The OriginalBody is a raw AMQP structure (JsonElement) that doesn't serialize correctly through Blazor JS interop
-        
         // Start with existing application properties or create new dictionary
         var appProps = msg.ApplicationProperties != null 
             ? new Dictionary<string, object>(msg.ApplicationProperties) 
@@ -497,7 +494,20 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         {
             MessageId = msg.MessageId,
             ContentType = msg.ContentType,
-            ApplicationProperties = appProps
+            CorrelationId = msg.CorrelationId,
+            Subject = msg.Subject,
+            To = msg.To,
+            ReplyTo = msg.ReplyTo,
+            SessionId = msg.SessionId,
+            PartitionKey = msg.PartitionKey,
+            ApplicationProperties = appProps,
+            // Carry over annotations if any (e.g. scheduled time)
+            // But exclude standard ones that the broker will re-set (seq, enqueued time)
+            MessageAnnotations = msg.MessageAnnotations != null 
+                ? msg.MessageAnnotations
+                    .Where(k => !k.Key.StartsWith("x-opt-"))
+                    .ToDictionary(k => k.Key, v => v.Value)
+                : null
         };
     }
 

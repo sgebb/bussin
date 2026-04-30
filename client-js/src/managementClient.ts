@@ -478,20 +478,17 @@ function uuidToBuffer(uuid: string): Uint8Array {
 }
 
 /**
- * Decode an encoded AMQP message buffer
+ * Decode an encoded AMQP message buffer.
+ * In real environments rhea.message.encode returns a binary buffer and
+ * rhea.message.decode converts it back to a message object.
+ * In mock/test environments both are identity functions, so plain objects
+ * pass through unchanged — no environment-sniffing needed here.
  */
 function decodeEncodedMessage(messageBuffer: any): any {
-    // Convert Buffer object to actual Uint8Array
-    let bytes: Uint8Array;
-    if (messageBuffer.type === 'Buffer' && Array.isArray(messageBuffer.data)) {
-        bytes = new Uint8Array(messageBuffer.data);
-    } else if (messageBuffer instanceof Uint8Array) {
-        bytes = messageBuffer;
-    } else {
-        throw new Error('Invalid message buffer format');
+    // Handle JSON-serialized Node.js Buffer representation ({ type: 'Buffer', data: [...] })
+    if (messageBuffer?.type === 'Buffer' && Array.isArray(messageBuffer.data)) {
+        messageBuffer = new Uint8Array(messageBuffer.data);
     }
 
-    // Use rhea's message decoder (cast to any due to Node.js Buffer vs browser Uint8Array mismatch)
-    const decoded = rhea.message.decode(bytes as any);
-    return decoded;
+    return rhea.message.decode(messageBuffer as any);
 }

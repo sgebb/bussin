@@ -8,6 +8,7 @@ import { ManagementClient } from './src/managementClient.js';
 import { MessageReceiver } from './src/messageReceiver.js';
 import { MessageSender } from './src/messageSender.js';
 import { parseServiceBusMessage } from './src/messageParser.js';
+import { GlobalMockBroker } from './src/mockBroker.js';
 import { types } from 'rhea'; // Import types for wrapping symbols
 import type {
     ServiceBusMessage,
@@ -129,9 +130,11 @@ async function sendMessage(
     try {
         await connection.connect();
         await connection.authenticateCBS(entityPath);
+        console.log(`[ServiceBusAPI] Auth success for ${entityPath}`);
 
         const sender = new MessageSender(connection, entityPath);
         await sender.open();
+        console.log(`[ServiceBusAPI] Sender opened for ${entityPath}`);
         const messageProps: MessageProperties = { ...properties };
         let bodyToSend: string;
 
@@ -201,14 +204,26 @@ async function sendMessageBatch(
         await sender.open();
 
         const preparedMessages = messages.map(msg => {
-            const messageProps: MessageProperties = { ...msg.properties };
+            // Check if it's already a wrapped object from C# { body, properties }
+            // or a raw message body (string/object)
+            let rawBody: any;
+            let rawProps: MessageProperties = {};
+
+            if (msg && typeof msg === 'object' && ('body' in msg || 'properties' in msg)) {
+                rawBody = msg.body;
+                rawProps = msg.properties || {};
+            } else {
+                rawBody = msg;
+            }
+
+            const messageProps: MessageProperties = { ...rawProps };
             let bodyToSend: string;
 
-            if (typeof msg.body === 'string') {
-                bodyToSend = msg.body;
-            } else if (msg.body !== null && msg.body !== undefined) {
-                bodyToSend = JSON.stringify(msg.body);
-                if (!messageProps.content_type && !messageProps.contentType) {
+            if (typeof rawBody === 'string') {
+                bodyToSend = rawBody;
+            } else if (rawBody !== null && rawBody !== undefined) {
+                bodyToSend = JSON.stringify(rawBody);
+                if (!messageProps.content_type) {
                     messageProps.content_type = 'application/json; charset=utf-8';
                 }
             } else {
@@ -310,6 +325,7 @@ async function receiveAndLockMessages(
     try {
         await connection.connect();
         await connection.authenticateCBS(entityPath);
+        console.log(`[ServiceBusAPI] Auth success for receive: ${entityPath}`);
 
         return new Promise((resolve, reject) => {
             const lockedMsgs: LockedMessage[] = [];
@@ -317,6 +333,7 @@ async function receiveAndLockMessages(
             let timedOut = false;
             let noMoreMessagesTimer: NodeJS.Timeout | null = null;
 
+            console.log(`[ServiceBusAPI] Opening receiver for ${entityPath}`);
             // Use peek-lock mode (rcv_settle_mode: 1, autoaccept: false)
             const receiver = connection.connection!.open_receiver({
                 source: { address: entityPath },
@@ -327,42 +344,50 @@ async function receiveAndLockMessages(
 
             receiver.on('message', (context: any) => {
                 if (timedOut) return;
+                console.log(`[ServiceBusAPI] Message event received on ${entityPath}`);
 
-                // Clear the "no more messages" timer since we got one
-                if (noMoreMessagesTimer) {
-                    clearTimeout(noMoreMessagesTimer);
-                    noMoreMessagesTimer = null;
+                try {
+                    // Clear the "no more messages" timer since we got one
+                    if (noMoreMessagesTimer) {
+                        clearTimeout(noMoreMessagesTimer);
+                        noMoreMessagesTimer = null;
+                    }
+
+                    // Parse the message
+                    const parsedMessage = parseServiceBusMessage(context.message) as LockedMessage;
+
+                    // Generate lock token from delivery tag - use standard JS since Buffer may not exist in browser
+                    const lockTokenArray = Array.from(context.delivery.tag as Iterable<number>);
+                    const lockToken = lockTokenArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    console.log(`[ServiceBusAPI] Lock token generated: ${lockToken}`);
+                    parsedMessage.lockToken = lockToken;
+
+                    // Store handle in Map (can't serialize, so keep server-side)
+                    messageHandles.set(lockToken, {
+                        delivery: context.delivery,
+                        receiver: receiver,
+                        connection: connection
+                    });
+
+                    lockedMsgs.push(parsedMessage);
+                    messagesReceived++;
+                    console.log(`[ServiceBusAPI] Message processed: ${messagesReceived}/${count}`);
+
+                    // If we got all requested messages, resolve immediately
+                    if (messagesReceived >= count) {
+                        timedOut = true;
+                        resolve(lockedMsgs);
+                        return;
+                    }
+
+                    // Start a short timer - if no message arrives in 500ms, assume queue is empty
+                    noMoreMessagesTimer = setTimeout(() => {
+                        timedOut = true;
+                        resolve(lockedMsgs);
+                    }, 500);
+                } catch (procErr) {
+                    console.error(`[ServiceBusAPI] Error processing message on ${entityPath}:`, procErr);
                 }
-
-                // Parse the message
-                const parsedMessage = parseServiceBusMessage(context.message) as LockedMessage;
-
-                // Generate lock token from delivery tag
-                const lockToken = context.delivery.tag.toString('hex');
-                parsedMessage.lockToken = lockToken;
-
-                // Store handle in Map (can't serialize, so keep server-side)
-                messageHandles.set(lockToken, {
-                    delivery: context.delivery,
-                    receiver: receiver,
-                    connection: connection
-                });
-
-                lockedMsgs.push(parsedMessage);
-                messagesReceived++;
-
-                // If we got all requested messages, resolve immediately
-                if (messagesReceived >= count) {
-                    timedOut = true;
-                    resolve(lockedMsgs);
-                    return;
-                }
-
-                // Start a short timer - if no message arrives in 500ms, assume queue is empty
-                noMoreMessagesTimer = setTimeout(() => {
-                    timedOut = true;
-                    resolve(lockedMsgs);
-                }, 500);
             });
 
             receiver.on('receiver_error', (context: any) => {
@@ -396,17 +421,20 @@ async function receiveAndLockMessages(
  * Complete (delete) locked messages by lock tokens
  * @param lockTokens - Array of lock tokens from receiveAndLock
  */
-async function complete(lockTokens: string[]): Promise<BatchOperationResult> {
+async function complete(lockTokens: string[] | string): Promise<BatchOperationResult> {
+    const tokens = Array.isArray(lockTokens) ? lockTokens : [lockTokens];
+    console.log(`[ServiceBusAPI] complete called for ${tokens.length} tokens`);
     const result: BatchOperationResult = {
         successCount: 0,
         failureCount: 0,
         errors: []
     };
 
-    for (const lockToken of lockTokens) {
+    for (const lockToken of tokens) {
         try {
             const handle = messageHandles.get(lockToken);
             if (!handle) {
+                console.error(`[ServiceBusAPI] Lock token ${lockToken} not found in messageHandles Map (size: ${messageHandles.size})`);
                 throw new Error('Message not found or lock expired');
             }
 
@@ -435,14 +463,16 @@ async function complete(lockTokens: string[]): Promise<BatchOperationResult> {
  * Abandon locked messages by lock tokens - releases locks and returns messages to queue
  * @param lockTokens - Array of lock tokens from receiveAndLock
  */
-async function abandon(lockTokens: string[]): Promise<BatchOperationResult> {
+async function abandon(lockTokens: string[] | string): Promise<BatchOperationResult> {
+    const tokens = Array.isArray(lockTokens) ? lockTokens : [lockTokens];
+    console.log(`[ServiceBusAPI] abandon called for ${tokens.length} tokens`);
     const result: BatchOperationResult = {
         successCount: 0,
         failureCount: 0,
         errors: []
     };
 
-    for (const lockToken of lockTokens) {
+    for (const lockToken of tokens) {
         try {
             const handle = messageHandles.get(lockToken);
             if (!handle) {
@@ -475,16 +505,18 @@ async function abandon(lockTokens: string[]): Promise<BatchOperationResult> {
  * @param lockTokens - Array of lock tokens from receiveAndLock
  */
 async function deadLetter(
-    lockTokens: string[],
+    lockTokens: string[] | string,
     options: DeadLetterOptions = {}
 ): Promise<BatchOperationResult> {
+    const tokens = Array.isArray(lockTokens) ? lockTokens : [lockTokens];
+    console.log(`[ServiceBusAPI] deadLetter called for ${tokens.length} tokens`);
     const result: BatchOperationResult = {
         successCount: 0,
         failureCount: 0,
         errors: []
     };
 
-    for (const lockToken of lockTokens) {
+    for (const lockToken of tokens) {
         try {
             const handle = messageHandles.get(lockToken);
             if (!handle) {
@@ -566,13 +598,9 @@ async function purgeEntity(
         await connection.connect();
         await connection.authenticateCBS(entityPath);
 
-        // Strategy 1: Try Management API Batch Delete (FASTEST - what Azure Portal uses)
-        // This can delete up to 4000 messages per call server-side
-        const useBatchDeleteAPI = true; // Can be made configurable
-
         const purgePromise = new Promise<number>(async (resolve, reject) => {
             try {
-                if (useBatchDeleteAPI) {
+                {
                     console.log('[Purge] Attempting FAST batch delete API (portal method)...');
 
                     const managementClient = new ManagementClient(connection, entityPath);
@@ -618,10 +646,8 @@ async function purgeEntity(
                     return;
                 }
             } catch (err: any) {
-                // If batch delete not supported or failed, fall back to parallel receivers
-                if (err.message === 'FALLBACK_TO_PARALLEL' || !useBatchDeleteAPI) {
+                if (err.message === 'FALLBACK_TO_PARALLEL') {
                     console.log('[Purge] Using parallel receiver strategy...');
-                    // Fall through to Strategy 2
                 } else {
                     throw err;
                 }
@@ -923,6 +949,35 @@ async function startMonitoring(
             connection.close();
         }
     };
+}
+
+/**
+ * Direct version of purgeQueue for C# interop that returns the result directly
+ */
+async function purgeQueueDirect(
+    namespace: string,
+    queueName: string,
+    token: string,
+    fromDeadLetter: boolean = false
+): Promise<any> {
+    const controller = await purgeQueue(namespace, queueName, token, null, fromDeadLetter);
+    const count = await controller.promise;
+    return { deletedCount: count };
+}
+
+/**
+ * Direct version of purgeSubscription for C# interop that returns the result directly
+ */
+async function purgeSubscriptionDirect(
+    namespace: string,
+    topicName: string,
+    subscriptionName: string,
+    token: string,
+    fromDeadLetter: boolean = false
+): Promise<any> {
+    const controller = await purgeSubscription(namespace, topicName, subscriptionName, token, null, fromDeadLetter);
+    const count = await controller.promise;
+    return { deletedCount: count };
 }
 
 // ============================================================================
@@ -1298,7 +1353,7 @@ async function peekMessagesBySequence(
         const chunkSize = 50;
         for (let i = 0; i < sequenceNumbers.length; i += chunkSize) {
             const chunk = sequenceNumbers.slice(i, i + chunkSize);
-            
+
             const promises = chunk.map(async (seqNum) => {
                 try {
                     const peeked = await managementClient.peekMessages(seqNum, 1);
@@ -1313,7 +1368,7 @@ async function peekMessagesBySequence(
                 }
                 return null;
             });
-            
+
             const results = await Promise.all(promises);
             for (const msg of results) {
                 if (msg) {
@@ -1333,11 +1388,178 @@ async function peekMessagesBySequence(
 }
 
 // ============================================================================
+// SIMULATOR CONTROL (demo / local-dev mode only)
+// These functions are called synchronously by DemoServiceBusJsInteropService
+// via IJSInProcessRuntime.Invoke so they MUST be synchronous.
+// ============================================================================
+
+/**
+ * Activate or deactivate the in-process mock broker.
+ * Must be called before any ServiceBus API calls in demo mode.
+ */
+function enableSimulator(enabled: boolean): void {
+    (globalThis as any).__BUSSIN_SIMULATOR_ACTIVE__ = enabled;
+    if (enabled) {
+        console.log('[ServiceBusAPI] Simulator ENABLED - AMQP calls will use MockBroker');
+    }
+}
+
+/**
+ * Seed a queue with initial messages (for demo/test setup).
+ * @param messages - array of { body, messageId? } objects
+ */
+function seedMockData(
+    namespace: string,
+    queueName: string,
+    messages: { body: any; messageId?: string }[]
+): void {
+    GlobalMockBroker.createQueue(queueName);
+    for (const m of messages) {
+        const body = typeof m.body === 'string' ? m.body : JSON.stringify(m.body);
+        GlobalMockBroker.pushMessage(queueName, {
+            body: new TextEncoder().encode(body),
+            message_id: m.messageId ?? `seed-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            application_properties: {},
+            content_type: 'application/json; charset=utf-8'
+        });
+    }
+    console.log(`[ServiceBusAPI] Seeded ${messages.length} messages into ${queueName}`);
+}
+
+/**
+ * Create (or reset) a topic in the mock broker topology.
+ */
+function seedTopic(namespace: string, topicName: string): void {
+    GlobalMockBroker.createTopic(topicName);
+    console.log(`[ServiceBusAPI] Created topic: ${topicName}`);
+}
+
+/**
+ * Create a subscription under a topic in the mock broker topology.
+ */
+function seedSubscription(namespace: string, topicName: string, subscriptionName: string): void {
+    GlobalMockBroker.createSubscription(topicName, subscriptionName);
+    console.log(`[ServiceBusAPI] Created subscription: ${topicName}/subscriptions/${subscriptionName}`);
+}
+
+/**
+ * Seed a topic with messages (broadcast to all subs).
+ */
+function seedTopicData(
+    namespace: string,
+    topicName: string,
+    messages: { body: any; messageId?: string; properties?: any }[]
+): void {
+    for (const m of messages) {
+        const body = typeof m.body === 'string' ? m.body : JSON.stringify(m.body);
+        GlobalMockBroker.pushMessage(topicName, {
+            body: new TextEncoder().encode(body),
+            message_id: m.messageId ?? `seed-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            application_properties: {},
+            content_type: 'application/json; charset=utf-8',
+            ...m.properties
+        });
+    }
+}
+
+/**
+ * Seed messages directly into a subscription's queue.
+ */
+function seedSubscriptionData(
+    namespace: string,
+    topicName: string,
+    subscriptionName: string,
+    messages: { body: any; messageId?: string; properties?: any }[]
+): void {
+    const subPath = `${topicName}/subscriptions/${subscriptionName}`;
+    for (const m of messages) {
+        const body = typeof m.body === 'string' ? m.body : JSON.stringify(m.body);
+        GlobalMockBroker.pushMessage(subPath, {
+            body: new TextEncoder().encode(body),
+            message_id: m.messageId ?? `seed-sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            application_properties: {},
+            content_type: 'application/json; charset=utf-8',
+            ...m.properties
+        });
+    }
+}
+
+/**
+ * Return the current message count for a queue (synchronous).
+ * Used by IJSInProcessRuntime.Invoke from Blazor.
+ */
+function getQueueMessageCount(namespace: string, queueName: string, fromDeadLetter: boolean = false): number {
+    const path = fromDeadLetter ? `${queueName}/$deadletterqueue` : queueName;
+    return GlobalMockBroker.getMessages(path).length;
+}
+
+/**
+ * Return the current message count for a subscription (synchronous).
+ * Used by IJSInProcessRuntime.Invoke from Blazor.
+ */
+function getSubscriptionMessageCount(namespace: string, topicName: string, subscriptionName: string, fromDeadLetter: boolean = false): number {
+    const basePath = `${topicName}/subscriptions/${subscriptionName}`;
+    const path = fromDeadLetter ? `${basePath}/$deadletterqueue` : basePath;
+    return GlobalMockBroker.getMessages(path).length;
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
 // Export for browser JS usage
-(window as any).ServiceBusAPI = {
+if (typeof window !== 'undefined') {
+    (window as any).ServiceBusAPI = {
+        // Read operations
+        peekQueueMessages,
+        peekSubscriptionMessages,
+        peekQueueMessagesBySequence,
+        peekSubscriptionMessagesBySequence,
+        receiveAndLockQueueMessage,
+        receiveAndLockSubscriptionMessage,
+
+        // Settlement operations (stateless - take LockedMessage[])
+        complete,
+        abandon,
+        deadLetter,
+
+        // Send operations
+        sendQueueMessage,
+        sendTopicMessage,
+        sendQueueMessageBatch,
+        sendTopicMessageBatch,
+
+        // Destructive operations
+        purgeQueue,
+        purgeSubscription,
+        deleteQueueMessagesBySequence,
+        deleteSubscriptionMessagesBySequence,
+        deadLetterQueueMessagesBySequence,
+        deadLetterSubscriptionMessagesBySequence,
+        purgeQueueDirect,
+        purgeSubscriptionDirect,
+
+        // Monitor operations
+        monitorQueue,
+        monitorSubscription,
+
+        // Search operations
+        searchQueueMessages,
+        searchSubscriptionMessages,
+
+        // Simulator control (demo / local-dev mode)
+        enableSimulator,
+        seedMockData,
+        seedTopic,
+        seedTopicData,
+        seedSubscription,
+        seedSubscriptionData,
+        getQueueMessageCount,
+        getSubscriptionMessageCount
+    };
+}
+
+export {
     // Read operations
     peekQueueMessages,
     peekSubscriptionMessages,
@@ -1364,6 +1586,8 @@ async function peekMessagesBySequence(
     deleteSubscriptionMessagesBySequence,
     deadLetterQueueMessagesBySequence,
     deadLetterSubscriptionMessagesBySequence,
+    purgeQueueDirect,
+    purgeSubscriptionDirect,
 
     // Monitor operations
     monitorQueue,
@@ -1371,36 +1595,15 @@ async function peekMessagesBySequence(
 
     // Search operations
     searchQueueMessages,
-    searchSubscriptionMessages
-};
+    searchSubscriptionMessages,
 
-export {
-    // Read operations
-    peekQueueMessages,
-    peekSubscriptionMessages,
-    receiveAndLockQueueMessage,
-    receiveAndLockSubscriptionMessage,
-
-    // Settlement operations (stateless - take LockedMessage[])
-    complete,
-    abandon,
-    deadLetter,
-
-    // Send operations
-    sendQueueMessage,
-    sendTopicMessage,
-    sendQueueMessageBatch,
-    sendTopicMessageBatch,
-
-    // Destructive operations
-    purgeQueue,
-    purgeSubscription,
-    deleteQueueMessagesBySequence,
-    deleteSubscriptionMessagesBySequence,
-    deadLetterQueueMessagesBySequence,
-    deadLetterSubscriptionMessagesBySequence,
-
-    // Monitor operations
-    monitorQueue,
-    monitorSubscription
+    // Simulator control (demo / local-dev mode)
+    enableSimulator,
+    seedMockData,
+    seedTopic,
+    seedTopicData,
+    seedSubscription,
+    seedSubscriptionData,
+    getQueueMessageCount,
+    getSubscriptionMessageCount
 };

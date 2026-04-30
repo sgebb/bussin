@@ -23,6 +23,7 @@ export interface ServiceBusMessage {
     scheduledEnqueueTime: Date | number | undefined;
     partitionKey: string | undefined;
     applicationProperties: Record<string, any>;
+    messageAnnotations: Record<string, any>;
     properties: Record<string, any>;
     ttl: number | undefined;
     expiryTime: Date | undefined;
@@ -47,13 +48,16 @@ export interface ReceiverOptions {
 }
 
 /**
- * Message properties for sending
+ * Message properties for sending - follows AMQP standard names
  */
 export interface MessageProperties {
     message_id?: string;
-    messageId?: string;
+    correlation_id?: string;
+    subject?: string;
     content_type?: string;
-    contentType?: string;
+    reply_to?: string;
+    to?: string;
+    time_to_live?: number;
     message_annotations?: Record<string, any>; // For scheduled messages
     [key: string]: any;
 }
