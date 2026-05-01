@@ -3,7 +3,7 @@ $jsonPath = "src/wwwroot/blog/data/articles.json"
 $outputDir = "src/wwwroot/blog"
 
 # 2. Load Content
-$articles = Get-Content $jsonPath | ConvertFrom-Json
+$articles = Get-Content $jsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
 # 3. Common Header & Footer snippets
 $headerText = @"
