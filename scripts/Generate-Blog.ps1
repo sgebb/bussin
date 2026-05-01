@@ -56,9 +56,9 @@ $headerText = @"
         <div class="header-brand">
             <a href="/" class="brand-root"><strong>bussin</strong></a><span class="header-sep">/</span><a href="/blog/index.html" class="header-section">blog</a>
         </div>
-        <a href="/blog/index.html" class="header-back">← All articles</a>
+        <a href="/blog/index.html" class="header-back">&#8592; All articles</a>
         <span class="header-spacer"></span>
-        <a href="/" class="header-cta">Open Bussin ↗</a>
+        <a href="/" class="header-cta">Open Bussin &#8599;</a>
     </header>
     <article>
 "@
@@ -66,8 +66,8 @@ $headerText = @"
 $footerText = @"
     </article>
     <footer class="site-footer">
-        <a href="/blog/index.html" class="back">← All articles</a>
-        <a href="/" class="cta">Open Bussin →</a>
+        <a href="/blog/index.html" class="back">&#8592; All articles</a>
+        <a href="/" class="cta">Open Bussin &#8594;</a>
     </footer>
 </body>
 </html>
@@ -86,7 +86,7 @@ foreach ($article in $articles) {
     $fullHtml += "`n        $($article.content)"
     $fullHtml += "`n$footerText"
     
-    $fullHtml | Out-File -FilePath "$outputDir/$($article.slug).html" -Encoding utf8
+    [System.IO.File]::WriteAllText("$outputDir/$($article.slug).html", $fullHtml, [System.Text.UTF8Encoding]::new($false))
 }
 
 # 5. Generate Index Page
@@ -114,7 +114,7 @@ $indexBody = @"
             <a href="/" class="brand-root"><strong>bussin</strong></a><span class="header-sep">/</span><a href="/blog/index.html" class="header-section">blog</a>
         </div>
         <span class="header-spacer"></span>
-        <a href="/" class="header-cta">Open Bussin ↗</a>
+        <a href="/" class="header-cta">Open Bussin &#8599;</a>
     </header>
 
     <main>
@@ -149,6 +149,6 @@ $indexBody += @"
 
 # Clean up article specific css from index
 $indexHtml = $indexHeader.Split('<header class="site-header">')[0] + $indexBody
-$indexHtml | Out-File -FilePath "$outputDir/index.html" -Encoding utf8
+[System.IO.File]::WriteAllText("$outputDir/index.html", $indexHtml, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Done!"

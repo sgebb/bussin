@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -47,9 +47,9 @@
         <div class="header-brand">
             <a href="/" class="brand-root"><strong>bussin</strong></a><span class="header-sep">/</span><a href="/blog/index.html" class="header-section">blog</a>
         </div>
-        <a href="/blog/index.html" class="header-back">â† All articles</a>
+        <a href="/blog/index.html" class="header-back">&#8592; All articles</a>
         <span class="header-spacer"></span>
-        <a href="/" class="header-cta">Open Bussin â†—</a>
+        <a href="/" class="header-cta">Open Bussin &#8599;</a>
     </header>
     <article>
         <span class="tag">Advanced</span>
@@ -58,8 +58,8 @@
         <img src='/blog/gif/peak-filter-deepsearch.gif' alt='Deep Search' style='width:100%; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:2rem;'><p class="lead">Standard peeking in Azure Service Bus is limited, often capping out around 10,000 messages. But what if your Dead-Letter Queue has 500,000 messages and you need to find one specific trace ID? That's where <strong>Deep Search</strong> comes in.</p><h2>How Deep Search Works</h2><p>When you add a search filter (Message ID, Subject, or Body content) in Advanced Peek and the entity has more than 10,000 messages, Bussin automatically suggests <strong>Deep Search Mode</strong>. This launches an intelligent search as a background task that iterates through up to 1 million messages to find your match.</p><ol><li>Open <strong>Advanced Peek</strong> (the gear icon (GearIcon) next to Peek)</li><li>Enter a filter - for example, a <code>MessageId</code> or a specific <code>"customerId": 123</code> snippet in the JSON body</li><li>If the entity has &gt;10K messages, you'll see the Deep Search option prompted automatically</li><li>Click <strong>Start Deep Search</strong></li></ol><h3>Tracking progress</h3><p>Unlike old desktop tools that lock up your interface while they poll APIs, Bussin runs the search fully in the background using a web worker model. You can:</p><ul><li>See real-time scanning progress in the <strong>Running Tasks</strong> panel (bottom-left)</li><li>Continue using other parts of the app - peek other queues, send messages, or organize your namespace</li><li>Cancel the search gracefully at any time</li><li>View results instantly when it completes - Bussin shows the matching sequence numbers and provides direct links to jump to those payloads</li></ul><h3>Filter options</h3><p>All three search filters use case-insensitive matching locally in your browser memory for maximum speed:</p><ul><li><strong>Message ID:</strong> Exact or partial match on the broker-assigned or custom message ID</li><li><strong>Subject:</strong> Search the Subject/Label metadata field</li><li><strong>Body Content:</strong> Search anywhere inside the raw message body string</li></ul><div class='callout'><strong>(Info) Practical example</strong><br>Your producer sends order events with a payload containing <code>"CorrelationId": "ORD-999"</code>. A customer reports their order wasn't processed. Use Deep Search with a body filter for "ORD-999" to scan the massive Dead Letter Queue, verify its content, and instantly determine exactly why it failed based on its delivery count or metadata error reason.</div>
     </article>
     <footer class="site-footer">
-        <a href="/blog/index.html" class="back">â† All articles</a>
-        <a href="/" class="cta">Open Bussin â†’</a>
+        <a href="/blog/index.html" class="back">&#8592; All articles</a>
+        <a href="/" class="cta">Open Bussin &#8594;</a>
     </footer>
 </body>
 </html>

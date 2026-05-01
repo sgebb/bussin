@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -47,9 +47,9 @@
         <div class="header-brand">
             <a href="/" class="brand-root"><strong>bussin</strong></a><span class="header-sep">/</span><a href="/blog/index.html" class="header-section">blog</a>
         </div>
-        <a href="/blog/index.html" class="header-back">â† All articles</a>
+        <a href="/blog/index.html" class="header-back">&#8592; All articles</a>
         <span class="header-spacer"></span>
-        <a href="/" class="header-cta">Open Bussin â†—</a>
+        <a href="/" class="header-cta">Open Bussin &#8599;</a>
     </header>
     <article>
         <span class="tag">Architecture</span>
@@ -66,8 +66,8 @@ resource subscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2022
 }</code></pre><h2>The One Error You Need to Know</h2><p>One tricky aspect of auto-forwarding is debugging routing failures. If the destination queue is full, disabled, or deleted, messages land in the <strong>Subscription's</strong> Dead Letter Queue with a <code>DeadLetterReason</code> of <code>TransferEndpointUpdateFailed</code>.</p><p>If you see this error, it means your 'pipe' is broken before the message even reached the consumer's 'bucket'.</p><img src='/blog/img/single-blade-view-bussin-auto-forwarding.jpg' alt='Bussin visualizing Auto Forwarding and DLQ' style='width:100%; border-radius:8px; border:1px solid #e2e8f0; margin:2rem 0;'><div class='callout'><strong>Monitoring with Bussin</strong><br>Tracking down these <code>TransferEndpointUpdateFailed</code> errors in the Azure Portal is a nightmare of blade-clicking. I built <a href='/'>Bussin</a> specifically to make this topology obvious. It visually flags auto-forwarders in the list and surfaces both the subscription-level and queue-level DLQs on a single screen so you never lose track of a message between teams.</div>
     </article>
     <footer class="site-footer">
-        <a href="/blog/index.html" class="back">â† All articles</a>
-        <a href="/" class="cta">Open Bussin â†’</a>
+        <a href="/blog/index.html" class="back">&#8592; All articles</a>
+        <a href="/" class="cta">Open Bussin &#8594;</a>
     </footer>
 </body>
 </html>
