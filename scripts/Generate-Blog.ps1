@@ -151,4 +151,56 @@ $indexBody += @"
 $indexHtml = $indexHeader.Split('<header class="site-header">')[0] + $indexBody
 [System.IO.File]::WriteAllText("$outputDir/index.html", $indexHtml, [System.Text.UTF8Encoding]::new($false))
 
+# 6. Update Sitemap
+Write-Host "Updating: sitemap.xml"
+$sitemapPath = "src/wwwroot/sitemap.xml"
+$today = Get-Date -Format "yyyy-MM-dd"
+
+$sitemapContent = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://bussin.dev/</loc>
+    <lastmod>$today</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://bussin.dev/demo</loc>
+    <lastmod>$today</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://bussin.dev/blog/index.html</loc>
+    <lastmod>$today</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+"@
+
+foreach ($article in $articles) {
+    $sitemapContent += @"
+  <url>
+    <loc>https://bussin.dev/blog/$($article.slug).html</loc>
+    <lastmod>$today</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+"@
+}
+
+# Add any legacy/extra pages
+$sitemapContent += @"
+  <url>
+    <loc>https://bussin.dev/blog/bussin-architecture.html</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+</urlset>
+"@
+
+[System.IO.File]::WriteAllText($sitemapPath, $sitemapContent, [System.Text.UTF8Encoding]::new($false))
+
 Write-Host "Done!"
