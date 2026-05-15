@@ -55,22 +55,6 @@
             </div>
         </div>
 
-        <div class="security-link-section mt-4 pt-4 border-top">
-            <a href="/blog/security-architecture" class="security-link">
-                <i class="bi bi-shield-lock me-2"></i>
-                How does Bussin handle my credentials and permissions?
-                <i class="bi bi-arrow-right ms-1"></i>
-            </a>
-        </div>
-
-        <div class="blog-cta mt-4 pt-3 border-top text-center">
-            <span class="blog-label">From the blog</span>
-            <a href="/blog" class="blog-link">
-                <i class="bi bi-journal-richtext me-1"></i>
-                Azure Service Bus Guides, Tips &amp; Best Practices
-                <i class="bi bi-chevron-right ms-1 small"></i>
-            </a>
-        </div>
     </div>
 </div>
 
@@ -147,53 +131,6 @@
     .feature-item span { font-size: 0.82rem; }
 
     /* Security link */
-    .security-link-section { text-align: left; }
-    .security-link {
-        display: flex;
-        align-items: center;
-        text-decoration: none;
-        color: var(--text-color);
-        font-size: 0.9rem;
-        font-weight: 500;
-        padding: 0.85rem 1rem;
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        transition: all 0.2s;
-        background: rgba(0,0,0,0.02);
-    }
-    .security-link:hover {
-        border-color: #0d6efd;
-        color: #0d6efd;
-        background: rgba(13,110,253,0.04);
-    }
-    .security-link i:first-child { color: #198754; }
-
-    /* Blog CTA */
-    .blog-cta { }
-    .blog-label {
-        display: block;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: var(--muted-text);
-        margin-bottom: 0.5rem;
-    }
-    .blog-link {
-        display: inline-flex;
-        align-items: center;
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: #0d6efd;
-        text-decoration: none;
-        padding: 0.4rem 0.75rem;
-        border-radius: 8px;
-        transition: background 0.2s;
-    }
-    .blog-link:hover {
-        background: rgba(13,110,253,0.08);
-        text-decoration: none;
-        color: #0a58ca;
-    }
 </style>
 
 @code {
