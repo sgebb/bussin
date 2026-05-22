@@ -3,8 +3,8 @@
   "short_name": "bussin",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#512bd4",
+  "background_color": "#03060D",
+  "theme_color": "#0C1422",
   "prefer_related_applications": false,
   "scope": "./",
   "icons": [

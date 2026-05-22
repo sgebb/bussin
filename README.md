@@ -34,6 +34,54 @@ Search deep into queues visually using advanced property and body pattern matchi
 - **Zero Installation**: Access it via [bussin.dev](https://bussin.dev/) or install it as a PWA for offline-enabled access.
 - **Entra ID (Azure AD) Integration**: Secure authentication using your existing Azure identity and RBAC roles.
 
+## 🏗 Architecture & Security Model
+
+Bussin operates under a **100% proxy-free, client-side** security architecture. 
+
+When you open Bussin, your browser acts as the direct orchestrator of all network and authentication flows, bypassing any intermediate relay servers or third-party databases. 
+
+```mermaid
+graph TD
+    subgraph Browser Sandbox (100% Client-Side)
+        direction TB
+        UI[Blazor WASM UI / Blades]
+        State[ExplorerViewModel & Cache]
+        MSAL[MSAL.js Authentication]
+        
+        subgraph Net[Network Stack]
+            ARMClient[ARM HTTP Client]
+            AMQPClient[Rhea AMQP-over-WebSockets]
+        end
+    end
+
+    subgraph Azure Cloud Endpoints
+        direction TB
+        AAD[Entra ID]
+        ARM[Azure Resource Manager <br> management.azure.com]
+        ASBData[Service Bus Data Plane <br> namespace.servicebus.windows.net]
+    end
+
+    %% Authentication flows
+    MSAL -.->|1. Authenticate & Consent| AAD
+    AAD -.->|2. Return Access Tokens| MSAL
+    
+    %% ARM Resource Discovery
+    UI -->|Discover Namespaces| State
+    State -->|3. Query Resources <br> REST + CORS| ARMClient
+    ARMClient -->|HTTPS GET <br> Auth: Bearer ARM Token| ARM
+
+    %% Service Bus Data Plane Operations
+    State -->|4. Active Messaging Operations| AMQPClient
+    AMQPClient -->|WSS Tunnel <br> Bypasses CORS| ASBData
+    AMQPClient -->|5. CBS Handshake <br> Auth: SB Token| ASBData
+```
+
+### Protocol & Connection Mechanics
+
+1. **Azure Resource Manager (ARM) Discovery**: Bussin queries the Azure management API over HTTPS using standard CORS (Cross-Origin Resource Sharing) requests. This enables seamless, automatic resource discovery of subscriptions, resource groups, namespaces, queues, and topics without typing connection strings.
+2. **Azure Service Bus Data Plane (CORS Bypass)**: Because standard Azure Service Bus data-plane REST endpoints completely lack CORS headers, standard browser HTTPS REST calls are blocked by browser sandboxes. Bussin bypasses this restriction by establishing direct **AMQP 1.0 connections over secure WebSockets** (`wss://<namespace>.servicebus.windows.net:443/$servicebus/websocket`), which do not fall under CORS Same-Origin Policy blocks.
+3. **Identity & Security (Claims-Based)**: All communication is secured using your active Entra ID tokens. The client performs an AMQP Claims-Based Security (CBS) handshake with the `$cbs` node of the namespace directly, matching standard enterprise security policies without storing credentials.
+
 ## 🛠 Why Bussin?
 
 If you are looking for an **Azure Service Bus Explorer alternative** that is cross-platform and web-native, Bussin is built for you:
