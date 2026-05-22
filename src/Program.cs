@@ -58,7 +58,7 @@ else
         builder.Configuration.Bind("AzureAd", options.ProviderOptions.Authentication);
         
         // Request Service Bus data plane permission at login (required for send/receive/peek operations)
-        // Note: Management API (ARM) is a separate resource and must be requested via a separate interaction
+        // Note: Management API (ARM) is a separate resource and will be silently swapped from the cache on load
         options.ProviderOptions.DefaultAccessTokenScopes.Add("https://servicebus.azure.net/user_impersonation");
         
         options.ProviderOptions.LoginMode = "redirect";

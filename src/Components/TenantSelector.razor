@@ -71,8 +71,8 @@
 
         await AuthService.SetTenantAsync(tenantId);
         
-        // Force login flow to ensure tokens are acquired for the new tenant
-        Navigation.NavigateTo("authentication/login");
+        // Force-load the Home dashboard page to trigger automatic dynamic token checking and consent popup if needed
+        Navigation.NavigateTo("/", forceLoad: true);
     }
 }
 @inject INotificationService NotificationService

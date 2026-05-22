@@ -227,6 +227,8 @@
 
     private string? currentTenantName;
     private string? currentTenantId;
+    private string? cachedTenantId;
+    private string? cachedLoginHint;
 
     private IEnumerable<ServiceBusNamespaceInfo> FilteredNamespaces => 
         string.IsNullOrWhiteSpace(searchTerm) 
@@ -255,6 +257,9 @@
         {
             // Try to find the tenant name for the UI
             currentTenantId = await AuthService.GetCurrentTenantIdAsync();
+            cachedTenantId = currentTenantId;
+            cachedLoginHint = await AuthService.GetUserNameAsync();
+
             if (!string.IsNullOrEmpty(currentTenantId))
             {
                 var homeCred = await AuthService.GetHomeTokenCredentialAsync();
@@ -303,49 +308,63 @@
 
         try
         {
-            var tenantId = await AuthService.GetCurrentTenantIdAsync();
-            var loginHint = await AuthService.GetUserNameAsync();
+            // Use cached details directly to prevent any asynchronous delay prior to popup creation,
+            // thereby preserving the browser user gesture context and avoiding popup blocking.
+            var tenantId = cachedTenantId;
+            var loginHint = cachedLoginHint;
             
-            // 1. Management Consent
+            // 1. Management Consent (Azure Resource discovery)
             if (!hasArmPermission)
             {
-                Console.WriteLine("Requesting Management consent...");
+                Console.WriteLine("Requesting Azure Management API consent via popup...");
                 var success = await AuthService.AcquireTokenPopupAsync("https://management.azure.com/user_impersonation", tenantId, loginHint);
 
                 if (!success)
                 {
-                    consentErrorMessage = "Management API consent was not granted. Please try again.";
+                    consentErrorMessage = "Azure Management API consent was not granted. Please try again.";
+                    isGrantingConsent = false;
                     StateHasChanged();
-                    await Task.Delay(1000); 
-                    Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
                     return;
                 }
                 hasArmPermission = true;
                 StateHasChanged();
             }
 
-            // Give a generous delay to ensure the first window is fully closed and MSAL state is flushed
-            await Task.Delay(2500);
+            // Check silently if the Service Bus token can be acquired.
+            // If they statically configured permissions in the portal, consenting to the first popup
+            // will have already granted consent to Service Bus, making silent acquisition succeed instantly.
+            var sbToken = await AuthService.GetServiceBusTokenAsync();
+            hasSbPermission = !string.IsNullOrEmpty(sbToken);
 
             // 2. Service Bus Consent
             if (!hasSbPermission)
             {
-                Console.WriteLine("Requesting Service Bus consent...");
-                var success = await AuthService.AcquireTokenPopupAsync("https://servicebus.azure.net/user_impersonation", tenantId, loginHint);
-
-                if (!success)
+                // If silent check failed, we prompt for Service Bus.
+                // Note: We don't trigger the second popup automatically in the same click handler 
+                // to avoid browser popup blockers (since the preceding Management popup was asynchronous).
+                // Instead, the UI updates, and the user can click "Grant Required Permissions" a second time 
+                // to trigger this block with a clean user gesture click.
+                Console.WriteLine("Management API granted, but Service Bus Data Plane is still missing.");
+                
+                // If they are clicking the button for the second time, this block will execute immediately with gesture context:
+                if (hasArmPermission)
                 {
-                    consentErrorMessage = "Service Bus API consent was not granted. Please try again.";
+                    Console.WriteLine("Requesting Service Bus Data Plane consent via popup...");
+                    var success = await AuthService.AcquireTokenPopupAsync("https://servicebus.azure.net/user_impersonation", tenantId, loginHint);
+
+                    if (!success)
+                    {
+                        consentErrorMessage = "Service Bus API consent was not granted. Please try again.";
+                        isGrantingConsent = false;
+                        StateHasChanged();
+                        return;
+                    }
+                    hasSbPermission = true;
                     StateHasChanged();
-                    await Task.Delay(1000);
-                    Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
-                    return;
                 }
-                hasSbPermission = true;
-                StateHasChanged();
             }
 
-            Console.WriteLine("✓ Consent acquired. Reloading dashboard...");
+            Console.WriteLine("✓ Required permissions active. Reloading dashboard...");
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
         }
         catch (Exception ex)

@@ -104,6 +104,13 @@ public sealed class AuthenticationService(
 
     public async Task<TokenCredential?> GetHomeTokenCredentialAsync()
     {
+        // First try silent JS acquisition for home tenant to ensure maximum reliability and sync with the JS MSAL cache
+        var jsToken = await TryGetTokenFromJsAsync("https://management.azure.com/user_impersonation", "");
+        if (!string.IsNullOrEmpty(jsToken))
+        {
+            return new AccessTokenCredential(jsToken);
+        }
+
         try
         {
             var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
@@ -131,21 +138,33 @@ public sealed class AuthenticationService(
     {
         var tenantId = await GetCurrentTenantIdAsync();
 
+        // If in a guest tenant context, strictly use the JS helper to prevent home-tenant token leakage
         if (!string.IsNullOrEmpty(tenantId))
         {
              return await TryGetTokenFromJsAsync("https://servicebus.azure.net/user_impersonation", tenantId);
         }
 
-        var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
+        // Home tenant flow: Try silent JS acquisition first, then fall back to the Blazor tokenProvider
+        var jsToken = await TryGetTokenFromJsAsync("https://servicebus.azure.net/user_impersonation", "");
+        if (!string.IsNullOrEmpty(jsToken))
         {
-            Scopes = ["https://servicebus.azure.net/user_impersonation"]
-        });
-
-        if (result.TryGetToken(out var token))
-        {
-            return token.Value;
+            return jsToken;
         }
-        return null;
+
+        try
+        {
+            var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
+            {
+                Scopes = ["https://servicebus.azure.net/user_impersonation"]
+            });
+
+            if (result.TryGetToken(out var token))
+            {
+                return token.Value;
+            }
+            return null;
+        }
+        catch { return null; }
     }
 
     public async Task<bool> AcquireTokenPopupAsync(string scope, string? tenantId, string? loginHint = null)
