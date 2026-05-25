@@ -8,6 +8,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 
 @inject BackgroundSearchService BackgroundSearch
+@inject NavigationManager Navigation
 
 <CascadingValue Value="@_isInitialized" Name="LayoutInitialized">
     <AuthorizeView>
@@ -15,11 +16,29 @@
             @if (_isInitialized)
             {
                 <div class="page" data-theme="@(_isDarkMode ? "dark" : "light")">
-                    <div class="sidebar">
+                    <!-- Mobile Top Header -->
+                    <div class="mobile-top-nav d-md-none">
+                        <button class="mobile-nav-toggle text-light" @onclick="ToggleMobileMenu" aria-label="Toggle Navigation">
+                            <i class="bi @(_isMobileMenuOpen ? "bi-x-lg" : "bi-list")"></i>
+                        </button>
+                        <a class="mobile-brand text-decoration-none" href="/" @onclick:preventDefault @onclick="@(() => Navigation.NavigateTo("/"))">
+                            <img src="favicon.svg" alt="bussin logo" class="mobile-logo" />
+                            <span class="text-light">bussin</span>
+                        </a>
+                    </div>
+
+                    <!-- Sidebar drawer overlay on mobile -->
+                    <div class="sidebar @(_isMobileMenuOpen ? "mobile-open" : "")">
                         <NavMenu IsDarkMode="@_isDarkMode" OnToggleDarkMode="@ToggleDarkMode" />
                     </div>
 
-                    <main>
+                    <!-- Mobile Sidebar Backdrop -->
+                    @if (_isMobileMenuOpen)
+                    {
+                        <div class="mobile-nav-backdrop d-md-none" @onclick="CloseMobileMenu"></div>
+                    }
+
+                    <main @onclick="CloseMobileMenu">
                         <article class="content">
                             @Body
                         </article>
@@ -111,11 +130,23 @@
 @code {
     private bool _isDarkMode;
     private bool _isInitialized;
+    private bool _isMobileMenuOpen = false;
+
+    private void ToggleMobileMenu()
+    {
+        _isMobileMenuOpen = !_isMobileMenuOpen;
+    }
+
+    private void CloseMobileMenu()
+    {
+        _isMobileMenuOpen = false;
+    }
 
     protected override async Task OnInitializedAsync()
     {
         // Subscribe to auth state changes to handle post-login initialization
         AuthStateProvider.AuthenticationStateChanged += OnAuthStateChanged;
+        Navigation.LocationChanged += OnLocationChanged;
         NavState.OnDeleteModalChange += OnDeleteModalChange;
         NavState.OnSupportModalChange += OnSupportModalChange;
         
@@ -146,7 +177,14 @@
     {
         // Re-initialize when auth state changes (e.g., after login redirect)
         await InitializeIfAuthenticatedAsync();
+        CloseMobileMenu();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        CloseMobileMenu();
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task InitializeIfAuthenticatedAsync()
@@ -182,6 +220,7 @@
     public void Dispose()
     {
         AuthStateProvider.AuthenticationStateChanged -= OnAuthStateChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
         NavState.OnDeleteModalChange -= OnDeleteModalChange;
         NavState.OnSupportModalChange -= OnSupportModalChange;
     }
