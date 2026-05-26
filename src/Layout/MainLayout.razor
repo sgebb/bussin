@@ -18,12 +18,12 @@
                 <div class="page" data-theme="@(_isDarkMode ? "dark" : "light")">
                     <!-- Mobile Top Header -->
                     <div class="mobile-top-nav d-md-none">
-                        <button class="mobile-nav-toggle text-light" @onclick="ToggleMobileMenu" aria-label="Toggle Navigation">
+                        <button class="mobile-nav-toggle" @onclick="ToggleMobileMenu" aria-label="Toggle Navigation">
                             <i class="bi @(_isMobileMenuOpen ? "bi-x-lg" : "bi-list")"></i>
                         </button>
                         <a class="mobile-brand text-decoration-none" href="/" @onclick:preventDefault @onclick="@(() => Navigation.NavigateTo("/"))">
                             <img src="favicon.svg" alt="bussin logo" class="mobile-logo" />
-                            <span class="text-light">bussin</span>
+                            <span>bussin</span>
                         </a>
                     </div>
 

@@ -164,12 +164,14 @@ body {
 
 /* Logo Styling & High-Contrast Filters */
 .brand-logo img,
-.nav-brand-logo {
+.nav-brand-logo,
+.mobile-logo {
     filter: var(--logo-filter, none) !important;
 }
 
 [data-theme='dark'] .brand-logo,
-[data-theme='dark'] .brand-logo img {
+[data-theme='dark'] .brand-logo img,
+[data-theme='dark'] .mobile-logo {
     filter: var(--logo-filter, none) drop-shadow(0 4px 16px rgba(34, 194, 183, 0.25)) !important;
 }
 
@@ -997,6 +999,7 @@ mark {
 .mobile-brand span {
     font-weight: 700;
     font-size: 1.15rem;
+    color: var(--header-text);
 }
 
 .mobile-nav-backdrop {
