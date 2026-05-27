@@ -67,6 +67,9 @@ jobs:
             -r linux-x64 \
             --self-contained true \
             -o ./publish_output
+          cd ./publish_output
+          chmod +x Bussin.Backend
+          zip -r ../deploy.zip .
 
       - name: Log in to Azure (OIDC)
         uses: azure/login@v2
@@ -96,4 +99,4 @@ jobs:
         uses: Azure/functions-action@v1
         with:
           app-name: ${{ steps.get_app_name.outputs.APP_NAME }}
-          package: ./publish_output
+          package: ./deploy.zip
