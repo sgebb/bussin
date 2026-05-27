@@ -48,6 +48,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Install WebAssembly AOT Workload
+        run: dotnet workload install wasm-tools
+
       - name: Run .NET Tests
         run: dotnet test tests/Bussin.Tests/Bussin.Tests.csproj
 

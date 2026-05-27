@@ -1,0 +1,98 @@
+name: Deploy Backend to Azure (AOT)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'iac/**'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # Required for secure OIDC authentication with Azure
+
+env:
+  AZURE_RESOURCE_GROUP: bussin-rg
+  AZURE_LOCATION: westeurope
+
+jobs:
+  deploy-infrastructure:
+    name: Deploy Azure Infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Bicep IaC
+        id: iac_deploy
+        uses: azure/arm-deploy@v2
+        with:
+          subscriptionId: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          template: ./iac/deploy.bicep
+          parameters: location=${{ env.AZURE_LOCATION }}
+          failOnTargetValidationError: true
+
+  build-and-deploy-app:
+    name: Build & Deploy Native AOT App
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Native AOT Build Prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish Native AOT C# Binary
+        run: |
+          dotnet publish backend/Bussin.Backend.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -o ./publish_output
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # We can dynamically retrieve the name of the function app deployed in the preceding stage
+      - name: Get Function App Name
+        id: get_app_name
+        uses: azure/powershell@v2
+        with:
+          azPSVersion: 'latest'
+          inlineScript: |
+            $resources = Get-AzResource -ResourceGroupName "${{ env.AZURE_RESOURCE_GROUP }}" -ResourceType "Microsoft.Web/sites"
+            $funcApp = $resources | Where-Object { $_.Kind -like "*functionapp*" } | Select-Object -First 1
+            if ($funcApp) {
+                Write-Output "APP_NAME=$($funcApp.Name)"
+                "APP_NAME=$($funcApp.Name)" >> $env:GITHUB_OUTPUT
+            } else {
+                throw "No Function App found in Resource Group!"
+            }
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.get_app_name.outputs.APP_NAME }}
+          package: ./publish_output
