@@ -176,7 +176,7 @@ resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignm
   name: guid(functionApp.id, '00000000-0000-0000-0000-000000000002', cosmosDbAccount.id)
   properties: {
     principalId: functionApp.identity.principalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', cosmosDbAccount.name, '00000000-0000-0000-0000-000000000002')
+    roleDefinitionId: resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', cosmosDbAccount.name, '00000000-0000-0000-0000-000000000002')
     scope: cosmosDbAccount.id
   }
 }
