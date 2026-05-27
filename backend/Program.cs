@@ -7,6 +7,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Azure.Identity;
 
 namespace Bussin.Backend;
 
@@ -21,18 +22,26 @@ public static class Program
                 // Register CosmosClient as a Singleton AOT-safely
                 services.AddSingleton(sp =>
                 {
-                    var connectionString = Environment.GetEnvironmentVariable("CosmosDbConnectionString");
-                    if (string.IsNullOrEmpty(connectionString))
-                    {
-                        throw new InvalidOperationException("CosmosDbConnectionString configuration is missing.");
-                    }
-
-                    // Configure CosmosClient to use our custom AOT-compliant System.Text.Json serializer
                     var options = new CosmosClientOptions
                     {
                         Serializer = new CosmosSystemTextJsonSerializer(BussinJsonContext.Default)
                     };
-                    return new CosmosClient(connectionString, options);
+
+                    var connectionString = Environment.GetEnvironmentVariable("CosmosDbConnectionString");
+                    if (!string.IsNullOrEmpty(connectionString))
+                    {
+                        // Fallback to connection string (useful for local development / emulator)
+                        return new CosmosClient(connectionString, options);
+                    }
+
+                    var endpoint = Environment.GetEnvironmentVariable("CosmosDbEndpoint");
+                    if (string.IsNullOrEmpty(endpoint))
+                    {
+                        throw new InvalidOperationException("Either CosmosDbConnectionString or CosmosDbEndpoint configuration must be provided.");
+                    }
+
+                    // Entra ID passwordless authentication (best practice for production)
+                    return new CosmosClient(endpoint, new DefaultAzureCredential(), options);
                 });
             })
             .Build();

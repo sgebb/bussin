@@ -114,6 +114,9 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
   kind: 'functionapp,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     serverFarmId: hostingPlan.id
     siteConfig: {
@@ -148,8 +151,8 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           value: appInsights.properties.ConnectionString
         }
         {
-          name: 'CosmosDbConnectionString'
-          value: 'AccountEndpoint=https://${cosmosDbAccount.name}.documents.azure.com:443/;AccountKey=${cosmosDbAccount.listKeys().primaryMasterKey};'
+          name: 'CosmosDbEndpoint'
+          value: 'https://${cosmosDbAccount.name}.documents.azure.com:443/'
         }
         {
           name: 'CosmosDbDatabaseName'
@@ -164,6 +167,17 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
       minTlsVersion: '1.2'
     }
     httpsOnly: true
+  }
+}
+
+// --- Cosmos DB SQL Role Assignment for Function App Managed Identity ---
+resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-09-15' = {
+  parent: cosmosDbAccount
+  name: guid(functionApp.id, '00000000-0000-0000-0000-000000000002', cosmosDbAccount.id)
+  properties: {
+    principalId: functionApp.identity.principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', cosmosDbAccount.name, '00000000-0000-0000-0000-000000000002')
+    scope: cosmosDbAccount.id
   }
 }
 
