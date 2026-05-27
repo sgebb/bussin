@@ -15,7 +15,7 @@
     <Authorized>
         <div class="container-fluid p-4">
 
-            @if (hasArmPermission)
+            @if (hasArmPermission || isCheckingPermissions)
             {
                 <div class="row justify-content-center mb-4">
                     <div class="col-lg-8">
@@ -40,7 +40,16 @@
                 </div>
             }
 
-            @if ((!hasArmPermission || !hasSbPermission) && !isGrantingConsent)
+            @if (isCheckingPermissions && namespaces.Count == 0)
+            {
+                <div class="text-center my-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Checking permissions...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Checking permissions...</p>
+                </div>
+            }
+            else if ((!hasArmPermission || !hasSbPermission) && !isGrantingConsent && !isCheckingPermissions)
             {
                 <div class="alert alert-warning border-warning shadow-sm">
                     <h5 class="alert-heading d-flex align-items-center gap-2">
@@ -121,7 +130,7 @@
             
 
             
-            @if (hasArmPermission)
+            @if (hasArmPermission || isCheckingPermissions)
             {
                 @if (isRefreshing && namespaces.Count == 0)
                 {
@@ -137,14 +146,14 @@
                         @foreach (var ns in FilteredNamespaces)
                         {
                             <div class="col-md-4 mb-3">
-                                <div class="card h-100 namespace-card" style="cursor: pointer;">
+                                <div class="card h-100 namespace-card" style="cursor: pointer;" @onclick="() => NavigateToExplorer(ns)">
                                     <button class="favorite-btn @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "favorited" : "not-favorited")" 
                                             @onclick="async () => await ToggleFavorite(ns.FullyQualifiedNamespace)" 
                                             @onclick:stopPropagation="true"
                                             title="@(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "Remove from favorites" : "Add to favorites")">
                                         <i class="bi @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "bi-star-fill" : "bi-star")"></i>
                                     </button>
-                                    <div class="card-body" @onclick="() => NavigateToExplorer(ns)">
+                                    <div class="card-body">
                                         <h5 class="card-title">@ns.Name</h5>
                                         <p class="card-text">
                                             <small class="text-muted">
@@ -224,6 +233,7 @@
     private bool hasSbPermission = false;
     private bool isGrantingConsent = false;
     private string? consentErrorMessage = null;
+    private bool isCheckingPermissions = false;
 
     private string? currentTenantName;
     private string? currentTenantId;
@@ -243,12 +253,21 @@
         var isAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (isAuthenticated)
         {
-            await CheckPermissions();
-            if (hasArmPermission)
-            {
-                _ = LoadNamespacesAsync();
-            }
+            isCheckingPermissions = true;
+            
+            // Start loading namespaces from cache/network immediately to leverage instant cache rendering
+            _ = LoadNamespacesAsync();
+            
+            // Check permissions in the background to avoid blocking the initial cache render
+            _ = CheckPermissionsAsync();
         }
+    }
+
+    private async Task CheckPermissionsAsync()
+    {
+        await CheckPermissions();
+        isCheckingPermissions = false;
+        StateHasChanged();
     }
 
     private async Task CheckPermissions()

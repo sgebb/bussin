@@ -242,10 +242,26 @@ public sealed class ExplorerViewModel : IDisposable
                 return;
             }
 
+            var seenQueues = new System.Collections.Generic.HashSet<string>();
+            var seenTopics = new System.Collections.Generic.HashSet<string>();
+
             await Task.WhenAll(
-                LoadQueuesAsync(credential, State.CurrentNamespace),
-                LoadTopicsAsync(credential, State.CurrentNamespace)
+                LoadQueuesAsync(credential, State.CurrentNamespace, seenQueues),
+                LoadTopicsAsync(credential, State.CurrentNamespace, seenTopics)
             );
+
+            // Clean up deleted queues and topics that were not returned by Azure
+            var queuesToRemove = QueueDict.Keys.Where(k => !seenQueues.Contains(k)).ToList();
+            foreach (var key in queuesToRemove)
+            {
+                QueueDict.Remove(key);
+            }
+
+            var topicsToRemove = TopicDict.Keys.Where(k => !seenTopics.Contains(k)).ToList();
+            foreach (var key in topicsToRemove)
+            {
+                TopicDict.Remove(key);
+            }
         }
         catch (Exception ex)
         {
@@ -258,7 +274,7 @@ public sealed class ExplorerViewModel : IDisposable
         }
     }
 
-    private async Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    private async Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, System.Collections.Generic.HashSet<string> seenQueues)
     {
         var ct = _loadCts?.Token ?? CancellationToken.None;
         try
@@ -267,13 +283,14 @@ public sealed class ExplorerViewModel : IDisposable
             {
                 if (ct.IsCancellationRequested) break;
                 QueueDict[queue.Name] = queue;
+                seenQueues.Add(queue.Name);
                 NotifyStateChanged();
             }
         }
         catch (OperationCanceledException) { }
     }
 
-    private async Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo)
+    private async Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, System.Collections.Generic.HashSet<string> seenTopics)
     {
         var ct = _loadCts?.Token ?? CancellationToken.None;
         try
@@ -282,6 +299,7 @@ public sealed class ExplorerViewModel : IDisposable
             {
                 if (ct.IsCancellationRequested) break;
                 TopicDict[topic.Name] = topic;
+                seenTopics.Add(topic.Name);
                 NotifyStateChanged();
             }
         }
@@ -290,11 +308,7 @@ public sealed class ExplorerViewModel : IDisposable
 
     public async Task RefreshEntitiesAsync()
     {
-        QueueDict.Clear();
-        TopicDict.Clear();
-        SubscriptionDict.Clear();
-        _loadedSubscriptionsForTopic = null;
-
+        // Do NOT clear dictionaries! This prevents the UI from flashing/emptying.
         await LoadEntitiesAsync();
 
         if (State.SelectedTopicName != null)
@@ -360,6 +374,7 @@ public sealed class ExplorerViewModel : IDisposable
                 return;
             }
 
+            var seenSubs = new System.Collections.Generic.HashSet<string>();
             var firstItem = true;
             await foreach (var sub in _resourceService.ListSubscriptionsAsync(credential, State.CurrentNamespace, topicName, ct))
             {
@@ -368,6 +383,7 @@ public sealed class ExplorerViewModel : IDisposable
                 if (State.SelectedTopicName == topicName)
                 {
                     SubscriptionDict[sub.Name] = sub;
+                    seenSubs.Add(sub.Name);
                 }
 
                 if (firstItem)
@@ -381,6 +397,13 @@ public sealed class ExplorerViewModel : IDisposable
             if (!ct.IsCancellationRequested && State.SelectedTopicName == topicName)
             {
                 _loadedSubscriptionsForTopic = topicName;
+
+                // Remove subscriptions that are no longer present
+                var subsToRemove = SubscriptionDict.Keys.Where(k => !seenSubs.Contains(k)).ToList();
+                foreach (var key in subsToRemove)
+                {
+                    SubscriptionDict.Remove(key);
+                }
             }
         }
         catch (OperationCanceledException) { }

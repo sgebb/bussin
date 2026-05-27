@@ -1030,6 +1030,14 @@ mark {
     .sidebar.mobile-open {
         transform: translateX(0) !important;
     }
+
+    .nav-menu {
+        height: 100% !important;
+    }
+
+    .nav-header {
+        display: none !important;
+    }
     
     main {
         padding-top: 50px !important;
