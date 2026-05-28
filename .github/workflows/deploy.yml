@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
 env:
-  PUBLISH_DIR: src/bin/Release/net10.0/publish/wwwroot
+  PUBLISH_DIR: src/app/bin/Release/net10.0/publish/wwwroot
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
         run: dotnet test tests/Bussin.Tests/Bussin.Tests.csproj
 
       - name: Publish app
-        run: dotnet publish src/Bussin.csproj -c Release
+        run: dotnet publish src/app/Bussin.csproj -c Release
 
       - name: Generate build info
         run: |

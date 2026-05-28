@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'backend/**'
+      - 'src/api/**'
       - 'iac/**'
       - '.github/workflows/backend-deploy.yml'
   workflow_dispatch:
@@ -62,7 +62,7 @@ jobs:
 
       - name: Publish Native AOT C# Binary
         run: |
-          dotnet publish backend/Bussin.Backend.csproj \
+          dotnet publish src/api/Bussin.Backend.csproj \
             -c Release \
             -r linux-x64 \
             --self-contained true \

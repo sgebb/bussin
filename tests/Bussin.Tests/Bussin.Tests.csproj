@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Bussin.csproj" />
+    <ProjectReference Include="..\..\src\app\Bussin.csproj" />
   </ItemGroup>
 
 </Project>

@@ -9,6 +9,8 @@
     <PublishAot>true</PublishAot>
     <!-- Optimize AOT build size and speed -->
     <OptimizationPreference>Speed</OptimizationPreference>
+    <!-- Resolve Azure Functions Worker SDK internal reflection-based serialization crash -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <ItemGroup>
