@@ -157,8 +157,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
     siteConfig: {
       appSettings: [
         {
-          name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+          name: 'AzureWebJobsStorage__accountName'
+          value: storageAccount.name
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
@@ -191,17 +191,23 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-// --- Storage Blob Data Owner Role Assignment for Function App Managed Identity ---
-// Required by Flex Consumption to deploy and read code packages from the storage container securely
-resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, functionAppName, 'b24988ac-6180-42a0-ab88-20f7382dd24c') // Storage Blob Data Owner Role ID
+// --- Storage Managed Identity Role Assignments for Function App ---
+// Grants Blob, Queue, and Table permissions to configure 100% passwordless storage access
+var storageRoles = [
+  'b24988ac-6180-42a0-ab88-20f7382dd24c' // Storage Blob Data Owner
+  '974c5e8b-45b9-4653-ba55-5f855dd0fb88' // Storage Queue Data Contributor
+  '0a9a22dd-7a55-4345-90a4-0d5d374b8de7' // Storage Table Data Contributor
+]
+
+resource storageRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for roleId in storageRoles: {
+  name: guid(storageAccount.id, functionAppName, roleId)
   scope: storageAccount
   properties: {
     principalId: functionApp.identity.principalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleId)
     principalType: 'ServicePrincipal'
   }
-}
+}]
 
 // --- Cosmos DB SQL Role Assignment for Function App Managed Identity ---
 resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-09-15' = {
