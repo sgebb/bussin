@@ -46,13 +46,13 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-// --- App Service Plan (Consumption Plan / Serverless Linux) ---
-resource hostingPlan 'Microsoft.Web/serverfarms@2022-09-01' = {
+// --- App Service Plan (Flex Consumption Plan Serverless Linux) ---
+resource hostingPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: 'bussin-plan-${uniqueString(resourceGroup().id)}'
   location: location
   sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
+    name: 'FC1'
+    tier: 'FlexConsumption'
   }
   properties: {
     reserved: true // Linux Plan
@@ -109,8 +109,22 @@ resource cosmosDbContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
   }
 }
 
-// --- Function App ---
-resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
+// --- Blob Services and Deployment Container ---
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource deploymentContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: 'package'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// --- Function App (Flex Consumption) ---
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   name: functionAppName
   location: location
   kind: 'functionapp,linux'
@@ -119,20 +133,32 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   }
   properties: {
     serverFarmId: hostingPlan.id
+    reserved: true
+    httpsOnly: true
+    functionAppConfig: {
+      deployment: {
+        storage: {
+          type: 'blobContainer'
+          value: '${storageAccount.properties.primaryEndpoints.blob}package'
+          authentication: {
+            type: 'SystemAssignedIdentity'
+          }
+        }
+      }
+      runtime: {
+        name: 'dotnet-isolated'
+        version: '10.0'
+      }
+      scaleAndConcurrency: {
+        maximumInstanceCount: 100
+        instanceMemoryMB: 2048
+      }
+    }
     siteConfig: {
-      linuxFxVersion: 'DOTNET-ISOLATED|10.0' // Self-contained AOT runs natively under this Isolated Host
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
           value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
-        }
-        {
-          name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
-        }
-        {
-          name: 'WEBSITE_CONTENTSHARE'
-          value: toLower(functionAppName)
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
@@ -162,15 +188,22 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'CosmosDbContainerName'
           value: 'Logins'
         }
-        {
-          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'false'
-        }
       ]
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
     }
-    httpsOnly: true
+  }
+}
+
+// --- Storage Blob Data Owner Role Assignment for Function App Managed Identity ---
+// Required by Flex Consumption to deploy and read code packages from the storage container securely
+resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, functionApp.id, 'b24988ac-6180-42a0-ab88-20f7382dd24c') // Storage Blob Data Owner Role ID
+  scope: storageAccount
+  properties: {
+    principalId: functionApp.identity.principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')
+    principalType: 'ServicePrincipal'
   }
 }
 
