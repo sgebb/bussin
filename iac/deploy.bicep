@@ -194,7 +194,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
 // --- Storage Managed Identity Role Assignments for Function App ---
 // Grants Blob, Queue, and Table permissions to configure 100% passwordless storage access
 var storageRoles = [
-  'b24988ac-6180-42a0-ab88-20f7382dd24c' // Storage Blob Data Owner
+  'b7e6dc6d-f1e8-4753-8033-0f276bb0955b' // Storage Blob Data Owner
   '974c5e8b-45b9-4653-ba55-5f855dd0fb88' // Storage Queue Data Contributor
   '965033a5-c8eb-4f35-b82f-fef460a3606d' // Storage Table Data Contributor
 ]
