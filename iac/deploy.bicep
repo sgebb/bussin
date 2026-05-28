@@ -196,7 +196,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
 var storageRoles = [
   'b24988ac-6180-42a0-ab88-20f7382dd24c' // Storage Blob Data Owner
   '974c5e8b-45b9-4653-ba55-5f855dd0fb88' // Storage Queue Data Contributor
-  '0a9a22dd-7a55-4345-90a4-0d5d374b8de7' // Storage Table Data Contributor
+  '965033a5-c8eb-4f35-b82f-fef460a3606d' // Storage Table Data Contributor
 ]
 
 resource storageRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for roleId in storageRoles: {
