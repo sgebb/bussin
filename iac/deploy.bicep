@@ -157,10 +157,6 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
     siteConfig: {
       appSettings: [
         {
-          name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet-isolated'
-        }
-        {
           name: 'AzureWebJobsStorage__accountName'
           value: storageAccount.name
         }
