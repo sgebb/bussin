@@ -194,7 +194,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
 // --- Storage Blob Data Owner Role Assignment for Function App Managed Identity ---
 // Required by Flex Consumption to deploy and read code packages from the storage container securely
 resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, functionApp.identity.principalId, 'b24988ac-6180-42a0-ab88-20f7382dd24c') // Storage Blob Data Owner Role ID
+  name: guid(storageAccount.id, functionAppName, 'b24988ac-6180-42a0-ab88-20f7382dd24c') // Storage Blob Data Owner Role ID
   scope: storageAccount
   properties: {
     principalId: functionApp.identity.principalId
@@ -206,7 +206,7 @@ resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
 // --- Cosmos DB SQL Role Assignment for Function App Managed Identity ---
 resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-09-15' = {
   parent: cosmosDbAccount
-  name: guid(functionApp.identity.principalId, '00000000-0000-0000-0000-000000000002', cosmosDbAccount.id)
+  name: guid(functionAppName, '00000000-0000-0000-0000-000000000002', cosmosDbAccount.id)
   properties: {
     principalId: functionApp.identity.principalId
     roleDefinitionId: resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', cosmosDbAccount.name, '00000000-0000-0000-0000-000000000002')
