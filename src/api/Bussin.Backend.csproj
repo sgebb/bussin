@@ -5,8 +5,8 @@
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Enable Native AOT compilation -->
-    <PublishAot>true</PublishAot>
+    <!-- Disable Native AOT compilation to ensure robust metadata and trigger indexing -->
+    <PublishAot>false</PublishAot>
     <!-- Optimize AOT build size and speed -->
     <OptimizationPreference>Speed</OptimizationPreference>
     <!-- Resolve Azure Functions Worker SDK internal reflection-based serialization crash -->
