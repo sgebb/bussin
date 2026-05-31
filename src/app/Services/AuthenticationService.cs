@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
 using System.Text.Json;
+using System.Net.Http;
+using System.Net.Http.Headers;
 
 namespace Bussin.Services;
 
@@ -14,7 +16,8 @@ public sealed class AuthenticationService(
     NavigationManager navigationManager,
     IPreferencesService preferencesService,
     IJSRuntime jsRuntime,
-    IConfiguration configuration) : IAuthenticationService
+    IConfiguration configuration,
+    HttpClient httpClient) : IAuthenticationService
 {
     public bool IsDemoMode => false;
 
@@ -220,6 +223,59 @@ public sealed class AuthenticationService(
     public async Task ClearMsalCacheAsync()
     {
         try { await jsRuntime.InvokeVoidAsync("msalHelper.clearCache"); } catch { }
+    }
+
+    private bool _loginTracked;
+
+    public async Task TrackLoginAsync()
+    {
+        if (_loginTracked) return;
+
+        try
+        {
+            var isAuthenticated = await IsAuthenticatedAsync();
+            if (!isAuthenticated) return;
+
+            var backendApiUrl = configuration["BackendApiUrl"];
+            if (string.IsNullOrEmpty(backendApiUrl))
+            {
+                Console.WriteLine("DEBUG: BackendApiUrl is not configured. Skipping adoption tracking.");
+                return;
+            }
+
+            var token = await GetIdTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                Console.WriteLine("DEBUG: Failed to acquire token for adoption tracking.");
+                return;
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{backendApiUrl.TrimEnd('/')}/api/track-login");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await httpClient.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _loginTracked = true;
+                Console.WriteLine("✓ Successful login tracked on backend.");
+            }
+            else
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"DEBUG: Failed to track login on backend: {response.StatusCode} - {content}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"DEBUG: Error tracking login on backend: {ex.Message}");
+        }
+    }
+
+    public async Task<string?> GetIdTokenAsync()
+    {
+        var clientId = configuration["AzureAd:ClientId"];
+        if (string.IsNullOrEmpty(clientId)) return null;
+        return await TryGetTokenFromJsAsync(clientId, "");
     }
 }
 

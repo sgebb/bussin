@@ -9,6 +9,7 @@
 
 @inject BackgroundSearchService BackgroundSearch
 @inject NavigationManager Navigation
+@inject IAuthenticationService AuthService
 
 <CascadingValue Value="@_isInitialized" Name="LayoutInitialized">
     <AuthorizeView>
@@ -198,6 +199,9 @@
             
             await NavState.InitializeAsync();
             _isInitialized = true;
+
+            // Securely track login adoption on backend API
+            _ = AuthService.TrackLoginAsync();
         }
         else
         {

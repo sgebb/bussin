@@ -55,7 +55,7 @@ public class SwaggerFunction
           SwaggerUIBundle.presets.apis
         ],
         layout: ""BaseLayout"",
-        oauth2RedirectUrl: 'https://unpkg.com/swagger-ui-dist@5/oauth2-redirect.html'
+        oauth2RedirectUrl: window.location.origin + '/api/oauth2-redirect'
       });
 
       window.ui.initOAuth({
@@ -64,6 +64,58 @@ public class SwaggerFunction
         usePkceWithAuthorizationCodeGrant: false
       });
     };
+  </script>
+</body>
+</html>";
+
+        await response.WriteStringAsync(html);
+        return response;
+    }
+
+    /// <summary>
+    /// Serves the local, secure OAuth2 redirect page for Swagger UI authorization callback.
+    /// Eliminates external CDN dependencies and resolves Entra ID path validation restrictions.
+    /// </summary>
+    [Function("SwaggerOAuth2Redirect")]
+    public async Task<HttpResponseData> RunOAuth2Redirect(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "oauth2-redirect")] HttpRequestData req)
+    {
+        _logger.LogInformation("Serving Swagger OAuth2 Redirect callback page.");
+
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        response.Headers.Add("Content-Type", "text/html; charset=utf-8");
+
+        const string html = @"<!doctype html>
+<html lang=""en-US"">
+<head>
+    <title>Swagger UI: OAuth2 Redirect</title>
+</head>
+<body onload=""run()"">
+  <script>
+    'use strict';
+    function run () {
+      var oauth2 = window.opener.swaggerUIRedirectOauth2;
+      var sentState = oauth2.state;
+      var isValid = true;
+      var qpArr = window.location.search.substring(1).split('&');
+      if (qpArr.length === 1 && qpArr[0] === '') {
+        qpArr = window.location.hash.substring(1).split('&');
+      }
+      var qpMap = {};
+
+      qpArr.forEach(function (v) {
+        var arr = v.split('=');
+        qpMap[arr[0]] = decodeURIComponent(arr[1]);
+      });
+
+      if (qpMap.state !== sentState) {
+        var err = 'The state parameter does not match the state from the authorization request.';
+        oauth2.errCb(err);
+      } else {
+        oauth2.callback({auth: oauth2.auth, token: qpMap, isValid: isValid});
+      }
+      window.close();
+    }
   </script>
 </body>
 </html>";

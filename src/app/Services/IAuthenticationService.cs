@@ -19,4 +19,7 @@ public interface IAuthenticationService
     Task ClearMsalCacheAsync();
     bool IsDemoMode { get; }
     string? GetUserName(); // Deprecated - use GetUserNameAsync
+    
+    Task TrackLoginAsync();
+    Task<string?> GetIdTokenAsync();
 }

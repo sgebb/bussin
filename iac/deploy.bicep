@@ -155,6 +155,12 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       }
     }
     siteConfig: {
+      cors: {
+        allowedOrigins: [
+          'https://app.bussin.dev'
+          'https://localhost:63079'
+        ]
+      }
       appSettings: [
         {
           name: 'AzureWebJobsStorage__accountName'

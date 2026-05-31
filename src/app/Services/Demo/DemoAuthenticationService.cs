@@ -75,4 +75,14 @@ public class DemoAuthenticationService : IAuthenticationService
     {
         return Task.CompletedTask;
     }
+
+    public Task TrackLoginAsync()
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<string?> GetIdTokenAsync()
+    {
+        return Task.FromResult<string?>("demo-id-token");
+    }
 }
