@@ -86,10 +86,13 @@ public class TrackLoginFunction
                           ?? principal.FindFirst("upn") 
                           ?? principal.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn")
                           ?? principal.FindFirst("unique_name");
+            var tidClaim = principal.FindFirst("tid") 
+                        ?? principal.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid");
 
             var userId = oidClaim?.Value;
             var email = emailClaim?.Value ?? "";
             var displayName = nameClaim?.Value ?? "";
+            var tenantId = tidClaim?.Value ?? "";
 
             if (string.IsNullOrEmpty(userId))
             {
@@ -103,6 +106,7 @@ public class TrackLoginFunction
             {
                 id = Guid.NewGuid().ToString(),
                 userId = userId,
+                tenantId = tenantId,
                 email = email,
                 displayName = displayName,
                 loginTimeUtc = DateTime.UtcNow
@@ -115,10 +119,56 @@ public class TrackLoginFunction
             var container = _cosmosClient.GetContainer(dbName, containerName);
             await container.CreateItemAsync(record, new PartitionKey(record.userId));
 
-            _logger.LogInformation("Login successfully recorded for verified userId: {UserId}", record.userId);
+            _logger.LogInformation("Login successfully recorded for verified userId: {UserId} in tenant: {TenantId}", record.userId, record.tenantId);
+
+            // 4. Query Tenants subscription & entitlements
+            var tier = "Free";
+            var features = new System.Collections.Generic.List<string>();
+
+            if (!string.IsNullOrEmpty(tenantId))
+            {
+                try
+                {
+                    var tenantsContainerName = Environment.GetEnvironmentVariable("CosmosDbTenantsContainerName") ?? "Tenants";
+                    var tenantsContainer = _cosmosClient.GetContainer(dbName, tenantsContainerName);
+                    
+                    var tenantResponse = await tenantsContainer.ReadItemAsync<TenantAccess>(
+                        tenantId,
+                        new PartitionKey(tenantId));
+                    
+                    if (tenantResponse?.Resource != null)
+                    {
+                        tier = tenantResponse.Resource.tier ?? "Free";
+                        features = tenantResponse.Resource.features ?? new System.Collections.Generic.List<string>();
+                    }
+                }
+                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _logger.LogInformation("No custom subscription details found for tenant {TenantId}. Defaulting to Free tier.", tenantId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error reading tenant access record for tenant {TenantId}", tenantId);
+                }
+            }
+
+            // 5. Construct and return the verified entitlements response payload
+            var loginResponse = new TrackLoginResponse
+            {
+                userId = userId,
+                displayName = displayName,
+                email = email,
+                tenantId = tenantId,
+                tier = tier,
+                features = features
+            };
 
             var okResponse = req.CreateResponse(HttpStatusCode.OK);
-            await okResponse.WriteStringAsync("Login tracked successfully.");
+            okResponse.Headers.Add("Content-Type", "application/json; charset=utf-8");
+            
+            // Serialize cleanly utilizing our AOT-compliant BussinJsonContext
+            var json = System.Text.Json.JsonSerializer.Serialize(loginResponse, BussinJsonContext.Default.TrackLoginResponse);
+            await okResponse.WriteStringAsync(json);
             return okResponse;
         }
         catch (Exception ex)

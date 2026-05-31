@@ -22,4 +22,6 @@ public interface IAuthenticationService
     
     Task TrackLoginAsync();
     Task<string?> GetIdTokenAsync();
+    string SubscriptionTier { get; }
+    bool HasFeature(string featureFlag);
 }

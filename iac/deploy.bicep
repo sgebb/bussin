@@ -99,6 +99,23 @@ resource cosmosDbContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
   }
 }
 
+// --- Cosmos DB Tenants Container ---
+resource cosmosDbTenantsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-09-15' = {
+  parent: cosmosDbDatabase
+  name: 'Tenants'
+  properties: {
+    resource: {
+      id: 'Tenants'
+      partitionKey: {
+        paths: [
+          '/tenantId'
+        ]
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
 // --- Blob Services and Deployment Container ---
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
   parent: storageAccount
@@ -179,6 +196,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'CosmosDbContainerName'
           value: 'Logins'
+        }
+        {
+          name: 'CosmosDbTenantsContainerName'
+          value: 'Tenants'
         }
       ]
       ftpsState: 'Disabled'

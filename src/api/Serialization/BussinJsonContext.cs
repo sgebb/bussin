@@ -9,6 +9,8 @@ namespace Bussin.Backend.Serialization;
 [JsonSerializable(typeof(TrackLoginRequest))]
 [JsonSerializable(typeof(LoginRecord))]
 [JsonSerializable(typeof(HealthStatus))]
+[JsonSerializable(typeof(TenantAccess))]
+[JsonSerializable(typeof(TrackLoginResponse))]
 internal partial class BussinJsonContext : JsonSerializerContext
 {
 }

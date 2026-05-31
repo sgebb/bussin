@@ -85,4 +85,11 @@ public class DemoAuthenticationService : IAuthenticationService
     {
         return Task.FromResult<string?>("demo-id-token");
     }
+
+    public string SubscriptionTier => "Premium";
+
+    public bool HasFeature(string featureFlag)
+    {
+        return true; // Pre-authorize all features in demo mode
+    }
 }

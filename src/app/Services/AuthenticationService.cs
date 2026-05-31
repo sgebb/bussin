@@ -227,6 +227,17 @@ public sealed class AuthenticationService(
 
     private bool _loginTracked;
 
+    private string _subscriptionTier = "Free";
+    private List<string> _features = new();
+
+    public string SubscriptionTier => _subscriptionTier;
+
+    public bool HasFeature(string featureFlag)
+    {
+        if (string.IsNullOrEmpty(featureFlag)) return false;
+        return _features.Contains(featureFlag, StringComparer.OrdinalIgnoreCase);
+    }
+
     public async Task TrackLoginAsync()
     {
         if (_loginTracked) return;
@@ -258,6 +269,24 @@ public sealed class AuthenticationService(
             {
                 _loginTracked = true;
                 Console.WriteLine("✓ Successful login tracked on backend.");
+                try
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var data = JsonSerializer.Deserialize<BackendLoginResponse>(content, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                    if (data != null)
+                    {
+                        _subscriptionTier = data.tier ?? "Free";
+                        _features = data.features ?? new List<string>();
+                        Console.WriteLine($"DEBUG: Resolved Subscription Tier: {_subscriptionTier}, Active Features Count: {_features.Count}");
+                    }
+                }
+                catch (Exception jsonEx)
+                {
+                    Console.WriteLine($"DEBUG: Error parsing entitlements response: {jsonEx.Message}");
+                }
             }
             else
             {
@@ -276,6 +305,16 @@ public sealed class AuthenticationService(
         var clientId = configuration["AzureAd:ClientId"];
         if (string.IsNullOrEmpty(clientId)) return null;
         return await TryGetTokenFromJsAsync(clientId, "");
+    }
+
+    private class BackendLoginResponse
+    {
+        public string userId { get; set; } = "";
+        public string displayName { get; set; } = "";
+        public string email { get; set; } = "";
+        public string tenantId { get; set; } = "";
+        public string tier { get; set; } = "Free";
+        public List<string> features { get; set; } = new();
     }
 }
 
