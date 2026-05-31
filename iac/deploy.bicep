@@ -1,17 +1,8 @@
-@description('The name of the Azure Function App')
-param functionAppName string = 'bussin-api'
-
-@description('The name of the Cosmos DB Account')
-param cosmosDbAccountName string = 'bussin-cosmos'
-
 @description('The Azure region where resources will be deployed')
 param location string = resourceGroup().location
 
-// --- Storage Account ---
-var storageAccountName = 'bussinstg${uniqueString(resourceGroup().id)}'
-
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: storageAccountName
+  name: 'bussinstorage'
   location: location
   sku: {
     name: 'Standard_LRS'
@@ -23,9 +14,8 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   }
 }
 
-// --- Log Analytics Workspace (Required for App Insights) ---
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: 'bussin-logs-${uniqueString(resourceGroup().id)}'
+  name: 'bussin-logs'
   location: location
   properties: {
     sku: {
@@ -37,7 +27,7 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10
 
 // --- Application Insights ---
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: 'bussin-insights-${uniqueString(resourceGroup().id)}'
+  name: 'bussin-appinsights'
   location: location
   kind: 'web'
   properties: {
@@ -48,7 +38,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 
 // --- App Service Plan (Flex Consumption Plan Serverless Linux) ---
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
-  name: 'bussin-plan-${uniqueString(resourceGroup().id)}'
+  name: 'bussin-appserviceplan'
   location: location
   sku: {
     name: 'FC1'
@@ -61,7 +51,7 @@ resource hostingPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
 
 // --- Cosmos DB Account (Serverless Capacity Mode) ---
 resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-09-15' = {
-  name: cosmosDbAccountName
+  name: 'bussin-cosmos'
   location: location
   kind: 'GlobalDocumentDB'
   properties: {
@@ -125,7 +115,7 @@ resource deploymentContainer 'Microsoft.Storage/storageAccounts/blobServices/con
 
 // --- Function App (Flex Consumption) ---
 resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
-  name: functionAppName
+  name: 'bussin-functionapp'
   location: location
   kind: 'functionapp,linux'
   identity: {
@@ -206,7 +196,7 @@ var storageRoles = [
 ]
 
 resource storageRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for roleId in storageRoles: {
-  name: guid(storageAccount.id, functionAppName, roleId)
+  name: guid(storageAccount.id, functionApp.name, roleId)
   scope: storageAccount
   properties: {
     principalId: functionApp.identity.principalId
@@ -218,13 +208,10 @@ resource storageRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04
 // --- Cosmos DB SQL Role Assignment for Function App Managed Identity ---
 resource sqlRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2023-09-15' = {
   parent: cosmosDbAccount
-  name: guid(functionAppName, '00000000-0000-0000-0000-000000000002', cosmosDbAccount.id)
+  name: guid(functionApp.name, '00000000-0000-0000-0000-000000000002', cosmosDbAccount.id)
   properties: {
     principalId: functionApp.identity.principalId
     roleDefinitionId: resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', cosmosDbAccount.name, '00000000-0000-0000-0000-000000000002')
     scope: cosmosDbAccount.id
   }
 }
-
-output functionAppUrl string = 'https://${functionApp.properties.defaultHostName}'
-output cosmosDbAccountName string = cosmosDbAccount.name
