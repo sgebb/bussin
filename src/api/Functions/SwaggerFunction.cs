@@ -54,7 +54,14 @@ public class SwaggerFunction
         presets: [
           SwaggerUIBundle.presets.apis
         ],
-        layout: ""BaseLayout""
+        layout: ""BaseLayout"",
+        oauth2RedirectUrl: 'https://unpkg.com/swagger-ui-dist@5/oauth2-redirect.html'
+      });
+
+      window.ui.initOAuth({
+        clientId: '36145d65-2256-48e6-a5f6-ae8fde23c103',
+        appName: 'Bussin Backend',
+        usePkceWithAuthorizationCodeGrant: false
       });
     };
   </script>
@@ -118,29 +125,47 @@ public class SwaggerFunction
     ""/api/track-login"": {
       ""post"": {
         ""summary"": ""Track User Login"",
-        ""description"": ""Logs user profile data inside Cosmos DB upon a successful MSAL login. Anonymous access."",
-        ""requestBody"": {
-          ""required"": true,
-          ""content"": {
-            ""application/json"": {
-              ""schema"": {
-                ""$ref"": ""#/components/schemas/TrackLoginRequest""
-              }
-            }
+        ""description"": ""Logs user profile data inside Cosmos DB upon a successful MSAL login."",
+        ""security"": [
+          {
+            ""oauth2"": [
+              ""openid"",
+              ""profile"",
+              ""email""
+            ]
           }
-        },
+        ],
         ""responses"": {
           ""200"": {
             ""description"": ""Login tracked successfully.""
           },
-          ""400"": {
-            ""description"": ""Invalid input payload.""
+          ""401"": {
+            ""description"": ""Unauthorized. Missing or invalid Bearer token.""
+          },
+          ""429"": {
+            ""description"": ""Too Many Requests. Rate limit exceeded.""
           }
         }
       }
     }
   },
   ""components"": {
+    ""securitySchemes"": {
+      ""oauth2"": {
+        ""type"": ""oauth2"",
+        ""description"": ""Microsoft Entra ID login flow for Bussin App"",
+        ""flows"": {
+          ""implicit"": {
+            ""authorizationUrl"": ""https://login.microsoftonline.com/common/oauth2/v2.0/authorize"",
+            ""scopes"": {
+              ""openid"": ""Sign in and verify identity"",
+              ""profile"": ""Access user profile claims"",
+              ""email"": ""Access user email address""
+            }
+          }
+        }
+      }
+    },
     ""schemas"": {
       ""HealthStatus"": {
         ""type"": ""object"",
@@ -153,26 +178,6 @@ public class SwaggerFunction
             ""type"": ""string"",
             ""format"": ""date-time"",
             ""example"": ""2026-05-27T15:10:45Z""
-          }
-        }
-      },
-      ""TrackLoginRequest"": {
-        ""type"": ""object"",
-        ""required"": [
-          ""userId""
-        ],
-        ""properties"": {
-          ""userId"": {
-            ""type"": ""string"",
-            ""example"": ""usr_entra_99""
-          },
-          ""email"": {
-            ""type"": ""string"",
-            ""example"": ""hello@bussin.dev""
-          },
-          ""displayName"": {
-            ""type"": ""string"",
-            ""example"": ""Developer Test""
           }
         }
       }

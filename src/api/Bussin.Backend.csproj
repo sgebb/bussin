@@ -5,10 +5,8 @@
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Disable Native AOT compilation to ensure robust metadata and trigger indexing -->
+    <!-- Standard JIT compilation for robust metadata and function indexing -->
     <PublishAot>false</PublishAot>
-    <!-- Optimize AOT build size and speed -->
-    <OptimizationPreference>Speed</OptimizationPreference>
     <!-- Resolve Azure Functions Worker SDK internal reflection-based serialization crash -->
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
@@ -19,8 +17,10 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.2.0" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.41.0" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.18.0" />
     <!-- Force upgrade of transitive dependency to resolve vulnerability warning NU1903 -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.18.0" />
   </ItemGroup>
 
   <ItemGroup>

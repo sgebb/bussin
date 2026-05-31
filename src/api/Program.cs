@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Azure.Identity;
 using Bussin.Backend.Serialization;
+using Bussin.Backend.Services;
 
 namespace Bussin.Backend;
 
@@ -41,6 +42,10 @@ public static class Program
                     // Entra ID passwordless authentication (best practice for production)
                     return new CosmosClient(endpoint, new DefaultAzureCredential(), options);
                 });
+
+                // Register Rate Limiting and Token Validation services
+                services.AddSingleton<IRateLimitingService, RateLimitingService>();
+                services.AddSingleton<ITokenValidationService, TokenValidationService>();
             })
             .Build();
 

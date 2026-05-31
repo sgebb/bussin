@@ -1,4 +1,4 @@
-name: Deploy Backend to Azure (AOT)
+name: Deploy Backend to Azure
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
           failOnTargetValidationError: true
 
   build-and-deploy-app:
-    name: Build & Deploy Native AOT App
+    name: Build & Deploy JIT App
     needs: deploy-infrastructure
     runs-on: ubuntu-22.04
     steps:
