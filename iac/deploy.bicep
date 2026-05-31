@@ -1,8 +1,8 @@
 @description('The name of the Azure Function App')
-param functionAppName string = 'bussin-backend-${uniqueString(resourceGroup().id)}'
+param functionAppName string = 'bussin-api'
 
 @description('The name of the Cosmos DB Account')
-param cosmosDbAccountName string = 'bussin-db-${uniqueString(resourceGroup().id)}'
+param cosmosDbAccountName string = 'bussin-cosmos'
 
 @description('The Azure region where resources will be deployed')
 param location string = resourceGroup().location

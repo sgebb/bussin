@@ -81,7 +81,11 @@ public class TrackLoginFunction
             // 3. For authenticated users, extract claims securely to prevent spoofing
             var oidClaim = principal.FindFirst("oid") ?? principal.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier");
             var nameClaim = principal.FindFirst("name") ?? principal.FindFirst(ClaimTypes.Name);
-            var emailClaim = principal.FindFirst("preferred_username") ?? principal.FindFirst(ClaimTypes.Email) ?? principal.FindFirst("upn");
+            var emailClaim = principal.FindFirst("preferred_username") 
+                          ?? principal.FindFirst(ClaimTypes.Email) 
+                          ?? principal.FindFirst("upn") 
+                          ?? principal.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn")
+                          ?? principal.FindFirst("unique_name");
 
             var userId = oidClaim?.Value;
             var email = emailClaim?.Value ?? "";
