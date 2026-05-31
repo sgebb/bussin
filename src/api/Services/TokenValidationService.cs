@@ -36,10 +36,11 @@ public class TokenValidationService : ITokenValidationService
             var validationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
-                // Multi-tenant validation: verify the token is signed by Entra ID
+                // Multi-tenant validation: verify the token is signed by Entra ID (supports both v1.0 and v2.0 tokens)
                 IssuerValidator = (issuer, securityToken, validationParams) =>
                 {
-                    if (issuer.StartsWith("https://login.microsoftonline.com/") && issuer.EndsWith("/v2.0"))
+                    if (issuer.StartsWith("https://login.microsoftonline.com/") || 
+                        issuer.StartsWith("https://sts.windows.net/"))
                     {
                         return issuer;
                     }
