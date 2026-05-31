@@ -46,7 +46,7 @@ public class TokenValidationService : ITokenValidationService
                     throw new SecurityTokenInvalidIssuerException("Invalid token issuer.");
                 },
                 ValidateAudience = true,
-                ValidAudience = ClientId,
+                ValidAudiences = new[] { ClientId, $"api://{ClientId}" },
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKeys = config.SigningKeys,
                 ValidateLifetime = true,

@@ -181,9 +181,7 @@ public class SwaggerFunction
         ""security"": [
           {
             ""oauth2"": [
-              ""openid"",
-              ""profile"",
-              ""email""
+              ""api://36145d65-2256-48e6-a5f6-ae8fde23c103/.default""
             ]
           }
         ],
@@ -210,9 +208,7 @@ public class SwaggerFunction
           ""implicit"": {
             ""authorizationUrl"": ""https://login.microsoftonline.com/common/oauth2/v2.0/authorize"",
             ""scopes"": {
-              ""openid"": ""Sign in and verify identity"",
-              ""profile"": ""Access user profile claims"",
-              ""email"": ""Access user email address""
+              ""api://36145d65-2256-48e6-a5f6-ae8fde23c103/.default"": ""Default access to the Bussin API""
             }
           }
         }
