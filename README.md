@@ -1,6 +1,8 @@
 # 🚌 Bussin: The Modern Azure Service Bus Explorer
 
-**Bussin** is a high-performance, client-side Azure Service Bus explorer. It runs entirely in your browser as a Progressive Web App (PWA), offering a secure and private way to manage your messaging infrastructure without any backend proxy or intermediate servers.
+**Bussin** is a high-performance, client-side Azure Service Bus explorer. Access the live tool directly at **[https://bussin.dev](https://bussin.dev)**.
+
+It runs entirely in your browser as a Progressive Web App (PWA), offering a secure and private way to manage your messaging infrastructure without any backend proxy or intermediate servers.
 
 [![Use Bussin](https://img.shields.io/badge/Use%20Bussin-bussin.dev-blueviolet?style=for-the-badge)](https://bussin.dev/)
 
@@ -111,6 +113,11 @@ cd client-js && npm ci && npm run build
 # Build Blazor WASM app
 cd ../src && dotnet publish -c Release
 ```
+
+## 🚀 Releases
+
+When creating a new release of Bussin on GitHub, please ensure the release notes include a link pointing back to the official site:
+`For more details and live usage, visit https://bussin.dev.`
 
 ## 📜 License
 
