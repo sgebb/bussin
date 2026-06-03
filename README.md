@@ -44,38 +44,38 @@ When you open Bussin, your browser acts as the direct orchestrator of all networ
 
 ```mermaid
 graph TD
-    subgraph Browser Sandbox (100% Client-Side)
+    subgraph "Browser Sandbox (100% Client-Side)"
         direction TB
-        UI[Blazor WASM UI / Blades]
-        State[ExplorerViewModel & Cache]
-        MSAL[MSAL.js Authentication]
+        UI["Blazor WASM UI / Blades"]
+        State["ExplorerViewModel & Cache"]
+        MSAL["MSAL.js Authentication"]
         
-        subgraph Net[Network Stack]
-            ARMClient[ARM HTTP Client]
-            AMQPClient[Rhea AMQP-over-WebSockets]
+        subgraph "Network Stack"
+            ARMClient["ARM HTTP Client"]
+            AMQPClient["Rhea AMQP-over-WebSockets"]
         end
     end
 
-    subgraph Azure Cloud Endpoints
+    subgraph "Azure Cloud Endpoints"
         direction TB
-        AAD[Entra ID]
-        ARM[Azure Resource Manager <br> management.azure.com]
-        ASBData[Service Bus Data Plane <br> namespace.servicebus.windows.net]
+        AAD["Entra ID"]
+        ARM["Azure Resource Manager <br> management.azure.com"]
+        ASBData["Service Bus Data Plane <br> namespace.servicebus.windows.net"]
     end
 
     %% Authentication flows
-    MSAL -.->|1. Authenticate & Consent| AAD
-    AAD -.->|2. Return Access Tokens| MSAL
+    MSAL -.->|"1. Authenticate and Consent"| AAD
+    AAD -.->|"2. Return Access Tokens"| MSAL
     
     %% ARM Resource Discovery
-    UI -->|Discover Namespaces| State
-    State -->|3. Query Resources <br> REST + CORS| ARMClient
-    ARMClient -->|HTTPS GET <br> Auth: Bearer ARM Token| ARM
+    UI -->|"Discover Namespaces"| State
+    State -->|"3. Query Resources <br> REST + CORS"| ARMClient
+    ARMClient -->|"HTTPS GET <br> Auth: Bearer ARM Token"| ARM
 
     %% Service Bus Data Plane Operations
-    State -->|4. Active Messaging Operations| AMQPClient
-    AMQPClient -->|WSS Tunnel <br> Bypasses CORS| ASBData
-    AMQPClient -->|5. CBS Handshake <br> Auth: SB Token| ASBData
+    State -->|"4. Active Messaging Operations"| AMQPClient
+    AMQPClient -->|"WSS Tunnel <br> Bypasses CORS"| ASBData
+    AMQPClient -->|"5. CBS Handshake <br> Auth: SB Token"| ASBData
 ```
 
 ### Protocol and Connection Mechanics
