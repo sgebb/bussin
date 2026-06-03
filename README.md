@@ -122,8 +122,8 @@ When creating a new release of Bussin on GitHub, please ensure the release notes
 ## License
 
 Business Source License 1.1 (BSL) - See [LICENSE](LICENSE) file for details.
-* **Standard functionality** is always free via [bussin.dev](https://bussin.dev/).
-* **Commercial redistribution** or rebranding is strictly prohibited.
+* Usage of the software is always free for personal, educational, or internal business use.
+* Commercial redistribution, rebranding, or hosting this software as a service (SaaS) by third parties is prohibited.
 
 ---
 
