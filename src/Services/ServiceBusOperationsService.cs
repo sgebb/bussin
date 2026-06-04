@@ -295,8 +295,10 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     
     public async Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false)
     {
-        // Note: receive-by-sequence-number only works for DEFERRED messages.
-        // So we use lock-match-complete approach.
+        // Note: In Azure Service Bus AMQP data-plane protocols, receiving/deleting directly by sequence number 
+        // is only supported for DEFERRED messages. For active or standard dead-lettered messages, we must use 
+        // the lock-match-complete pattern (i.e. locking messages sequentially from the receiver link, checking 
+        // their sequence numbers, completing those that match, and abandoning the rest).
         try
         {
             var lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, fromDeadLetter);
@@ -393,8 +395,11 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         bool fromDeadLetter,
         bool deleteOriginal)
     {
-        // Note: receive-by-sequence-number only works for DEFERRED messages.
-        // So we use: peek (for content) + batch send + lock-match-complete (for deletion)
+        // Note: Direct AMQP receive-by-sequence-number operations only succeed for deferred messages.
+        // To resubmit standard active or dead-lettered messages, we use a three-step transactional flow:
+        // 1. Peek the message payloads by sequence number (read-only peek does support sequence queries).
+        // 2. Publish cloned messages as a new batch to the destination queue/topic.
+        // 3. If deleteOriginal is true, lock the original messages and complete them to clean up the queue.
         try
         {
             var token = await GetTokenAsync();

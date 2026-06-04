@@ -111,24 +111,6 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
         await JSRuntime.InvokeAsync<object>("ServiceBusAPI.seedSubscription", @namespace, topicName, subscriptionName);
     }
 
-    public int GetQueueMessageCount(string @namespace, string queueName, bool fromDeadLetter = false)
-    {
-        if (JSRuntime is IJSInProcessRuntime inProcess)
-        {
-            return inProcess.Invoke<int>("ServiceBusAPI.getQueueMessageCount", @namespace, queueName, fromDeadLetter);
-        }
-        return 0;
-    }
-
-    public int GetSubscriptionMessageCount(string @namespace, string topicName, string subscriptionName, bool fromDeadLetter = false)
-    {
-        if (JSRuntime is IJSInProcessRuntime inProcess)
-        {
-            return inProcess.Invoke<int>("ServiceBusAPI.getSubscriptionMessageCount", @namespace, topicName, subscriptionName, fromDeadLetter);
-        }
-        return 0;
-    }
-
     public async Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token, bool fromDeadLetter = false)
     {
         var result = await InvokeSimulatorAsync<JsonElement>("purgeQueueDirect", namespaceName, queueName, token, fromDeadLetter);
