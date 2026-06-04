@@ -1,4 +1,4 @@
-﻿@using Bussin.Models
+@using Bussin.Models
 @using System.Text.Json
 
 @if (IsVisible && Message != null)
@@ -7,185 +7,328 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content" @onmousedown:stopPropagation="true">
                 <div class="modal-header">
-                    <h5 class="modal-title">Message Details</h5>
-                    <button type="button" class="btn-close" @onclick="Close" title="Close"></button>
+                    <h5 class="modal-title">@(isEditing ? "Edit & Resubmit Message" : "Message Details")</h5>
+                    <button type="button" class="btn-close" @onclick="Close" title="Close" disabled="@IsProcessing"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="row">
-                        <!-- Message Info -->
-                        <div class="col-md-6 mb-3">
-                            <h6 class="border-bottom pb-2">Broker Properties</h6>
-                            <table class="table table-sm">
-                                <tbody>
-                                    <tr>
-                                        <td class="fw-bold" style="width: 200px;">Sequence Number</td>
-                                        <td>@Message.SequenceNumber</td>
-                                    </tr>
-                                    @if (!string.IsNullOrEmpty(Message.MessageId))
+                    @if (isEditing)
+                    {
+                        <div class="row">
+                            <!-- Message Info Form -->
+                            <div class="col-md-6 mb-3">
+                                <h6 class="border-bottom pb-2 text-primary">Broker Properties (Editable)</h6>
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Message ID</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editMessageId" placeholder="Auto-generated if empty" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Session ID</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editSessionId" placeholder="Optional" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Correlation ID</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editCorrelationId" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Subject / Label</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editSubject" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Content Type</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editContentType" placeholder="e.g. application/json" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Partition Key</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editPartitionKey" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">To</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editTo" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Reply To</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="editReplyTo" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Custom Properties Editor -->
+                            <div class="col-md-6 mb-3">
+                                <h6 class="border-bottom pb-2 text-primary">Custom Properties</h6>
+                                <div style="max-height: 230px; overflow-y: auto; overflow-x: hidden; padding-right: 15px;">
+                                    @if (editCustomProperties.Any())
                                     {
-                                        <tr>
-                                            <td class="fw-bold">Message ID</td>
-                                            <td>@Message.MessageId</td>
-                                        </tr>
+                                        @foreach (var prop in editCustomProperties)
+                                        {
+                                            <div class="row g-2 mb-2 align-items-end mx-0">
+                                                <div class="col-4">
+                                                    <input type="text" class="form-control form-control-sm" @bind="prop.Key" placeholder="Key" />
+                                                </div>
+                                                <div class="col-3">
+                                                    <select class="form-select form-select-sm" @bind="prop.Type">
+                                                        <option value="string">String</option>
+                                                        <option value="number">Number</option>
+                                                        <option value="boolean">Boolean</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-4">
+                                                    @if (prop.Type == "boolean")
+                                                    {
+                                                        <select class="form-select form-select-sm" @bind="prop.Value">
+                                                            <option value="true">true</option>
+                                                            <option value="false">false</option>
+                                                        </select>
+                                                    }
+                                                    else
+                                                    {
+                                                        <input type="@(prop.Type == "number" ? "number" : "text")" class="form-control form-control-sm" @bind="prop.Value" placeholder="Value" />
+                                                    }
+                                                </div>
+                                                <div class="col-1">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCustomProperty(prop)">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
                                     }
-                                    @if (Message.EnqueuedTime.HasValue)
+                                    else
                                     {
-                                        <tr>
-                                            <td class="fw-bold">Enqueued Time</td>
-                                            <td>@Message.EnqueuedTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                                        </tr>
+                                        <div class="text-muted fst-italic py-2">No custom properties</div>
                                     }
-                                    @if (Message.ScheduledEnqueueTime.HasValue)
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Scheduled Enqueue (UTC)</td>
-                                            <td>@FormatUnixTime(Message.ScheduledEnqueueTime.Value)</td>
-                                        </tr>
-                                    }
-                                    <tr>
-                                        <td class="fw-bold">Delivery Count</td>
-                                        <td>@Message.DeliveryCount</td>
-                                    </tr>
-                                    @if (Message.Ttl.HasValue)
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Time To Live</td>
-                                            <td>@FormatTtl(Message.Ttl.Value)</td>
-                                        </tr>
-                                    }
-                                    @if (!string.IsNullOrEmpty(Message.ContentType))
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Content Type</td>
-                                            <td>@Message.ContentType</td>
-                                        </tr>
-                                    }
-                                    @if (!string.IsNullOrEmpty(Message.CorrelationId))
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Correlation ID</td>
-                                            <td>@Message.CorrelationId</td>
-                                        </tr>
-                                    }
-                                    @if (!string.IsNullOrEmpty(Message.SessionId))
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Session ID</td>
-                                            <td>@Message.SessionId</td>
-                                        </tr>
-                                    }
-                                    @if (!string.IsNullOrEmpty(Message.Subject))
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Subject / Label</td>
-                                            <td>@Message.Subject</td>
-                                        </tr>
-                                    }
-                                    @if (!string.IsNullOrEmpty(Message.ReplyTo))
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Reply To</td>
-                                            <td>@Message.ReplyTo</td>
-                                        </tr>
-                                    }
-                                    @if (!string.IsNullOrEmpty(Message.To))
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">To</td>
-                                            <td>@Message.To</td>
-                                        </tr>
-                                    }
-                                    @if (!string.IsNullOrEmpty(Message.PartitionKey))
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Partition Key</td>
-                                            <td>@Message.PartitionKey</td>
-                                        </tr>
-                                    }
-                                    @if (Message.ExpiryTime.HasValue)
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">Expires At (UTC)</td>
-                                            <td>@Message.ExpiryTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" @onclick="AddCustomProperty">
+                                    <i class="bi bi-plus"></i> Add Property
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- Custom Properties -->
-                        <div class="col-md-6 mb-3">
-                            <h6 class="border-bottom pb-2">Custom Properties</h6>
-                            @if (Message.ApplicationProperties != null && Message.ApplicationProperties.Any())
-                            {
+                        <!-- Message Body Editor -->
+                        <div class="mb-3">
+                            <h6 class="border-bottom pb-2 text-primary">Message Body</h6>
+                            <textarea class="form-control font-monospace" rows="8" @bind="editBody" placeholder="Message content (JSON or plain text)"></textarea>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <!-- Message Info -->
+                            <div class="col-md-6 mb-3">
+                                <h6 class="border-bottom pb-2">Broker Properties</h6>
                                 <table class="table table-sm">
                                     <tbody>
-                                        @foreach (var prop in Message.ApplicationProperties)
+                                        <tr>
+                                            <td class="fw-bold" style="width: 200px;">Sequence Number</td>
+                                            <td>@Message.SequenceNumber</td>
+                                        </tr>
+                                        @if (!string.IsNullOrEmpty(Message.MessageId))
                                         {
                                             <tr>
-                                                <td class="fw-bold" style="width: 200px;">@prop.Key</td>
-                                                <td>@prop.Value</td>
+                                                <td class="fw-bold">Message ID</td>
+                                                <td>@Message.MessageId</td>
+                                            </tr>
+                                        }
+                                        @if (Message.EnqueuedTime.HasValue)
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Enqueued Time</td>
+                                                <td>@Message.EnqueuedTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                            </tr>
+                                        }
+                                        @if (Message.ScheduledEnqueueTime.HasValue)
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Scheduled Enqueue (UTC)</td>
+                                                <td>@FormatUnixTime(Message.ScheduledEnqueueTime.Value)</td>
+                                            </tr>
+                                        }
+                                        <tr>
+                                            <td class="fw-bold">Delivery Count</td>
+                                            <td>@Message.DeliveryCount</td>
+                                        </tr>
+                                        @if (Message.Ttl.HasValue)
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Time To Live</td>
+                                                <td>@FormatTtl(Message.Ttl.Value)</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(Message.ContentType))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Content Type</td>
+                                                <td>@Message.ContentType</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(Message.CorrelationId))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Correlation ID</td>
+                                                <td>@Message.CorrelationId</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(Message.SessionId))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Session ID</td>
+                                                <td>@Message.SessionId</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(Message.Subject))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Subject / Label</td>
+                                                <td>@Message.Subject</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(Message.ReplyTo))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Reply To</td>
+                                                <td>@Message.ReplyTo</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(Message.To))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">To</td>
+                                                <td>@Message.To</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(Message.PartitionKey))
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Partition Key</td>
+                                                <td>@Message.PartitionKey</td>
+                                            </tr>
+                                        }
+                                        @if (Message.ExpiryTime.HasValue)
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">Expires At (UTC)</td>
+                                                <td>@Message.ExpiryTime.Value.ToString("yyyy-MM-dd HH:mm:ss")</td>
                                             </tr>
                                         }
                                     </tbody>
                                 </table>
-                            }
-                            else
-                            {
-                                <div class="text-muted fst-italic">No custom properties</div>
-                            }
-                        </div>
-                    </div>
+                            </div>
 
-                    <!-- Message Body -->
-                    <div class="mb-3">
-                        <h6 class="border-bottom pb-2">Message Body</h6>
-                        <div class="position-relative">
-                            <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" 
-                                    @onclick="CopyBody" title="Copy to clipboard">
-                                <i class="bi bi-clipboard"></i>
-                            </button>
-                            <pre class="p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
+                            <!-- Custom Properties -->
+                            <div class="col-md-6 mb-3">
+                                <h6 class="border-bottom pb-2">Custom Properties</h6>
+                                @if (Message.ApplicationProperties != null && Message.ApplicationProperties.Any())
+                                {
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            @foreach (var prop in Message.ApplicationProperties)
+                                            {
+                                                <tr>
+                                                    <td class="fw-bold" style="width: 200px;">@prop.Key</td>
+                                                    <td>@prop.Value</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                }
+                                else
+                                {
+                                    <div class="text-muted fst-italic">No custom properties</div>
+                                }
+                            </div>
                         </div>
-                    </div>
-                    
-                    @if (IsScheduledMessage)
-                    {
-                        <div class="alert alert-info d-flex align-items-center mb-0">
-                            <i class="bi bi-info-circle me-2"></i>
-                            <span><strong>Scheduled message.</strong> Scheduled messages cannot be deleted or moved. They can only wait for their scheduled time or be cancelled via the Service Bus API.</span>
+
+                        <!-- Message Body -->
+                        <div class="mb-3">
+                            <h6 class="border-bottom pb-2">Message Body</h6>
+                            <div class="position-relative">
+                                <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" 
+                                        @onclick="CopyBody" title="Copy to clipboard">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                                <pre class="p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>@FormattedBody</code></pre>
+                            </div>
                         </div>
+                        
+                        @if (IsScheduledMessage)
+                        {
+                            <div class="alert alert-info d-flex align-items-center mb-0">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <span><strong>Scheduled message.</strong> Scheduled messages cannot be deleted or moved. They can only wait for their scheduled time or be cancelled via the Service Bus API.</span>
+                            </div>
+                        }
                     }
                 </div>
                 <div class="modal-footer justify-content-end">
-                    <button class="btn btn-danger" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
-                            title="@GetDeleteButtonTitle()">
-                        @if (IsProcessing)
-                        {
-                            <span class="spinner-border spinner-border-sm me-2"></span>
-                        }
-                        Delete
-                    </button>
-                    @if (IsDLQ)
+                    @if (isEditing)
                     {
-                        <button class="btn btn-primary" @onclick="ResubmitMessage" disabled="@IsProcessing">
-                            @if (IsProcessing)
-                            {
-                                <span class="spinner-border spinner-border-sm me-2"></span>
-                            }
-                            Resubmit
+                        <button class="btn btn-secondary me-auto" @onclick="CancelEdit" disabled="@IsProcessing">
+                            Cancel
                         </button>
+                        
+                        @if (IsDLQ)
+                        {
+                            <button class="btn btn-outline-primary me-2" @onclick="() => SendEditedMessage(deleteOriginal: false)" disabled="@IsProcessing">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Resubmit as Clone
+                            </button>
+                            <button class="btn btn-primary" @onclick="() => SendEditedMessage(deleteOriginal: true)" disabled="@IsProcessing">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Resubmit & Delete Original
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary" @onclick="() => SendEditedMessage(deleteOriginal: false)" disabled="@IsProcessing">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Send (Clone)
+                            </button>
+                        }
                     }
                     else
                     {
-                        <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
-                                title="@GetMoveToDLQButtonTitle()">
+                        <button class="btn btn-secondary me-auto" @onclick="StartEdit" disabled="@IsScheduledMessage" title="Edit message content and properties">
+                            <i class="bi bi-pencil-square me-1"></i> Edit
+                        </button>
+                        
+                        <button class="btn btn-danger me-2" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
+                                title="@GetDeleteButtonTitle()">
                             @if (IsProcessing)
                             {
                                 <span class="spinner-border spinner-border-sm me-2"></span>
                             }
-                            Move to DLQ
+                            Delete
                         </button>
+                        @if (IsDLQ)
+                        {
+                            <button class="btn btn-primary" @onclick="ResubmitMessage" disabled="@IsProcessing">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Resubmit
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
+                                    title="@GetMoveToDLQButtonTitle()">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Move to DLQ
+                            </button>
+                        }
                     }
                 </div>
             </div>
@@ -203,8 +346,141 @@
     [Parameter] public EventCallback<long> OnDelete { get; set; }
     [Parameter] public EventCallback<long> OnResubmit { get; set; }
     [Parameter] public EventCallback<long> OnMoveToDLQ { get; set; }
+    [Parameter] public EventCallback<EditResubmitRequest> OnEditResubmit { get; set; }
 
     [Inject] private IJSRuntime JSRuntime { get; set; } = default!;
+
+    private bool isEditing = false;
+    private string editBody = "";
+    private string editMessageId = "";
+    private string editCorrelationId = "";
+    private string editSessionId = "";
+    private string editSubject = "";
+    private string editContentType = "";
+    private string editTo = "";
+    private string editReplyTo = "";
+    private string editPartitionKey = "";
+    private List<CustomProperty> editCustomProperties = new();
+
+    public class CustomProperty
+    {
+        public string Key { get; set; } = "";
+        public string Type { get; set; } = "string";
+        public string Value { get; set; } = "";
+    }
+
+    public class EditResubmitRequest
+    {
+        public required long OriginalSequenceNumber { get; set; }
+        public required string Body { get; set; }
+        public string? SessionId { get; set; }
+        public string? MessageId { get; set; }
+        public string? CorrelationId { get; set; }
+        public string? Subject { get; set; }
+        public string? ReplyTo { get; set; }
+        public string? To { get; set; }
+        public string? ContentType { get; set; }
+        public string? PartitionKey { get; set; }
+        public Dictionary<string, object>? CustomProperties { get; set; }
+        public required bool DeleteOriginal { get; set; }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!IsVisible)
+        {
+            isEditing = false;
+        }
+    }
+
+    private void StartEdit()
+    {
+        isEditing = true;
+        editBody = Message?.Body?.ToString() ?? "";
+        editMessageId = Message?.MessageId ?? "";
+        editCorrelationId = Message?.CorrelationId ?? "";
+        editSessionId = Message?.SessionId ?? "";
+        editSubject = Message?.Subject ?? "";
+        editContentType = Message?.ContentType ?? "";
+        editTo = Message?.To ?? "";
+        editReplyTo = Message?.ReplyTo ?? "";
+        editPartitionKey = Message?.PartitionKey ?? "";
+        
+        editCustomProperties = new List<CustomProperty>();
+        if (Message?.ApplicationProperties != null)
+        {
+            foreach (var prop in Message.ApplicationProperties)
+            {
+                var valStr = prop.Value?.ToString() ?? "";
+                var valType = "string";
+                if (prop.Value is bool) valType = "boolean";
+                else if (prop.Value is int || prop.Value is long || prop.Value is double || prop.Value is float || prop.Value is decimal) valType = "number";
+                
+                editCustomProperties.Add(new CustomProperty
+                {
+                    Key = prop.Key,
+                    Type = valType,
+                    Value = valStr
+                });
+            }
+        }
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    private void AddCustomProperty()
+    {
+        editCustomProperties.Add(new CustomProperty { Type = "string" });
+    }
+
+    private void RemoveCustomProperty(CustomProperty prop)
+    {
+        editCustomProperties.Remove(prop);
+    }
+
+    private async Task SendEditedMessage(bool deleteOriginal)
+    {
+        if (Message == null || !Message.SequenceNumber.HasValue) return;
+
+        var validProps = editCustomProperties.Where(p => !string.IsNullOrWhiteSpace(p.Key)).ToList();
+        Dictionary<string, object>? customPropertiesDict = null;
+        if (validProps.Any())
+        {
+            customPropertiesDict = new Dictionary<string, object>();
+            foreach (var prop in validProps)
+            {
+                object value = prop.Type switch
+                {
+                    "number" => double.TryParse(prop.Value, out var num) ? (object)num : prop.Value ?? "",
+                    "boolean" => prop.Value?.ToLower() == "true",
+                    _ => prop.Value ?? ""
+                };
+                customPropertiesDict[prop.Key] = value;
+            }
+        }
+
+        var request = new EditResubmitRequest
+        {
+            OriginalSequenceNumber = Message.SequenceNumber.Value,
+            Body = editBody,
+            SessionId = string.IsNullOrWhiteSpace(editSessionId) ? null : editSessionId,
+            MessageId = string.IsNullOrWhiteSpace(editMessageId) ? null : editMessageId,
+            CorrelationId = string.IsNullOrWhiteSpace(editCorrelationId) ? null : editCorrelationId,
+            Subject = string.IsNullOrWhiteSpace(editSubject) ? null : editSubject,
+            ReplyTo = string.IsNullOrWhiteSpace(editReplyTo) ? null : editReplyTo,
+            To = string.IsNullOrWhiteSpace(editTo) ? null : editTo,
+            ContentType = string.IsNullOrWhiteSpace(editContentType) ? null : editContentType,
+            PartitionKey = string.IsNullOrWhiteSpace(editPartitionKey) ? null : editPartitionKey,
+            CustomProperties = customPropertiesDict,
+            DeleteOriginal = deleteOriginal
+        };
+
+        await OnEditResubmit.InvokeAsync(request);
+        isEditing = false;
+    }
 
     private string FormattedBody
     {
@@ -214,7 +490,6 @@
             
             var bodyStr = Message.Body.ToString() ?? "";
             
-            // Try to format as JSON
             try
             {
                 var jsonDoc = JsonDocument.Parse(bodyStr);
@@ -225,7 +500,6 @@
             }
             catch
             {
-                // Not JSON, return as-is
                 return bodyStr;
             }
         }

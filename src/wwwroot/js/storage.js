@@ -118,3 +118,16 @@ window.awaitSearchResult = async function (controller) {
         throw new Error(errorMsg);
     }
 };
+
+// Helper to download a text file
+window.downloadFile = function (fileName, contentType, contentString) {
+    const blob = new Blob([contentString], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};

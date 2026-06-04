@@ -1,4 +1,4 @@
-﻿@using Bussin.Models
+@using Bussin.Models
 @using System.Text.RegularExpressions
 
 
@@ -50,6 +50,28 @@
                         <i class="bi bi-search message-search-icon big-icon" style="font-size: 0.8rem;"></i>
                     </div>
                     
+                    @if (SelectedMessages.Any())
+                    {
+                        <button class="btn btn-sm btn-outline-secondary me-2" @onclick="DownloadSelected" title="Download selected messages as JSON">
+                            <i class="bi bi-download"></i> Download Selected (@SelectedMessages.Count)
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="dropdown me-2" style="position: relative;">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" @onclick="ToggleDownloadDropdown" type="button" title="Download options">
+                                <i class="bi bi-download"></i> Download
+                            </button>
+                            @if (showDownloadDropdown)
+                            {
+                                <ul class="dropdown-menu show" style="display: block; position: absolute; right: 0; left: auto; top: 100%; z-index: 1050; min-width: 210px; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);">
+                                    <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" @onclick="DownloadLoaded">Download Loaded (@Messages.Count)</button></li>
+                                    <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" @onclick="DownloadEntireEntity">Download Queue/Sub (Max 10k)</button></li>
+                                </ul>
+                            }
+                        </div>
+                    }
+
                     <button class="btn btn-sm btn-outline-secondary" @onclick="OnClearMessagesClick" title="Clear all peeked messages">
                         <i class="bi bi-trash"></i> Clear
                     </button>
@@ -135,6 +157,9 @@
     [Parameter] public EventCallback<List<long>> OnMoveToDLQMessages { get; set; }
     [Parameter] public EventCallback<string> OnScheduledMessageWarning { get; set; }
     [Parameter] public EventCallback OnClearMessages { get; set; }
+    [Parameter] public EventCallback<List<long>> OnDownloadSelected { get; set; }
+    [Parameter] public EventCallback OnDownloadLoaded { get; set; }
+    [Parameter] public EventCallback OnDownloadEntireEntity { get; set; }
 
     private string SearchTerm { get; set; } = "";
 
@@ -330,5 +355,29 @@
     private async Task OnClearMessagesClick()
     {
         await OnClearMessages.InvokeAsync();
+    }
+
+    private bool showDownloadDropdown = false;
+
+    private void ToggleDownloadDropdown()
+    {
+        showDownloadDropdown = !showDownloadDropdown;
+    }
+
+    private async Task DownloadSelected()
+    {
+        await OnDownloadSelected.InvokeAsync(SelectedMessages.ToList());
+    }
+
+    private async Task DownloadLoaded()
+    {
+        showDownloadDropdown = false;
+        await OnDownloadLoaded.InvokeAsync();
+    }
+
+    private async Task DownloadEntireEntity()
+    {
+        showDownloadDropdown = false;
+        await OnDownloadEntireEntity.InvokeAsync();
     }
 }

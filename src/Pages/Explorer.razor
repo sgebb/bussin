@@ -117,7 +117,10 @@
                                      OnResubmitMessages="@VM.ResubmitMessages"
                                      OnMoveToDLQMessages="@VM.MoveToDLQMessages"
                                      OnScheduledMessageWarning="@VM.ShowScheduledMessageWarning"
-                                     OnClearMessages="@VM.ClearPeekedMessages" />
+                                     OnClearMessages="@VM.ClearPeekedMessages"
+                                     OnDownloadSelected="@VM.DownloadSelectedMessagesAsync"
+                                     OnDownloadLoaded="@VM.DownloadLoadedMessagesAsync"
+                                     OnDownloadEntireEntity="@VM.DownloadEntireEntityMessagesAsync" />
                     }
                     else if (VM.State.SelectedQueueName != null || VM.State.SelectedSubscriptionName != null)
                     {
@@ -210,7 +213,8 @@
                     OnClose="@VM.CloseMessageDetail"
                     OnDelete="@VM.DeleteSingleMessage"
                     OnResubmit="@VM.ResubmitSingleMessage"
-                    OnMoveToDLQ="@VM.MoveToDLQSingleMessage" />
+                    OnMoveToDLQ="@VM.MoveToDLQSingleMessage"
+                    OnEditResubmit="@VM.EditAndResubmitMessageAsync" />
 
 <PeekLockModal IsVisible="@VM.ShowPeekLockModal"
                IsProcessing="@VM.IsPeeking"
@@ -238,6 +242,11 @@
 <ReceiveAndLockModal IsVisible="@VM.ShowReceiveAndLockModal"
                      OnClose="@(() => VM.ShowReceiveAndLockModal = false)"
                      OnLockMessages="@VM.LockMessagesForModalAsync" />
+
+<ExportOptionsModal IsVisible="@VM.ShowExportOptionsModal"
+                    Options="@VM.MessageExportOptions"
+                    OnClose="@(() => VM.ShowExportOptionsModal = false)"
+                    OnExport="@VM.ExecuteExportAsync" />
 
 <ConfirmModal IsVisible="@VM.ConfirmModalVisible"
               Title="@VM.ConfirmModalTitle"

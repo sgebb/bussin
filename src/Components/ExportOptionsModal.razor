@@ -1,0 +1,164 @@
+@if (IsVisible)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnBackdropClick">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h5 class="modal-title">Export Options</h5>
+                    <button type="button" class="btn-close" @onclick="OnClose"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Choose the fields to include in the exported JSON file.</span>
+                        <div>
+                            <button class="btn btn-sm btn-outline-secondary me-1" @onclick="SelectAll">Select All</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="ClearAll">Clear All</button>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Left Column: Primary Broker Properties -->
+                        <div class="col-md-6 border-end">
+                            <h6 class="border-bottom pb-2 text-primary">Message Properties</h6>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expMessageId" @bind="Options.IncludeMessageId">
+                                <label class="form-check-label" for="expMessageId">Message ID</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expSessionId" @bind="Options.IncludeSessionId">
+                                <label class="form-check-label" for="expSessionId">Session ID</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expCorrelationId" @bind="Options.IncludeCorrelationId">
+                                <label class="form-check-label" for="expCorrelationId">Correlation ID</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expSubject" @bind="Options.IncludeSubject">
+                                <label class="form-check-label" for="expSubject">Subject / Label</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expContentType" @bind="Options.IncludeContentType">
+                                <label class="form-check-label" for="expContentType">Content Type</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expPartitionKey" @bind="Options.IncludePartitionKey">
+                                <label class="form-check-label" for="expPartitionKey">Partition Key</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expTo" @bind="Options.IncludeTo">
+                                <label class="form-check-label" for="expTo">To</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expReplyTo" @bind="Options.IncludeReplyTo">
+                                <label class="form-check-label" for="expReplyTo">Reply To</label>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Metadata & Custom Properties -->
+                        <div class="col-md-6">
+                            <h6 class="border-bottom pb-2 text-primary">Metadata & Custom</h6>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expSeqNum" @bind="Options.IncludeSequenceNumber">
+                                <label class="form-check-label" for="expSeqNum">Sequence Number</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expEnqueuedTime" @bind="Options.IncludeEnqueuedTime">
+                                <label class="form-check-label" for="expEnqueuedTime">Enqueued Time</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expDeliveryCount" @bind="Options.IncludeDeliveryCount">
+                                <label class="form-check-label" for="expDeliveryCount">Delivery Count</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expTtl" @bind="Options.IncludeTtl">
+                                <label class="form-check-label" for="expTtl">Time To Live (TTL)</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expExpiryTime" @bind="Options.IncludeExpiryTime">
+                                <label class="form-check-label" for="expExpiryTime">Expiry Time</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expLockedUntil" @bind="Options.IncludeLockedUntil">
+                                <label class="form-check-label" for="expLockedUntil">Locked Until Time</label>
+                            </div>
+                            <hr />
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="expCustomProps" @bind="Options.IncludeCustomProperties">
+                                <label class="form-check-label fw-bold" for="expCustomProps">Include Custom Properties</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="HandleExport">Export</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnExport { get; set; }
+    [Parameter] public ExportOptions Options { get; set; } = new();
+
+    public class ExportOptions
+    {
+        public bool IncludeMessageId { get; set; } = true;
+        public bool IncludeSessionId { get; set; } = true;
+        public bool IncludeCorrelationId { get; set; } = true;
+        public bool IncludeSubject { get; set; } = true;
+        public bool IncludeContentType { get; set; } = true;
+        public bool IncludePartitionKey { get; set; } = true;
+        public bool IncludeTo { get; set; } = true;
+        public bool IncludeReplyTo { get; set; } = true;
+        public bool IncludeSequenceNumber { get; set; } = true;
+        public bool IncludeEnqueuedTime { get; set; } = true;
+        public bool IncludeDeliveryCount { get; set; } = true;
+        public bool IncludeTtl { get; set; } = true;
+        public bool IncludeExpiryTime { get; set; } = true;
+        public bool IncludeLockedUntil { get; set; } = true;
+        public bool IncludeCustomProperties { get; set; } = true;
+    }
+
+    private void SelectAll()
+    {
+        ToggleAll(true);
+    }
+
+    private void ClearAll()
+    {
+        ToggleAll(false);
+    }
+
+    private void ToggleAll(bool val)
+    {
+        Options.IncludeMessageId = val;
+        Options.IncludeSessionId = val;
+        Options.IncludeCorrelationId = val;
+        Options.IncludeSubject = val;
+        Options.IncludeContentType = val;
+        Options.IncludePartitionKey = val;
+        Options.IncludeTo = val;
+        Options.IncludeReplyTo = val;
+        Options.IncludeSequenceNumber = val;
+        Options.IncludeEnqueuedTime = val;
+        Options.IncludeDeliveryCount = val;
+        Options.IncludeTtl = val;
+        Options.IncludeExpiryTime = val;
+        Options.IncludeLockedUntil = val;
+        Options.IncludeCustomProperties = val;
+    }
+
+    private async Task HandleExport()
+    {
+        await OnExport.InvokeAsync();
+    }
+
+    private async Task OnBackdropClick()
+    {
+        await OnClose.InvokeAsync();
+    }
+}

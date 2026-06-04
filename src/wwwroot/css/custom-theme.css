@@ -490,6 +490,23 @@ a:hover,
     border-color: var(--warning-color);
 }
 
+/* Global custom checkboxes styled with theme colors */
+.form-check-input {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    cursor: pointer;
+}
+
+.form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.form-check-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.25);
+}
+
 /* Input Fields */
 .form-control,
 .form-select,

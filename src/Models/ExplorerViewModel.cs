@@ -26,6 +26,7 @@ public sealed class ExplorerViewModel : IDisposable
     private readonly BackgroundSearchService _backgroundSearch;
     private readonly BackgroundResubmitService _backgroundResubmit;
     private readonly NavigationStateService _navState;
+    private readonly IJSRuntime _jsRuntime;
 
     public ExplorerViewModel(
         IAuthenticationService authService,
@@ -37,7 +38,8 @@ public sealed class ExplorerViewModel : IDisposable
         BackgroundPurgeService backgroundPurge,
         BackgroundSearchService backgroundSearch,
         BackgroundResubmitService backgroundResubmit,
-        NavigationStateService navState)
+        NavigationStateService navState,
+        IJSRuntime jsRuntime)
     {
         _authService = authService;
         _resourceService = resourceService;
@@ -49,6 +51,7 @@ public sealed class ExplorerViewModel : IDisposable
         _backgroundSearch = backgroundSearch;
         _backgroundResubmit = backgroundResubmit;
         _navState = navState;
+        _jsRuntime = jsRuntime;
 
         // Initialize state listeners
         _confirmModal.OnChange += NotifyStateChanged;
@@ -94,6 +97,8 @@ public sealed class ExplorerViewModel : IDisposable
     public bool ShowReceiveAndLockModal { get; set; }
     public bool ShowPeekOptionsModal { get; set; }
     public bool ShowStatsModal { get; set; }
+    public bool ShowExportOptionsModal { get; set; }
+    public Bussin.Components.ExportOptionsModal.ExportOptions MessageExportOptions { get; set; } = new();
     
     public ServiceBusMessage? SelectedMessage { get; set; }
     public int PeekLockCount { get; set; } = 10;
@@ -109,6 +114,8 @@ public sealed class ExplorerViewModel : IDisposable
 
     private CancellationTokenSource? _loadCts;
     private string? _loadedSubscriptionsForTopic;
+    private string _currentExportMode = "";
+    private List<long> _currentExportSequenceNumbers = new();
 
     // Computed
     public List<ServiceBusQueueInfo> Queues => QueueDict.Values.OrderBy(q => q.Name).ToList();
@@ -822,6 +829,62 @@ public sealed class ExplorerViewModel : IDisposable
         }
     }
 
+    public async Task EditAndResubmitMessageAsync(Bussin.Components.MessageDetailModal.EditResubmitRequest request)
+    {
+        IsProcessingBatch = true;
+        ErrorMessage = null;
+        try
+        {
+            var props = new MessageProperties
+            {
+                MessageId = request.MessageId,
+                CorrelationId = request.CorrelationId,
+                Subject = request.Subject,
+                ReplyTo = request.ReplyTo,
+                To = request.To,
+                SessionId = request.SessionId,
+                ContentType = request.ContentType,
+                ApplicationProperties = request.CustomProperties,
+                PartitionKey = request.PartitionKey
+            };
+
+            // 1. Send the edited message back to the active queue/topic
+            if (State.IsQueueSelected)
+                await _operationsService.SendQueueMessageAsync(NamespaceNameOnly, State.SelectedQueueName!, request.Body, props);
+            else if (State.IsSubscriptionSelected)
+                await _operationsService.SendTopicMessageAsync(NamespaceNameOnly, State.SelectedTopicName!, request.Body, props);
+
+            // 2. If it's a DLQ message and the user checked "delete original", delete it
+            if (State.IsViewingDLQ && request.DeleteOriginal)
+            {
+                if (State.IsQueueSelected)
+                {
+                    await _operationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, State.SelectedQueueName!, new[] { request.OriginalSequenceNumber }, fromDeadLetter: true);
+                }
+                else if (State.IsSubscriptionSelected)
+                {
+                    await _operationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, State.SelectedTopicName!, State.SelectedSubscriptionName!, new[] { request.OriginalSequenceNumber }, fromDeadLetter: true);
+                }
+
+                // Remove it from the local list
+                PeekedMessages.RemoveAll(m => m.SequenceNumber == request.OriginalSequenceNumber);
+            }
+
+            ShowMessageDetailModal = false;
+            SelectedMessage = null;
+        }
+        catch (Exception ex)
+        {
+            RawErrorMessage = ex.Message;
+            ErrorMessage = PermissionErrorHelper.FormatError(ex.Message, "resubmit edited message for");
+        }
+        finally
+        {
+            IsProcessingBatch = false;
+            NotifyStateChanged();
+        }
+    }
+
     public async Task SendBatchMessagesAsync(List<SendMessageModal.SendMessageRequest> requests)
     {
         IsSending = true;
@@ -1107,6 +1170,159 @@ public sealed class ExplorerViewModel : IDisposable
     {
         CloseMessageDetail();
         MoveToDLQMessages(new List<long> { sequenceNumber });
+    }
+
+    public void DownloadSelectedMessagesAsync(List<long> sequenceNumbers)
+    {
+        _currentExportMode = "selected";
+        _currentExportSequenceNumbers = sequenceNumbers;
+        ShowExportOptionsModal = true;
+        NotifyStateChanged();
+    }
+
+    public void DownloadLoadedMessagesAsync()
+    {
+        _currentExportMode = "loaded";
+        _currentExportSequenceNumbers.Clear();
+        ShowExportOptionsModal = true;
+        NotifyStateChanged();
+    }
+
+    public void DownloadEntireEntityMessagesAsync()
+    {
+        _currentExportMode = "all";
+        _currentExportSequenceNumbers.Clear();
+        ShowExportOptionsModal = true;
+        NotifyStateChanged();
+    }
+
+    public async Task ExecuteExportAsync()
+    {
+        ShowExportOptionsModal = false;
+        IsProcessingBatch = true;
+        ErrorMessage = null;
+        NotifyStateChanged();
+
+        try
+        {
+            List<ServiceBusMessage> messages = new();
+
+            if (_currentExportMode == "selected")
+            {
+                messages = PeekedMessages.Where(m => m.SequenceNumber.HasValue && _currentExportSequenceNumbers.Contains(m.SequenceNumber.Value)).ToList();
+            }
+            else if (_currentExportMode == "loaded")
+            {
+                messages = PeekedMessages;
+            }
+            else if (_currentExportMode == "all")
+            {
+                var token = await _authService.GetServiceBusTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                {
+                    throw new InvalidOperationException("Failed to get authentication token.");
+                }
+
+                bool isQueue = State.IsQueueSelected;
+                string entityPath = isQueue ? State.SelectedQueueName! : State.SelectedTopicName!;
+                string? subName = isQueue ? null : State.SelectedSubscriptionName;
+
+                int countToFetch = 10000;
+                int currentSequence = 0;
+
+                while (countToFetch > 0)
+                {
+                    List<ServiceBusMessage> batch;
+                    if (isQueue)
+                    {
+                        batch = await _jsInterop.PeekQueueMessagesAsync(NamespaceNameOnly, entityPath, token, Math.Min(250, countToFetch), currentSequence, State.IsViewingDLQ);
+                    }
+                    else
+                    {
+                        batch = await _jsInterop.PeekSubscriptionMessagesAsync(NamespaceNameOnly, entityPath, subName!, token, Math.Min(250, countToFetch), currentSequence, State.IsViewingDLQ);
+                    }
+
+                    if (batch == null || batch.Count == 0)
+                    {
+                        break;
+                    }
+
+                    messages.AddRange(batch);
+                    countToFetch -= batch.Count;
+
+                    var lastSeq = batch.Last().SequenceNumber;
+                    if (!lastSeq.HasValue) break;
+
+                    currentSequence = (int)lastSeq.Value + 1;
+                }
+            }
+
+            if (messages.Any())
+            {
+                var json = FilterJsonProperties(messages, MessageExportOptions);
+                
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss");
+                var entityName = State.IsQueueSelected ? State.SelectedQueueName : State.SelectedSubscriptionName;
+                var fileName = $"{entityName}_{_currentExportMode}_{timestamp}.json";
+
+                await _jsRuntime.InvokeVoidAsync("downloadFile", fileName, "application/json", json);
+                _notificationService.NotifySuccess($"Downloaded {messages.Count} messages successfully.");
+            }
+            else
+            {
+                _notificationService.NotifyError("No messages found to export.");
+            }
+        }
+        catch (Exception ex)
+        {
+            RawErrorMessage = ex.Message;
+            ErrorMessage = PermissionErrorHelper.FormatError(ex.Message, "export messages from");
+        }
+        finally
+        {
+            IsProcessingBatch = false;
+            NotifyStateChanged();
+        }
+    }
+
+    private string FilterJsonProperties(List<ServiceBusMessage> messages, Bussin.Components.ExportOptionsModal.ExportOptions options)
+    {
+        var node = JsonSerializer.SerializeToNode(messages);
+        if (node is System.Text.Json.Nodes.JsonArray jsonArray)
+        {
+            foreach (var item in jsonArray)
+            {
+                if (item is System.Text.Json.Nodes.JsonObject obj)
+                {
+                    if (!options.IncludeMessageId) obj.Remove("messageId");
+                    if (!options.IncludeSessionId) obj.Remove("sessionId");
+                    if (!options.IncludeCorrelationId) obj.Remove("correlationId");
+                    if (!options.IncludeSubject) obj.Remove("subject");
+                    if (!options.IncludeReplyTo) obj.Remove("replyTo");
+                    if (!options.IncludeTo) obj.Remove("to");
+                    if (!options.IncludeContentType) obj.Remove("contentType");
+                    if (!options.IncludePartitionKey) obj.Remove("partitionKey");
+                    if (!options.IncludeSequenceNumber) obj.Remove("sequenceNumber");
+                    if (!options.IncludeEnqueuedTime) obj.Remove("enqueuedTime");
+                    if (!options.IncludeDeliveryCount) obj.Remove("deliveryCount");
+                    if (!options.IncludeTtl) obj.Remove("ttl");
+                    if (!options.IncludeExpiryTime) obj.Remove("expiryTime");
+                    if (!options.IncludeLockedUntil) obj.Remove("lockedUntil");
+                    
+                    if (!options.IncludeCustomProperties)
+                    {
+                        obj.Remove("applicationProperties");
+                    }
+                    
+                    obj.Remove("messageAnnotations");
+                    obj.Remove("properties");
+                    obj.Remove("creationTime");
+                    obj.Remove("lockToken");
+                }
+            }
+            return jsonArray.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        }
+        return "[]";
     }
 
     public void Dispose()

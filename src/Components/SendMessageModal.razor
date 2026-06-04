@@ -42,9 +42,9 @@
                             <label class="form-label">Upload File</label>
                             <InputFile OnChange="@LoadFiles" class="form-control" accept=".json, .txt" />
                             <div class="form-text">
-                                Supported format: A JSON array of messages (<code>.json</code> or <code>.txt</code>).
-                                <br />Each element in the array will be sent as a separate message body.
-                                <br />Example: <code>["Message 1", {"data": 123}, "Message 3"]</code>
+                                Supported formats: A JSON array of messages (<code>.json</code> or <code>.txt</code>).
+                                <br />• <strong>Simple format:</strong> An array of message bodies. Example: <code>["Body 1", {"data": 123}]</code>
+                                <br />• <strong>Rich format (Bussin export):</strong> An array of structured objects containing a <code>"body"</code> property, optional broker properties (<code>"messageId"</code>, <code>"sessionId"</code>, <code>"correlationId"</code>, <code>"subject"</code>, <code>"replyTo"</code>, <code>"to"</code>, <code>"contentType"</code>) and custom headers inside <code>"applicationProperties"</code>.
                             </div>
                         </div>
 
@@ -428,15 +428,77 @@
             {
                 var request = new SendMessageRequest();
 
-                // Treat the entire element as the body
-                if (element.ValueKind == JsonValueKind.String)
+                // Check if the element is an object and contains a "body" or "Body" property
+                if (element.ValueKind == JsonValueKind.Object && (element.TryGetProperty("body", out var bodyProp) || element.TryGetProperty("Body", out bodyProp)))
                 {
-                    request.Body = element.GetString() ?? "";
+                    // Structured message!
+                    if (bodyProp.ValueKind == JsonValueKind.String)
+                    {
+                        request.Body = bodyProp.GetString() ?? "";
+                    }
+                    else
+                    {
+                        request.Body = bodyProp.ToString();
+                    }
+
+                    // Parse other properties if present
+                    if (element.TryGetProperty("sessionId", out var p) || element.TryGetProperty("SessionId", out p))
+                        request.SessionId = p.GetString();
+                    
+                    if (element.TryGetProperty("messageId", out p) || element.TryGetProperty("MessageId", out p))
+                        request.MessageId = p.GetString();
+                    
+                    if (element.TryGetProperty("correlationId", out p) || element.TryGetProperty("CorrelationId", out p))
+                        request.CorrelationId = p.GetString();
+                    
+                    if (element.TryGetProperty("subject", out p) || element.TryGetProperty("Subject", out p))
+                        request.Subject = p.GetString();
+                    
+                    if (element.TryGetProperty("replyTo", out p) || element.TryGetProperty("ReplyTo", out p))
+                        request.ReplyTo = p.GetString();
+                    
+                    if (element.TryGetProperty("to", out p) || element.TryGetProperty("To", out p))
+                        request.To = p.GetString();
+                    
+                    if (element.TryGetProperty("contentType", out p) || element.TryGetProperty("ContentType", out p))
+                        request.ContentType = p.GetString();
+
+                    // Parse custom / application properties
+                    if (element.TryGetProperty("applicationProperties", out p) || 
+                        element.TryGetProperty("ApplicationProperties", out p) ||
+                        element.TryGetProperty("customProperties", out p) ||
+                        element.TryGetProperty("CustomProperties", out p))
+                    {
+                        if (p.ValueKind == JsonValueKind.Object)
+                        {
+                            var customProps = new Dictionary<string, object>();
+                            foreach (var objProp in p.EnumerateObject())
+                            {
+                                object val = objProp.Value.ValueKind switch
+                                {
+                                    JsonValueKind.True => true,
+                                    JsonValueKind.False => false,
+                                    JsonValueKind.Number => objProp.Value.GetDouble(),
+                                    JsonValueKind.String => objProp.Value.GetString() ?? "",
+                                    _ => objProp.Value.ToString()
+                                };
+                                customProps[objProp.Name] = val;
+                            }
+                            request.CustomProperties = customProps;
+                        }
+                    }
                 }
                 else
                 {
-                    // Serialize object/number/bool/array to string
-                    request.Body = element.ToString();
+                    // Simple message: treat the entire element as the body
+                    if (element.ValueKind == JsonValueKind.String)
+                    {
+                        request.Body = element.GetString() ?? "";
+                    }
+                    else
+                    {
+                        request.Body = element.ToString();
+                    }
                 }
 
                 batchMessages.Add(request);
