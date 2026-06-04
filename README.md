@@ -2,6 +2,8 @@
 
 Bussin is a client-side Azure Service Bus explorer. It runs entirely in your browser as a Progressive Web App (PWA). You can access the live version at **[https://bussin.dev](https://bussin.dev)**.
 
+Looking for the marketing website or documentation source code? Visit **[sgebb/bussin-site](https://github.com/sgebb/bussin-site)**.
+
 Because all connections are established directly from your browser to Azure, there is no backend proxy or intermediate server transiting your credentials or messaging payloads.
 
 [![Use Bussin](https://img.shields.io/badge/Use%20Bussin-bussin.dev-blueviolet?style=for-the-badge)](https://bussin.dev/)
@@ -10,25 +12,13 @@ Because all connections are established directly from your browser to Azure, the
 
 ## Features
 
-### Background Operations
-Run connection-safe bulk actions in the background without freezing the user interface.
-![Background Purge](src/wwwroot/blog/gif/backgroud-purge.gif)
+* **Background Operations**: Run connection-safe bulk actions in the background without freezing the user interface.
+* **Batch Transmissions**: Send high-volume message payloads using concurrent AMQP pipelining.
+* **Bulk Management**: Resubmit or delete combinations of active and dead-letter messages with dynamic depth-locking to prevent data loss.
+* **Namespace Organization**: Manage multiple Entra ID environments using folder nesting and text searching.
+* **Message Search**: Search and peek messages using property and body pattern matching.
 
-### Batch Transmissions
-Send high-volume message payloads using concurrent AMQP pipelining.
-![15k Batch Send](src/wwwroot/blog/gif/batch-send-15k.gif)
-
-### Bulk Management
-Resubmit or delete combinations of active and dead-letter messages with dynamic depth-locking to prevent data loss.
-![Bulk Move & Resubmit](src/wwwroot/blog/gif/bulk-operations-movetodlq-resubmit.gif)
-
-### Namespace Organization
-Manage multiple Entra ID environments using folder nesting and text searching.
-![Namespace Organization](src/wwwroot/blog/gif/namespace-filter-and-folder-organize.gif)
-
-### Message Search
-Search and peek messages using property and body pattern matching.
-![Peek & Deep Search](src/wwwroot/blog/gif/peak-filter-deepsearch.gif)
+For visual walkthroughs, screenshots, and detailed guides of these features, visit the website at **[bussin.dev](https://bussin.dev)**.
 
 ---
 
