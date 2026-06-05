@@ -2,8 +2,6 @@
 
 Bussin is a client-side Azure Service Bus explorer. It runs entirely in your browser as a Progressive Web App (PWA). You can access the live version at **[https://bussin.dev](https://bussin.dev)**.
 
-Looking for the marketing website or documentation source code? Visit **[sgebb/bussin-site](https://github.com/sgebb/bussin-site)**.
-
 Because all connections are established directly from your browser to Azure, there is no backend proxy or intermediate server transiting your credentials or messaging payloads.
 
 [![Use Bussin](https://img.shields.io/badge/Use%20Bussin-bussin.dev-blueviolet?style=for-the-badge)](https://bussin.dev/)
@@ -118,3 +116,5 @@ Business Source License 1.1 (BSL) - See [LICENSE](LICENSE) file for details.
 ---
 
 *Disclaimer: Bussin is a community tool and is not officially supported by Microsoft. Use at your own risk.*
+
+Looking for the marketing website or documentation source code? Visit **[sgebb/bussin-site](https://github.com/sgebb/bussin-site)**.
