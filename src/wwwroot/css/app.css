@@ -12,6 +12,24 @@
     --muted-text: #6c757d;
     --top-row-bg: #ffffff;
     --content-bg: #f5f7fa;
+
+    /* Pride flag background variables */
+    --pride-opacity: 0.12;
+    --pride-background: repeating-linear-gradient(
+        135deg,
+        rgba(239, 68, 68, var(--pride-opacity)) 0px,
+        rgba(239, 68, 68, var(--pride-opacity)) 30px,
+        rgba(249, 115, 22, var(--pride-opacity)) 30px,
+        rgba(249, 115, 22, var(--pride-opacity)) 60px,
+        rgba(234, 179, 8, var(--pride-opacity)) 60px,
+        rgba(234, 179, 8, var(--pride-opacity)) 90px,
+        rgba(34, 197, 94, var(--pride-opacity)) 90px,
+        rgba(34, 197, 94, var(--pride-opacity)) 120px,
+        rgba(59, 130, 246, var(--pride-opacity)) 120px,
+        rgba(59, 130, 246, var(--pride-opacity)) 150px,
+        rgba(168, 85, 247, var(--pride-opacity)) 150px,
+        rgba(168, 85, 247, var(--pride-opacity)) 180px
+    );
 }
 
 [data-theme="dark"] {
@@ -27,6 +45,9 @@
     --muted-text: #A0A0A0;
     --top-row-bg: #2A2A2A;
     --content-bg: #1A1A1A;
+
+    /* Subtle glow opacity in dark mode */
+    --pride-opacity: 0.075;
 }
 
 /* Scrollbar Styling */
@@ -86,10 +107,12 @@ a,
 main {
     flex: 1;
     background-color: var(--content-bg);
+    background-image: var(--pride-background);
 }
 
 .content {
     background-color: var(--content-bg);
+    background-image: var(--pride-background);
 }
 
 .sidebar {
