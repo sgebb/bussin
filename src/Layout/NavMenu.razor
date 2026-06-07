@@ -487,13 +487,20 @@
         __builder.CloseElement(); // outer div
     };
 
-    private void ConfirmDeleteNamespace(NamespaceConnection ns)
+    private async Task ConfirmDeleteNamespace(NamespaceConnection ns)
     {
+        if (string.IsNullOrEmpty(ns.ConnectionString))
+        {
+            await NavState.RemoveFromFavoritesAsync(ns.FullyQualifiedNamespace);
+            Navigation.NavigateTo("/");
+            return;
+        }
+
         ConfirmModal.Show(
-            "Delete Connection",
-            $"Are you sure you want to delete the manual connection '{ns.DisplayName}'?",
-            "This will remove the connection configuration and all manually registered queues/topics.",
-            "Delete",
+            "Remove Favorite Connection",
+            $"Are you sure you want to remove the connection '{ns.DisplayName}'?",
+            "This will remove the connection configuration from your local settings.",
+            "Remove",
             "btn-danger",
             async () =>
             {
@@ -541,35 +548,23 @@
 
         __builder.CloseElement(); // Text wrapper
 
-        if (!string.IsNullOrEmpty(ns.ConnectionString))
-        {
-            __builder.OpenElement(25, "div");
-            __builder.AddAttribute(26, "class", "ns-actions-wrapper d-flex gap-1");
-            __builder.AddAttribute(27, "onclick", EventCallback.Factory.Create(this, () => {})); // Stop navigation
-            __builder.AddEventStopPropagationAttribute(28, "onclick", true);
+        __builder.OpenElement(25, "div");
+        __builder.AddAttribute(26, "class", "ns-actions-wrapper d-flex gap-1");
+        __builder.AddAttribute(27, "onclick", EventCallback.Factory.Create(this, () => {})); // Stop navigation
+        __builder.AddEventStopPropagationAttribute(28, "onclick", true);
 
-            __builder.OpenElement(29, "button");
-            __builder.AddAttribute(30, "class", "btn btn-xs btn-link p-1 text-secondary");
-            __builder.AddAttribute(31, "style", "font-size: 0.85rem; line-height: 1;");
-            __builder.AddAttribute(32, "onclick", EventCallback.Factory.Create(this, () => NavState.ShowAddConnectionStringModalDialog(ns)));
-            __builder.AddAttribute(33, "title", "Edit connection");
-            __builder.OpenElement(34, "i");
-            __builder.AddAttribute(35, "class", "bi bi-gear");
-            __builder.CloseElement();
-            __builder.CloseElement();
+        __builder.OpenElement(29, "button");
+        __builder.AddAttribute(30, "class", "btn-link text-danger");
+        __builder.AddAttribute(31, "style", "font-size: 0.85rem; line-height: 1;");
+        __builder.AddAttribute(32, "onclick", EventCallback.Factory.Create(this, () => ConfirmDeleteNamespace(ns)));
+        __builder.AddEventStopPropagationAttribute(33, "onclick", true);
+        __builder.AddAttribute(34, "title", "Remove from favorites");
+        __builder.OpenElement(35, "i");
+        __builder.AddAttribute(36, "class", "bi bi-trash-fill");
+        __builder.CloseElement();
+        __builder.CloseElement();
 
-            __builder.OpenElement(36, "button");
-            __builder.AddAttribute(37, "class", "btn btn-xs btn-link p-1 text-danger");
-            __builder.AddAttribute(38, "style", "font-size: 0.85rem; line-height: 1;");
-            __builder.AddAttribute(39, "onclick", EventCallback.Factory.Create(this, () => ConfirmDeleteNamespace(ns)));
-            __builder.AddAttribute(40, "title", "Delete connection");
-            __builder.OpenElement(41, "i");
-            __builder.AddAttribute(42, "class", "bi bi-trash");
-            __builder.CloseElement();
-            __builder.CloseElement();
-
-            __builder.CloseElement(); // Actions wrapper
-        }
+        __builder.CloseElement(); // Actions wrapper
 
         __builder.CloseElement(); // Flex layout
         __builder.CloseElement(); // Outer card

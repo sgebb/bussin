@@ -27,6 +27,7 @@ public sealed class ExplorerViewModel : IDisposable
     private readonly BackgroundResubmitService _backgroundResubmit;
     private readonly NavigationStateService _navState;
     private readonly IJSRuntime _jsRuntime;
+    private readonly NavigationManager _navigation;
 
     public ExplorerViewModel(
         IAuthenticationService authService,
@@ -39,7 +40,8 @@ public sealed class ExplorerViewModel : IDisposable
         BackgroundSearchService backgroundSearch,
         BackgroundResubmitService backgroundResubmit,
         NavigationStateService navState,
-        IJSRuntime jsRuntime)
+        IJSRuntime jsRuntime,
+        NavigationManager navigation)
     {
         _authService = authService;
         _resourceService = resourceService;
@@ -52,6 +54,7 @@ public sealed class ExplorerViewModel : IDisposable
         _backgroundResubmit = backgroundResubmit;
         _navState = navState;
         _jsRuntime = jsRuntime;
+        _navigation = navigation;
 
         // Initialize state listeners
         _confirmModal.OnChange += NotifyStateChanged;
@@ -1386,6 +1389,27 @@ public sealed class ExplorerViewModel : IDisposable
     public async Task ToggleFavoriteAsync()
     {
         if (string.IsNullOrEmpty(State.FullyQualifiedNamespace)) return;
+
+        if (IsConnectionStringMode)
+        {
+            var connection = _navState.GetNamespaceConnection(State.FullyQualifiedNamespace);
+            if (connection != null)
+            {
+                _confirmModal.Show(
+                    "Remove Favorite Connection",
+                    $"Are you sure you want to remove the connection '{DisplayName}'?",
+                    "This will remove the connection configuration from your local settings.",
+                    "Remove",
+                    "btn-danger",
+                    async () =>
+                    {
+                        await _navState.RemoveFromFavoritesAsync(State.FullyQualifiedNamespace);
+                        _navigation.NavigateTo("/");
+                    });
+            }
+            return;
+        }
+
         if (_navState.IsFavorite(State.FullyQualifiedNamespace))
             await _navState.RemoveFromFavoritesAsync(State.FullyQualifiedNamespace);
         else

@@ -1,6 +1,7 @@
 /* Namespace header action buttons - ensure perfect alignment */
 .rename-btn,
 .favorite-toggle-btn,
+.edit-connection-btn,
 .refresh-btn,
 .stats-btn {
     background: none;
@@ -20,6 +21,7 @@
 }
 
 .rename-btn:hover,
+.edit-connection-btn:hover,
 .refresh-btn:hover,
 .stats-btn:hover {
     background-color: var(--hover-bg);

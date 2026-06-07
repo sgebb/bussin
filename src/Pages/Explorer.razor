@@ -3,6 +3,7 @@
 @using Azure.Core
 @inject ExplorerViewModel VM
 @inject NavigationManager Navigation
+@inject NavigationStateService NavState
 @implements IDisposable
 
 <PageTitle>Explorer - bussin</PageTitle>
@@ -44,6 +45,18 @@
                                 title="@(VM.IsFavorite ? "Remove from favorites" : "Add to favorites")">
                             <i class="bi @(VM.IsFavorite ? "bi-star-fill" : "bi-star")"></i>
                         </button>
+                        @if (VM.IsConnectionStringMode)
+                        {
+                            var currentConn = NavState.GetNamespaceConnection(VM.State.FullyQualifiedNamespace ?? NamespaceParam ?? "");
+                            if (currentConn != null)
+                            {
+                                <button class="namespace-action-btn edit-connection-btn ms-2"
+                                        @onclick="@(() => NavState.ShowAddConnectionStringModalDialog(currentConn))"
+                                        title="Edit connection settings">
+                                    <i class="bi bi-gear-fill"></i>
+                                </button>
+                            }
+                        }
                     </div>
                 </div>
             }

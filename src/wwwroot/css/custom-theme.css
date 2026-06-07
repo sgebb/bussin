@@ -468,12 +468,41 @@ a:hover,
 }
 
 .recent-namespace-tile .ns-actions-wrapper {
-    opacity: 0.3;
+    opacity: 0.6;
     transition: opacity 0.15s ease-in-out;
+    flex-shrink: 0;
+    margin-left: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.min-width-0 {
+    min-width: 0 !important;
 }
 
 .recent-namespace-tile:hover .ns-actions-wrapper {
     opacity: 1;
+}
+
+.recent-namespace-tile .ns-actions-wrapper .btn-link.text-danger {
+    color: #ef4444 !important;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    border: none;
+    background: transparent;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.15s ease;
+}
+
+.recent-namespace-tile .ns-actions-wrapper .btn-link.text-danger:hover {
+    color: #f87171 !important;
+    background-color: rgba(239, 68, 68, 0.1) !important;
 }
 
 .user-section {

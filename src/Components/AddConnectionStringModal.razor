@@ -21,34 +21,30 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Display Name</label>
-                        <input type="text" class="form-control" placeholder="e.g. Local Emulator or Production Invoicing" @bind="displayName" @bind:event="oninput" />
-                        <small class="form-text text-muted">A friendly name to identify this connection.</small>
+                        <input type="text" class="form-control" placeholder="e.g. Production Invoicing or Development Namespace" @bind="displayName" @bind:event="oninput" />
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Connection String</label>
                         <textarea class="form-control" rows="3" placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...   or   amqps://..." @bind="connectionString" @bind:event="oninput"></textarea>
-                        <small class="form-text text-muted">Paste your Service Bus connection string or standard AMQP URI.</small>
+                        <small class="form-text text-muted">Paste your connection string or standard AMQP URI.</small>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">WebSocket URL Override (Optional)</label>
-                        <input type="text" class="form-control" placeholder="e.g. ws://localhost:5673/$servicebus/websocket" @bind="webSocketUrl" />
-                        <small class="form-text text-muted">
-                            For local emulator, enter your WebSocket proxy URL (e.g. <code>ws://localhost:5673/$servicebus/websocket</code> if running websockify forwarding to port 5672).
-                        </small>
+                    <div class="alert alert-warning py-2 small mb-3">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Local Emulator Support:</strong> The local Azure Service Bus Emulator is <strong>not supported</strong> out of the box because it lacks native WebSocket support, which browser applications require. For details or updates, see <a href="https://github.com/Azure/azure-service-bus-emulator-installer/issues/143" target="_blank" class="alert-link">Azure Service Bus Emulator Issue #143</a>.
                     </div>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-semibold">Queues (Comma-separated, Optional)</label>
                             <input type="text" class="form-control" placeholder="e.g. queue1, queue2" @bind="queuesCsv" />
-                            <small class="form-text text-muted">Since browser sandboxes cannot list queues via connection strings directly, list them here to browse them.</small>
+                            <small class="form-text text-muted">List queues here. You can always add more later.</small>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-semibold">Topics (Comma-separated, Optional)</label>
                             <input type="text" class="form-control" placeholder="e.g. topic1, topic2" @bind="topicsCsv" />
-                            <small class="form-text text-muted">List your topic names here. You can configure subscriptions in the explorer sidebar.</small>
+                            <small class="form-text text-muted">List topics here. You can always add more later.</small>
                         </div>
                     </div>
 
