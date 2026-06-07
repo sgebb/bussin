@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Bussin.Models;
 
@@ -15,6 +15,7 @@ public sealed class BackgroundPurgeService : IDisposable
     private readonly INotificationService _notificationService;
     
     public event Action? OnOperationsChanged;
+    public event Action<PurgeOperation>? OnPurgeCompleted;
     
     public IReadOnlyList<PurgeOperation> ActiveOperations => _activeOperations.AsReadOnly();
     
@@ -53,7 +54,20 @@ public sealed class BackgroundPurgeService : IDisposable
             {
                 Console.WriteLine($"[BackgroundPurge] Starting purge for {entityType} {entityPath}");
                 
-                var token = await authService.GetServiceBusTokenAsync();
+                var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
+                await navState.InitializeAsync();
+                var connection = navState.GetNamespaceConnection(namespaceName);
+                string? token;
+                
+                if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
+                {
+                    token = ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, entityPath, TimeSpan.FromHours(2));
+                }
+                else
+                {
+                    token = await authService.GetServiceBusTokenAsync();
+                }
+                
                 if (string.IsNullOrEmpty(token))
                 {
                     throw new Exception("Service Bus token not available");
@@ -124,6 +138,7 @@ public sealed class BackgroundPurgeService : IDisposable
                     operation.MessagesDeleted = finalCount;
                     operation.Status = PurgeStatus.Completed;
                     operation.EndTime = DateTime.Now;
+                    OnPurgeCompleted?.Invoke(operation);
                     
                     // Show success notification (updates the progress notification)
                     string typeLabel = entityType == "queue" ? "queue" : "subscription";

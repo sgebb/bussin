@@ -141,10 +141,15 @@ public class SimulatorTopologyTests
         var authMock = new Mock<IAuthenticationService>();
         authMock.Setup(a => a.GetServiceBusTokenAsync()).ReturnsAsync("demo-token");
         
+        var prefMock = new Mock<IPreferencesService>();
+        prefMock.Setup(p => p.LoadPreferencesAsync()).ReturnsAsync(new AppPreferences());
+        var navState = new NavigationStateService(prefMock.Object);
+        
         var serviceBusOps = new ServiceBusOperationsService(
             _service, 
             authMock.Object, 
-            new Mock<INotificationService>().Object
+            new Mock<INotificationService>().Object,
+            navState
         );
         
         await serviceBusOps.ResendQueueMessagesAsync(ns, queue, new[] { 1L }, fromDeadLetter: true, deleteOriginal: false);

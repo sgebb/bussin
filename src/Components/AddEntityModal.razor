@@ -1,0 +1,79 @@
+@if (IsVisible)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnClose">
+        <div class="modal-dialog">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Title</h5>
+                    <button type="button" class="btn-close" @onclick="OnClose"></button>
+                </div>
+                <div class="modal-body">
+                    
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger py-2 small mb-3">
+                            <i class="bi bi-exclamation-octagon me-2"></i> @errorMessage
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">@Label</label>
+                        <input type="text" class="form-control" placeholder="@Placeholder" @bind="entityName" @bind:event="oninput" @onkeydown="HandleKeyDown" autofocus />
+                        <small class="form-text text-muted">Enter the exact name of the entity as it is named in the broker.</small>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
+                    <button type="button" class="btn btn-primary fw-bold" @onclick="HandleSubmit" disabled="@string.IsNullOrWhiteSpace(entityName)">
+                        Register Entity
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string Title { get; set; } = "Add Entity";
+    [Parameter] public string Label { get; set; } = "Entity Name";
+    [Parameter] public string Placeholder { get; set; } = "Enter name...";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnSubmit { get; set; }
+
+    private string entityName = "";
+    private string? errorMessage;
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible)
+        {
+            entityName = "";
+            errorMessage = null;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(entityName))
+        {
+            errorMessage = "Name cannot be empty.";
+            return;
+        }
+
+        await OnSubmit.InvokeAsync(entityName.Trim());
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(entityName))
+        {
+            await HandleSubmit();
+        }
+        else if (e.Key == "Escape")
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+}

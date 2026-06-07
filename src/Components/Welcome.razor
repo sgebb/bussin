@@ -1,5 +1,6 @@
 @inject NavigationManager Navigation
 @inject IAuthenticationService AuthService
+@inject NavigationStateService NavState
 @inject IJSRuntime JS
 
 <div class="welcome-container">
@@ -16,6 +17,10 @@
         <div class="actions-section">
             <button class="btn btn-primary btn-lg w-100 mb-3 py-3 fw-bold login-btn" @onclick="NavigateToLogin">
                 <i class="bi bi-microsoft me-2"></i>Sign in with Microsoft
+            </button>
+
+            <button class="btn btn-outline-primary w-100 mb-3 py-2 fw-semibold" @onclick="EnterConnectionStringMode">
+                <i class="bi bi-link-45deg me-2"></i>Run without login — Connection String Mode
             </button>
 
             <div class="divider">
@@ -139,6 +144,12 @@
     async Task NavigateToLogin()
     {
         await AuthService.LoginWithRedirectAsync(new[] { "https://servicebus.azure.net/user_impersonation" });
+    }
+
+    async Task EnterConnectionStringMode()
+    {
+        await NavState.SetRunWithoutLoginAsync(true);
+        Navigation.NavigateTo("/", forceLoad: true);
     }
 
     void EnterDemoMode()

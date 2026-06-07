@@ -19,17 +19,36 @@ export class ServiceBusConnection {
     private readonly token: string;
     private cbsAuthenticated: boolean = false;
     private useMock: boolean = false;
+    private readonly customWebSocketUrl: string | null = null;
 
     constructor(namespace: string, token: string) {
-        this.namespace = namespace;
         this.token = token;
         
-        // Safety check: detect if we are in mock mode via a global flag
-        // This ensures the hostname is never a real Azure domain if mocking is active
-        this.useMock = (globalThis as any).__BUSSIN_SIMULATOR_ACTIVE__ === true;
-        this.hostname = this.useMock 
-            ? `${namespace}.bussin.internal` 
-            : `${namespace}.servicebus.windows.net`;
+        if (namespace.startsWith('ws://') || namespace.startsWith('wss://')) {
+            this.customWebSocketUrl = namespace;
+            try {
+                const url = new URL(namespace);
+                this.hostname = url.hostname;
+                this.namespace = url.hostname;
+            } catch {
+                this.hostname = namespace;
+                this.namespace = namespace;
+            }
+        } else if (namespace.includes(':')) {
+            this.hostname = namespace.split(':')[0];
+            this.namespace = this.hostname;
+            this.customWebSocketUrl = `ws://${namespace}/$servicebus/websocket`;
+        } else {
+            this.useMock = (globalThis as any).__BUSSIN_SIMULATOR_ACTIVE__ === true;
+            let cleanNamespace = namespace;
+            if (cleanNamespace.endsWith('.servicebus.windows.net')) {
+                cleanNamespace = cleanNamespace.substring(0, cleanNamespace.length - '.servicebus.windows.net'.length);
+            }
+            this.hostname = this.useMock 
+                ? `${cleanNamespace}.bussin.internal` 
+                : `${cleanNamespace}.servicebus.windows.net`;
+            this.namespace = cleanNamespace;
+        }
     }
 
     /**
@@ -37,7 +56,13 @@ export class ServiceBusConnection {
      */
     async connect(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const wsUrl = `wss://${this.hostname}:443/$servicebus/websocket`;
+            const wsUrl = this.customWebSocketUrl || `wss://${this.hostname}:443/$servicebus/websocket`;
+            const isSecure = wsUrl.startsWith('wss://');
+            let port = 443;
+            try {
+                const urlObj = new URL(wsUrl);
+                port = urlObj.port ? parseInt(urlObj.port) : (isSecure ? 443 : 80);
+            } catch { }
             
             if ((globalThis as any).__BUSSIN_SIMULATOR_ACTIVE__) {
                 console.log(`[ServiceBusConnection] Initializing Mock Connection for ${this.namespace}`);
@@ -52,8 +77,8 @@ export class ServiceBusConnection {
                     connection_details: wsFactory(wsUrl, ['AMQPWSB10'], {}) as any,
                     host: this.hostname,
                     hostname: this.hostname,
-                    port: 443,
-                    transport: 'ssl',
+                    port: port,
+                    transport: isSecure ? 'ssl' : undefined,
                     reconnect: false
                 });
             }
@@ -116,10 +141,11 @@ export class ServiceBusConnection {
             
             cbsSender.on('sender_open', () => {
                 console.log(`[ServiceBusConnection] CBS Sender OPEN - Sending token for ${entityPath}`);
+                const isSasToken = this.token.startsWith('SharedAccessSignature ');
                 const tokenMessage = {
                     application_properties: {
                         'operation': 'put-token',
-                        'type': 'jwt',
+                        'type': isSasToken ? 'servicebus.windows.net:sastoken' : 'jwt',
                         'name': `sb://${this.hostname}/${entityPath}`
                     },
                     body: this.token

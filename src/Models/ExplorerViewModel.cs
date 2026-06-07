@@ -56,6 +56,7 @@ public sealed class ExplorerViewModel : IDisposable
         // Initialize state listeners
         _confirmModal.OnChange += NotifyStateChanged;
         _backgroundPurge.OnOperationsChanged += NotifyStateChanged;
+        _backgroundPurge.OnPurgeCompleted += HandlePurgeCompleted;
         _backgroundResubmit.OnOperationsChanged += NotifyStateChanged;
         _backgroundSearch.OnViewResultsRequested += OnViewSearchResultsRequested;
     }
@@ -82,6 +83,7 @@ public sealed class ExplorerViewModel : IDisposable
     public string DisplayName { get; set; } = "";
     public string? ErrorMessage { get; set; }
     public string? RawErrorMessage { get; set; }
+    public bool IsConnectionStringMode { get; set; }
     
     // UI Visibility State
     public bool IsLoadingEntities { get; set; }
@@ -189,12 +191,14 @@ public sealed class ExplorerViewModel : IDisposable
     public Task OnConfirmModalConfirmAsync() => _confirmModal.ConfirmAsync();
     public Task OnConfirmModalAlternativeConfirmAsync() => _confirmModal.AlternativeConfirmAsync();
     public Task OnConfirmModalCancelAsync() => _confirmModal.CancelAsync();
+    public Task<bool> IsAuthenticatedAsync() => _authService.IsAuthenticatedAsync();
 
     public async Task InitializeAsync(string? namespaceParam, string? resourceGroupParam, string? subscriptionIdParam, string? nameParam)
     {
         if (!string.IsNullOrEmpty(namespaceParam))
         {
             var connection = _navState.GetNamespaceConnection(namespaceParam);
+            IsConnectionStringMode = connection != null && !string.IsNullOrEmpty(connection.ConnectionString);
             
             State.SetNamespace(new ServiceBusNamespaceInfo
             {
@@ -214,11 +218,18 @@ public sealed class ExplorerViewModel : IDisposable
 
             DisplayName = connection?.DisplayName ?? nameParam ?? "";
 
-            // Only load if we have the minimum required information for the ResourceIdentifier
-            if (!string.IsNullOrEmpty(State.CurrentNamespace?.SubscriptionId) && 
-                !string.IsNullOrEmpty(State.CurrentNamespace?.ResourceGroup))
+            if (IsConnectionStringMode)
             {
-                await LoadEntitiesAsync();
+                await LoadConnectionStringEntitiesAsync(connection!);
+            }
+            else
+            {
+                // Only load if we have the minimum required information for the ResourceIdentifier
+                if (!string.IsNullOrEmpty(State.CurrentNamespace?.SubscriptionId) && 
+                    !string.IsNullOrEmpty(State.CurrentNamespace?.ResourceGroup))
+                {
+                    await LoadEntitiesAsync();
+                }
             }
         }
     }
@@ -360,6 +371,30 @@ public sealed class ExplorerViewModel : IDisposable
     {
         if (State.CurrentNamespace == null) return;
 
+        if (IsConnectionStringMode)
+        {
+            SubscriptionDict.Clear();
+            var connection = _navState.GetNamespaceConnection(State.CurrentNamespace.FullyQualifiedNamespace);
+            var topic = connection?.ConfiguredTopics.FirstOrDefault(t => t.TopicName == topicName);
+            if (topic != null)
+            {
+                foreach (var subName in topic.Subscriptions)
+                {
+                    SubscriptionDict[subName] = new ServiceBusSubscriptionInfo
+                    {
+                        Name = subName,
+                        Status = "Active",
+                        ActiveMessageCount = 0,
+                        DeadLetterMessageCount = 0,
+                        RequiresSession = false
+                    };
+                }
+            }
+            _loadedSubscriptionsForTopic = topicName;
+            NotifyStateChanged();
+            return;
+        }
+
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
@@ -425,6 +460,249 @@ public sealed class ExplorerViewModel : IDisposable
         }
     }
 
+    private async Task LoadConnectionStringEntitiesAsync(NamespaceConnection connection)
+    {
+        IsLoadingEntities = true;
+        ErrorMessage = null;
+        NotifyStateChanged();
+
+        try
+        {
+            QueueDict.Clear();
+            TopicDict.Clear();
+
+            foreach (var qName in connection.ConfiguredQueues)
+            {
+                QueueDict[qName] = new ServiceBusQueueInfo
+                {
+                    Name = qName,
+                    Status = "Active",
+                    ActiveMessageCount = 0,
+                    DeadLetterMessageCount = 0,
+                    ScheduledMessageCount = 0,
+                    SizeInBytes = 0,
+                    RequiresSession = false
+                };
+            }
+
+            foreach (var tTopic in connection.ConfiguredTopics)
+            {
+                TopicDict[tTopic.TopicName] = new ServiceBusTopicInfo
+                {
+                    Name = tTopic.TopicName,
+                    Status = "Active",
+                    SubscriptionCount = tTopic.Subscriptions.Count
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to load manual entities: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingEntities = false;
+            NotifyStateChanged();
+        }
+    }
+
+    public async Task RegisterQueueAsync(string queueName)
+    {
+        if (string.IsNullOrWhiteSpace(queueName) || State.CurrentNamespace == null) return;
+        var connection = _navState.GetNamespaceConnection(State.CurrentNamespace.FullyQualifiedNamespace);
+        if (connection == null) return;
+
+        queueName = queueName.Trim();
+        if (!connection.ConfiguredQueues.Contains(queueName))
+        {
+            connection.ConfiguredQueues.Add(queueName);
+            await _navState.AddNamespaceConnectionAsync(connection);
+            QueueDict[queueName] = new ServiceBusQueueInfo
+            {
+                Name = queueName,
+                Status = "Active",
+                ActiveMessageCount = 0,
+                DeadLetterMessageCount = 0,
+                ScheduledMessageCount = 0,
+                SizeInBytes = 0,
+                RequiresSession = false
+            };
+            NotifyStateChanged();
+            _notificationService.NotifySuccess($"Queue '{queueName}' registered successfully.");
+        }
+        else
+        {
+            _notificationService.NotifyError($"Queue '{queueName}' is already registered.");
+        }
+    }
+
+    public async Task RegisterTopicAsync(string topicName)
+    {
+        if (string.IsNullOrWhiteSpace(topicName) || State.CurrentNamespace == null) return;
+        var connection = _navState.GetNamespaceConnection(State.CurrentNamespace.FullyQualifiedNamespace);
+        if (connection == null) return;
+
+        topicName = topicName.Trim();
+        if (!connection.ConfiguredTopics.Any(t => t.TopicName == topicName))
+        {
+            connection.ConfiguredTopics.Add(new ConfiguredTopic { TopicName = topicName });
+            await _navState.AddNamespaceConnectionAsync(connection);
+            TopicDict[topicName] = new ServiceBusTopicInfo
+            {
+                Name = topicName,
+                Status = "Active",
+                SubscriptionCount = 0
+            };
+            NotifyStateChanged();
+            _notificationService.NotifySuccess($"Topic '{topicName}' registered successfully.");
+        }
+        else
+        {
+            _notificationService.NotifyError($"Topic '{topicName}' is already registered.");
+        }
+    }
+
+    public async Task RegisterSubscriptionAsync(string topicName, string subscriptionName)
+    {
+        if (string.IsNullOrWhiteSpace(topicName) || string.IsNullOrWhiteSpace(subscriptionName) || State.CurrentNamespace == null) return;
+        var connection = _navState.GetNamespaceConnection(State.CurrentNamespace.FullyQualifiedNamespace);
+        if (connection == null) return;
+
+        subscriptionName = subscriptionName.Trim();
+        var topic = connection.ConfiguredTopics.FirstOrDefault(t => t.TopicName == topicName);
+        if (topic == null) return;
+
+        if (!topic.Subscriptions.Contains(subscriptionName))
+        {
+            topic.Subscriptions.Add(subscriptionName);
+            await _navState.AddNamespaceConnectionAsync(connection);
+            if (State.SelectedTopicName == topicName)
+            {
+                SubscriptionDict[subscriptionName] = new ServiceBusSubscriptionInfo
+                {
+                    Name = subscriptionName,
+                    Status = "Active",
+                    ActiveMessageCount = 0,
+                    DeadLetterMessageCount = 0,
+                    RequiresSession = false
+                };
+            }
+            if (TopicDict.TryGetValue(topicName, out var topicInfo))
+            {
+                TopicDict[topicName] = topicInfo with { SubscriptionCount = topic.Subscriptions.Count };
+            }
+            NotifyStateChanged();
+            _notificationService.NotifySuccess($"Subscription '{subscriptionName}' registered successfully.");
+        }
+        else
+        {
+            _notificationService.NotifyError($"Subscription '{subscriptionName}' is already registered.");
+        }
+    }
+
+    public void UnregisterQueue(string queueName)
+    {
+        if (string.IsNullOrWhiteSpace(queueName) || State.CurrentNamespace == null) return;
+        var connection = _navState.GetNamespaceConnection(State.CurrentNamespace.FullyQualifiedNamespace);
+        if (connection == null) return;
+
+        _confirmModal.Show(
+            title: "Forget Queue",
+            message: $"Are you sure you want to forget the queue '{queueName}'?",
+            detail: "This will only remove it from Bussin's local preferences. The actual queue on the broker will not be affected.",
+            confirmText: "Forget Queue",
+            confirmClass: "btn-danger",
+            onConfirm: async () =>
+            {
+                if (connection.ConfiguredQueues.Contains(queueName))
+                {
+                    connection.ConfiguredQueues.Remove(queueName);
+                    await _navState.AddNamespaceConnectionAsync(connection);
+                    QueueDict.Remove(queueName);
+                    if (State.SelectedQueueName == queueName)
+                    {
+                        State.ClearSelection();
+                        ResetMessageState();
+                    }
+                    NotifyStateChanged();
+                    _notificationService.NotifySuccess($"Queue '{queueName}' forgotten successfully.");
+                }
+            }
+        );
+    }
+
+    public void UnregisterTopic(string topicName)
+    {
+        if (string.IsNullOrWhiteSpace(topicName) || State.CurrentNamespace == null) return;
+        var connection = _navState.GetNamespaceConnection(State.CurrentNamespace.FullyQualifiedNamespace);
+        if (connection == null) return;
+
+        _confirmModal.Show(
+            title: "Forget Topic",
+            message: $"Are you sure you want to forget the topic '{topicName}'?",
+            detail: "This will remove the topic and its subscriptions from Bussin's local preferences. The actual topic on the broker will not be affected.",
+            confirmText: "Forget Topic",
+            confirmClass: "btn-danger",
+            onConfirm: async () =>
+            {
+                var topic = connection.ConfiguredTopics.FirstOrDefault(t => t.TopicName == topicName);
+                if (topic != null)
+                {
+                    connection.ConfiguredTopics.Remove(topic);
+                    await _navState.AddNamespaceConnectionAsync(connection);
+                    TopicDict.Remove(topicName);
+                    if (State.SelectedTopicName == topicName)
+                    {
+                        State.ClearSelection();
+                        ResetMessageState();
+                        SubscriptionDict.Clear();
+                    }
+                    NotifyStateChanged();
+                    _notificationService.NotifySuccess($"Topic '{topicName}' forgotten successfully.");
+                }
+            }
+        );
+    }
+
+    public void UnregisterSubscription(string topicName, string subscriptionName)
+    {
+        if (string.IsNullOrWhiteSpace(topicName) || string.IsNullOrWhiteSpace(subscriptionName) || State.CurrentNamespace == null) return;
+        var connection = _navState.GetNamespaceConnection(State.CurrentNamespace.FullyQualifiedNamespace);
+        if (connection == null) return;
+
+        _confirmModal.Show(
+            title: "Forget Subscription",
+            message: $"Are you sure you want to forget the subscription '{subscriptionName}'?",
+            detail: $"This will only remove the subscription from this topic in Bussin's local preferences. The actual subscription on the broker will not be affected.",
+            confirmText: "Forget Subscription",
+            confirmClass: "btn-danger",
+            onConfirm: async () =>
+            {
+                var topic = connection.ConfiguredTopics.FirstOrDefault(t => t.TopicName == topicName);
+                if (topic != null && topic.Subscriptions.Contains(subscriptionName))
+                {
+                    topic.Subscriptions.Remove(subscriptionName);
+                    await _navState.AddNamespaceConnectionAsync(connection);
+                    if (State.SelectedTopicName == topicName)
+                    {
+                        SubscriptionDict.Remove(subscriptionName);
+                        if (State.SelectedSubscriptionName == subscriptionName)
+                        {
+                            State.SelectTopic(topicName);
+                            ResetMessageState();
+                        }
+                    }
+                    if (TopicDict.TryGetValue(topicName, out var topicInfo))
+                    {
+                        TopicDict[topicName] = topicInfo with { SubscriptionCount = topic.Subscriptions.Count };
+                    }
+                    NotifyStateChanged();
+                    _notificationService.NotifySuccess($"Subscription '{subscriptionName}' forgotten successfully.");
+                }
+            }
+        );
+    }
+
     public void ResetMessageState()
     {
         PeekedMessages.Clear();
@@ -476,7 +754,7 @@ public sealed class ExplorerViewModel : IDisposable
 
         try
         {
-            var token = await _authService.GetServiceBusTokenAsync();
+            var token = await GetTokenAsync(GetEntityPath());
             if (string.IsNullOrEmpty(token))
             {
                 ErrorMessage = "Service Bus token not available";
@@ -541,7 +819,7 @@ public sealed class ExplorerViewModel : IDisposable
 
         try
         {
-            var token = await _authService.GetServiceBusTokenAsync();
+            var token = await GetTokenAsync(GetEntityPath());
             if (string.IsNullOrEmpty(token))
             {
                 ErrorMessage = "Service Bus token not available";
@@ -733,7 +1011,7 @@ public sealed class ExplorerViewModel : IDisposable
         {
             var entityType = State.IsQueueSelected ? "queue" : "subscription";
             var entityPath = State.GetEntityPath();
-            await _backgroundPurge.StartPurgeAsync(NamespaceNameOnly, entityType, entityPath, State.IsViewingDLQ);
+            await _backgroundPurge.StartPurgeAsync(State.FullyQualifiedNamespace, entityType, entityPath, State.IsViewingDLQ);
             PeekedMessages.Clear();
             PeekFromSequence = 0;
             _confirmModal.Close();
@@ -773,7 +1051,7 @@ public sealed class ExplorerViewModel : IDisposable
         {
             var entityType = State.IsQueueSelected ? "queue" : "subscription";
             var entityPath = State.GetEntityPath();
-            await _backgroundResubmit.StartResubmitAsync(NamespaceNameOnly, entityType, entityPath, ResubmitRemoveFromDLQ);
+            await _backgroundResubmit.StartResubmitAsync(State.FullyQualifiedNamespace, entityType, entityPath, ResubmitRemoveFromDLQ);
             PeekedMessages.Clear();
             PeekFromSequence = 0;
             _confirmModal.Close();
@@ -949,7 +1227,17 @@ public sealed class ExplorerViewModel : IDisposable
 
                 IsPeeking = true;
                 NotifyStateChanged();
-                var token = await _authService.GetServiceBusTokenAsync();
+                string entityPath;
+                if (operation.EntityType == "queue")
+                {
+                    entityPath = operation.IsDeadLetter ? $"{operation.EntityPath}/$DeadLetterQueue" : operation.EntityPath;
+                }
+                else
+                {
+                    var subPath = $"{operation.TopicName}/subscriptions/{operation.SubscriptionName}";
+                    entityPath = operation.IsDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
+                }
+                var token = await GetTokenAsync(entityPath);
                 if (string.IsNullOrEmpty(token)) return;
 
                 List<ServiceBusMessage> loadedMessages;
@@ -973,7 +1261,7 @@ public sealed class ExplorerViewModel : IDisposable
         ShowPeekOptionsModal = false;
         var searchOptions = new BackgroundSearchOptions
         {
-            NamespaceName = NamespaceNameOnly,
+            NamespaceName = State.FullyQualifiedNamespace,
             EntityType = State.IsQueueSelected ? "queue" : "subscription",
             EntityPath = State.IsQueueSelected ? State.SelectedQueueName : $"{State.SelectedTopicName}/Subscriptions/{State.SelectedSubscriptionName}",
             TopicName = State.SelectedTopicName,
@@ -1115,7 +1403,18 @@ public sealed class ExplorerViewModel : IDisposable
 
     public async Task<List<ServiceBusMessage>> LockMessagesForModalAsync(int count, int timeoutSeconds, bool fromDeadLetter)
     {
-        var token = await _authService.GetServiceBusTokenAsync();
+        string entityPath = "";
+        if (State.SelectedQueueName != null)
+        {
+            entityPath = fromDeadLetter ? $"{State.SelectedQueueName}/$DeadLetterQueue" : State.SelectedQueueName;
+        }
+        else if (State.IsSubscriptionSelected)
+        {
+            var subPath = $"{State.SelectedTopicName}/subscriptions/{State.SelectedSubscriptionName}";
+            entityPath = fromDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
+        }
+
+        var token = await GetTokenAsync(entityPath);
         if (string.IsNullOrEmpty(token)) throw new InvalidOperationException("Service Bus token not available");
 
         if (State.SelectedQueueName != null)
@@ -1217,15 +1516,24 @@ public sealed class ExplorerViewModel : IDisposable
             }
             else if (_currentExportMode == "all")
             {
-                var token = await _authService.GetServiceBusTokenAsync();
+                bool isQueue = State.IsQueueSelected;
+                string entityPath = isQueue ? State.SelectedQueueName! : State.SelectedTopicName!;
+                string? subName = isQueue ? null : State.SelectedSubscriptionName;
+                string tokenPath;
+                if (isQueue)
+                {
+                    tokenPath = State.IsViewingDLQ ? $"{entityPath}/$DeadLetterQueue" : entityPath;
+                }
+                else
+                {
+                    var subPath = $"{entityPath}/subscriptions/{subName}";
+                    tokenPath = State.IsViewingDLQ ? $"{subPath}/$DeadLetterQueue" : subPath;
+                }
+                var token = await GetTokenAsync(tokenPath);
                 if (string.IsNullOrEmpty(token))
                 {
                     throw new InvalidOperationException("Failed to get authentication token.");
                 }
-
-                bool isQueue = State.IsQueueSelected;
-                string entityPath = isQueue ? State.SelectedQueueName! : State.SelectedTopicName!;
-                string? subName = isQueue ? null : State.SelectedSubscriptionName;
 
                 int countToFetch = 10000;
                 int currentSequence = 0;
@@ -1325,13 +1633,111 @@ public sealed class ExplorerViewModel : IDisposable
         return "[]";
     }
 
+    private string GetEntityPath()
+    {
+        if (State.SelectedQueueName != null)
+        {
+            return State.IsViewingDLQ ? $"{State.SelectedQueueName}/$DeadLetterQueue" : State.SelectedQueueName;
+        }
+        if (State.SelectedTopicName != null && State.SelectedSubscriptionName != null)
+        {
+            var subPath = $"{State.SelectedTopicName}/subscriptions/{State.SelectedSubscriptionName}";
+            return State.IsViewingDLQ ? $"{subPath}/$DeadLetterQueue" : subPath;
+        }
+        return "";
+    }
+
+    private async Task<string> GetTokenAsync(string entityPath)
+    {
+        var connection = _navState.GetNamespaceConnection(State.FullyQualifiedNamespace);
+        if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
+        {
+            var (endpoint, keyName, key, defaultEntityPath) = ServiceBusConnectionStringHelper.ParseConnectionString(connection.ConnectionString);
+            var activePath = !string.IsNullOrEmpty(defaultEntityPath) ? defaultEntityPath : entityPath;
+            return ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, activePath, TimeSpan.FromHours(2));
+        }
+
+        var token = await _authService.GetServiceBusTokenAsync();
+        return token;
+    }
+
     public void Dispose()
     {
         _confirmModal.OnChange -= NotifyStateChanged;
         _backgroundPurge.OnOperationsChanged -= NotifyStateChanged;
+        _backgroundPurge.OnPurgeCompleted -= HandlePurgeCompleted;
         _backgroundResubmit.OnOperationsChanged -= NotifyStateChanged;
         _backgroundSearch.OnViewResultsRequested -= OnViewSearchResultsRequested;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
+    }
+
+    private void HandlePurgeCompleted(PurgeOperation op)
+    {
+        if (State.CurrentNamespace == null || (op.NamespaceName != State.FullyQualifiedNamespace && op.NamespaceName != NamespaceNameOnly)) return;
+
+        if (op.EntityType == "queue")
+        {
+            if (QueueDict.TryGetValue(op.EntityPath, out var queue))
+            {
+                if (op.IsDeadLetter)
+                {
+                    QueueDict[op.EntityPath] = queue with { DeadLetterMessageCount = 0 };
+                }
+                else
+                {
+                    QueueDict[op.EntityPath] = queue with { ActiveMessageCount = 0 };
+                }
+                NotifyStateChanged();
+            }
+        }
+        else if (op.EntityType == "subscription")
+        {
+            var parts = op.EntityPath.Split('/');
+            if (parts.Length >= 2)
+            {
+                string topicName = parts[0];
+                string subscriptionName = parts[^1];
+
+                if (State.SelectedTopicName == topicName && SubscriptionDict.TryGetValue(subscriptionName, out var sub))
+                {
+                    if (op.IsDeadLetter)
+                    {
+                        SubscriptionDict[subscriptionName] = sub with { DeadLetterMessageCount = 0 };
+                    }
+                    else
+                    {
+                        SubscriptionDict[subscriptionName] = sub with { ActiveMessageCount = 0 };
+                    }
+                    NotifyStateChanged();
+                }
+            }
+        }
+
+        // Clear peeked messages if the purged entity is the selected one and the DLQ view matches
+        bool isCurrentSelected = false;
+        if (op.EntityType == "queue" && State.SelectedQueueName == op.EntityPath)
+        {
+            isCurrentSelected = true;
+        }
+        else if (op.EntityType == "subscription")
+        {
+            var parts = op.EntityPath.Split('/');
+            if (parts.Length >= 2)
+            {
+                string topicName = parts[0];
+                string subscriptionName = parts[^1];
+                if (State.SelectedTopicName == topicName && State.SelectedSubscriptionName == subscriptionName)
+                {
+                    isCurrentSelected = true;
+                }
+            }
+        }
+
+        if (isCurrentSelected && State.IsViewingDLQ == op.IsDeadLetter)
+        {
+            ClearPeekedMessages();
+            NotifyStateChanged();
+        }
     }
 }

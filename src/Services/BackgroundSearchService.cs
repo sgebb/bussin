@@ -70,7 +70,20 @@ public sealed class BackgroundSearchService : IDisposable
             {
                 Console.WriteLine($"[BackgroundSearch] Starting search for {options.EntityPath} with filters: {options.GetFilterDescription()}");
                 
-                var token = await authService.GetServiceBusTokenAsync();
+                var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
+                await navState.InitializeAsync();
+                var connection = navState.GetNamespaceConnection(options.NamespaceName);
+                string? token;
+                
+                if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
+                {
+                    token = ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, options.EntityPath, TimeSpan.FromHours(2));
+                }
+                else
+                {
+                    token = await authService.GetServiceBusTokenAsync();
+                }
+                
                 if (string.IsNullOrEmpty(token))
                 {
                     throw new Exception("Service Bus token not available");

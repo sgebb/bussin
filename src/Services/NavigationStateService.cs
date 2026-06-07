@@ -1,4 +1,4 @@
-﻿using Bussin.Models;
+using Bussin.Models;
 
 namespace Bussin.Services;
 
@@ -8,6 +8,19 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     private const string DefaultFolderName = "Favorites";
     private AppPreferences _preferences = new();
     private bool _isInitialized = false;
+
+    public bool RunWithoutLogin => _preferences?.RunWithoutLogin ?? false;
+
+    public async Task SetRunWithoutLoginAsync(bool value)
+    {
+        if (!_isInitialized)
+        {
+            await InitializeAsync();
+        }
+        _preferences.RunWithoutLogin = value;
+        await preferencesService.SavePreferencesAsync(_preferences);
+        NotifyStateChanged();
+    }
 
     // Delete folder modal state
     private bool _showDeleteFolderModal = false;
@@ -268,11 +281,10 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     {
         if (!_isInitialized || _preferences?.Folders == null) return null;
 
-        var currentTenantId = _preferences.SelectedTenantId;
+        var normalizedSearch = NormalizeNamespace(fullyQualifiedNamespace);
         return _preferences.Folders
-            .Where(f => f.TenantId == currentTenantId)
             .SelectMany(f => f.Namespaces)
-            .FirstOrDefault(n => n.FullyQualifiedNamespace == fullyQualifiedNamespace);
+            .FirstOrDefault(n => NormalizeNamespace(n.FullyQualifiedNamespace).Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase));
     }
 
     public IEnumerable<Folder> GetChildFolders(string? parentId)
@@ -489,4 +501,81 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
     }
 
     public string GetDefaultFolderIdValue() => GetDefaultFolderId();
+
+    public async Task AddNamespaceConnectionAsync(NamespaceConnection connection)
+    {
+        if (!_isInitialized)
+        {
+            await InitializeAsync();
+        }
+        
+        var currentDefaultId = GetDefaultFolderId();
+        var defaultFolder = _preferences.Folders.FirstOrDefault(f => f.Id == currentDefaultId);
+        
+        if (defaultFolder == null)
+        {
+            defaultFolder = new Folder
+            {
+                Id = currentDefaultId,
+                Name = DefaultFolderName,
+                IsExpanded = true,
+                TenantId = _preferences.SelectedTenantId
+            };
+            _preferences.Folders.Insert(0, defaultFolder);
+        }
+
+        // Remove existing connection with same FullyQualifiedNamespace if it exists to overwrite/update it!
+        var currentTenantId = _preferences.SelectedTenantId;
+        foreach (var folder in _preferences.Folders.Where(f => f.TenantId == currentTenantId))
+        {
+            var existing = folder.Namespaces.FirstOrDefault(n => n.FullyQualifiedNamespace.Equals(connection.FullyQualifiedNamespace, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                folder.Namespaces.Remove(existing);
+            }
+        }
+        
+        defaultFolder.Namespaces.Add(connection);
+        await preferencesService.SavePreferencesAsync(_preferences);
+        NotifyStateChanged();
+    }
+
+    private bool _showAddConnectionStringModal = false;
+    private NamespaceConnection? _editingNamespace = null;
+
+    public bool ShowAddConnectionStringModal => _showAddConnectionStringModal;
+    public NamespaceConnection? EditingNamespace => _editingNamespace;
+    public event Action? OnAddConnectionStringModalChange;
+
+    public void ShowAddConnectionStringModalDialog(NamespaceConnection? namespaceToEdit = null)
+    {
+        _editingNamespace = namespaceToEdit;
+        _showAddConnectionStringModal = true;
+        OnAddConnectionStringModalChange?.Invoke();
+    }
+
+    public void HideAddConnectionStringModal()
+    {
+        _showAddConnectionStringModal = false;
+        _editingNamespace = null;
+        OnAddConnectionStringModalChange?.Invoke();
+    }
+
+    private static string NormalizeNamespace(string ns)
+    {
+        if (string.IsNullOrEmpty(ns)) return "";
+        ns = ns.Trim();
+        if (ns.StartsWith("sb://", StringComparison.OrdinalIgnoreCase)) ns = ns.Substring(5);
+        if (ns.StartsWith("amqps://", StringComparison.OrdinalIgnoreCase)) ns = ns.Substring(8);
+        if (ns.StartsWith("amqp://", StringComparison.OrdinalIgnoreCase)) ns = ns.Substring(7);
+        if (ns.EndsWith("/")) ns = ns.Substring(0, ns.Length - 1);
+        
+        var dotIndex = ns.IndexOf('.');
+        if (dotIndex > -1 && ns.Contains(".servicebus.", StringComparison.OrdinalIgnoreCase))
+        {
+            ns = ns.Substring(0, dotIndex);
+        }
+        
+        return ns;
+    }
 }

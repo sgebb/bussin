@@ -1,0 +1,208 @@
+@using Bussin.Models
+@using Bussin.Services
+
+@if (IsVisible)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnClose">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(NamespaceToEdit == null ? "Add Connection String Namespace" : "Edit Connection Namespace")</h5>
+                    <button type="button" class="btn-close" @onclick="OnClose"></button>
+                </div>
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger py-2 small mb-3">
+                            <i class="bi bi-exclamation-octagon me-2"></i> @errorMessage
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Display Name</label>
+                        <input type="text" class="form-control" placeholder="e.g. Local Emulator or Production Invoicing" @bind="displayName" @bind:event="oninput" />
+                        <small class="form-text text-muted">A friendly name to identify this connection.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Connection String</label>
+                        <textarea class="form-control" rows="3" placeholder="Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...   or   amqps://..." @bind="connectionString" @bind:event="oninput"></textarea>
+                        <small class="form-text text-muted">Paste your Service Bus connection string or standard AMQP URI.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">WebSocket URL Override (Optional)</label>
+                        <input type="text" class="form-control" placeholder="e.g. ws://localhost:5673/$servicebus/websocket" @bind="webSocketUrl" />
+                        <small class="form-text text-muted">
+                            For local emulator, enter your WebSocket proxy URL (e.g. <code>ws://localhost:5673/$servicebus/websocket</code> if running websockify forwarding to port 5672).
+                        </small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Queues (Comma-separated, Optional)</label>
+                            <input type="text" class="form-control" placeholder="e.g. queue1, queue2" @bind="queuesCsv" />
+                            <small class="form-text text-muted">Since browser sandboxes cannot list queues via connection strings directly, list them here to browse them.</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Topics (Comma-separated, Optional)</label>
+                            <input type="text" class="form-control" placeholder="e.g. topic1, topic2" @bind="topicsCsv" />
+                            <small class="form-text text-muted">List your topic names here. You can configure subscriptions in the explorer sidebar.</small>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info py-2 small mb-0 mt-2">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Security:</strong> All connection strings are saved in your browser's local cache. They are never sent to external servers or the Bussin project.
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="OnClose">Cancel</button>
+                    <button type="button" class="btn btn-primary fw-bold" @onclick="HandleSave">
+                        Save Connection
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public NamespaceConnection? NamespaceToEdit { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<NamespaceConnection> OnSave { get; set; }
+
+    private string displayName = "";
+    private string connectionString = "";
+    private string webSocketUrl = "";
+    private string queuesCsv = "";
+    private string topicsCsv = "";
+    private string? errorMessage;
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible)
+        {
+            errorMessage = null;
+            if (NamespaceToEdit != null)
+            {
+                displayName = NamespaceToEdit.DisplayName;
+                connectionString = NamespaceToEdit.ConnectionString ?? "";
+                webSocketUrl = NamespaceToEdit.WebSocketUrl ?? "";
+                queuesCsv = string.Join(", ", NamespaceToEdit.ConfiguredQueues);
+                topicsCsv = string.Join(", ", NamespaceToEdit.ConfiguredTopics.Select(t => t.TopicName));
+            }
+            else
+            {
+                displayName = "";
+                connectionString = "";
+                webSocketUrl = "";
+                queuesCsv = "";
+                topicsCsv = "";
+            }
+        }
+    }
+
+    private async Task HandleSave()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            errorMessage = "Display Name is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            errorMessage = "Connection String is required.";
+            return;
+        }
+
+        try
+        {
+            // Parse to validate
+            var (endpoint, keyName, key, entityPath) = ServiceBusConnectionStringHelper.ParseConnectionString(connectionString);
+            
+            // Extract hostname
+            var uriStr = endpoint;
+            if (!uriStr.StartsWith("sb://", StringComparison.OrdinalIgnoreCase) && 
+                !uriStr.StartsWith("amqp://", StringComparison.OrdinalIgnoreCase) && 
+                !uriStr.StartsWith("amqps://", StringComparison.OrdinalIgnoreCase))
+            {
+                uriStr = "sb://" + uriStr;
+            }
+            if (uriStr.StartsWith("amqp://", StringComparison.OrdinalIgnoreCase))
+            {
+                uriStr = "sb://" + uriStr.Substring(7);
+            }
+            else if (uriStr.StartsWith("amqps://", StringComparison.OrdinalIgnoreCase))
+            {
+                uriStr = "sb://" + uriStr.Substring(8);
+            }
+            var uri = new Uri(uriStr);
+            var hostname = uri.Host;
+
+            // Generate unique FullyQualifiedNamespace key
+            var fullyQualifiedNamespace = hostname;
+            if (uri.Port != -1 && uri.Port != 5671 && uri.Port != 5672)
+            {
+                fullyQualifiedNamespace = $"{hostname}:{uri.Port}";
+            }
+            
+            // If hostname is localhost and we have custom WS port, include it in key to avoid collisions
+            if (hostname == "localhost" && !string.IsNullOrEmpty(webSocketUrl))
+            {
+                try
+                {
+                    var wsUri = new Uri(webSocketUrl);
+                    fullyQualifiedNamespace = $"{hostname}:{wsUri.Port}";
+                }
+                catch { }
+            }
+
+            var queuesList = queuesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(q => q.Trim())
+                .Where(q => !string.IsNullOrEmpty(q))
+                .ToList();
+
+            var topicsList = topicsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.Trim())
+                .Where(t => !string.IsNullOrEmpty(t))
+                .ToList();
+
+            // Create list of ConfiguredTopic preserving existing subscriptions if editing
+            var configuredTopics = new List<ConfiguredTopic>();
+            foreach (var tName in topicsList)
+            {
+                var existingTopic = NamespaceToEdit?.ConfiguredTopics.FirstOrDefault(t => t.TopicName.Equals(tName, StringComparison.OrdinalIgnoreCase));
+                configuredTopics.Add(new ConfiguredTopic
+                {
+                    TopicName = tName,
+                    Subscriptions = existingTopic?.Subscriptions ?? new List<string>()
+                });
+            }
+
+            var conn = new NamespaceConnection
+            {
+                FullyQualifiedNamespace = fullyQualifiedNamespace,
+                ResourceGroup = "Manual Connection",
+                SubscriptionId = "Manual",
+                DisplayName = displayName.Trim(),
+                ConnectionString = connectionString.Trim(),
+                WebSocketUrl = string.IsNullOrWhiteSpace(webSocketUrl) ? null : webSocketUrl.Trim(),
+                ConfiguredQueues = queuesList,
+                ConfiguredTopics = configuredTopics
+            };
+
+            await OnSave.InvokeAsync(conn);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to validate connection string: {ex.Message}";
+        }
+    }
+}

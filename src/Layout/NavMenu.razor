@@ -2,6 +2,7 @@
 @inject NavigationStateService NavState
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IConfirmModalService ConfirmModal
 @implements IDisposable
 
 <div class="nav-menu">
@@ -20,44 +21,94 @@
          @ondrop="OnRootDrop"
          @ondrop:preventDefault="true">
         <nav class="flex-column">
-            <AuthorizeView>
-                <Authorized>
-                    @if (NavState.IsInitialized && NavState.Folders.Any())
-                    {
-                        <div class="px-3 mt-3">
-                            @RenderFavoritesSection()
-                            
-                            @if (!isCreatingFolder)
-                            {
-                                <button class="btn btn-sm btn-outline-primary w-100" @onclick="ShowCreateFolder">
-                                    <i class="bi bi-plus"></i> New Folder
+            @if (NavState.RunWithoutLogin)
+            {
+                @if (NavState.IsInitialized && NavState.Folders.Any())
+                {
+                    <div class="px-3 mt-3">
+                        @RenderFavoritesSection()
+                        
+                        @if (!isCreatingFolder)
+                        {
+                            <div class="d-flex gap-2 w-100">
+                                <button class="btn btn-sm btn-outline-primary flex-grow-1" @onclick="ShowCreateFolder" title="Create a new folder to organize namespaces">
+                                    <i class="bi bi-folder-plus"></i> Folder
                                 </button>
-                            }
-                            else
-                            {
-                                <div class="mt-3">
-                                    <input type="text" class="form-control form-control-sm mb-2" placeholder="Folder name" 
-                                           @bind="newFolderName" 
-                                           @bind:event="oninput"
-                                           @onkeydown="HandleFolderNameKeyDown"
-                                           autofocus />
-                                    <div class="d-flex gap-2">
-                                        <button class="btn btn-sm btn-primary flex-fill" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(newFolderName)">Create</button>
-                                        <button class="btn btn-sm btn-secondary flex-fill" @onclick="CancelCreateFolder">Cancel</button>
-                                    </div>
+                                <button class="btn btn-sm btn-outline-success flex-grow-1" @onclick="@(() => NavState.ShowAddConnectionStringModalDialog(null))" title="Add a manual connection string or emulator connection">
+                                    <i class="bi bi-link-45deg"></i> Add CS
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mt-3">
+                                <input type="text" class="form-control form-control-sm mb-2" placeholder="Folder name" 
+                                       @bind="newFolderName" 
+                                       @bind:event="oninput"
+                                       @onkeydown="HandleFolderNameKeyDown"
+                                       autofocus />
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-primary flex-fill" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(newFolderName)">Create</button>
+                                    <button class="btn btn-sm btn-secondary flex-fill" @onclick="CancelCreateFolder">Cancel</button>
                                 </div>
-                            }
-                        </div>
-                    }
-                </Authorized>
-            </AuthorizeView>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <AuthorizeView>
+                    <Authorized>
+                        @if (NavState.IsInitialized && NavState.Folders.Any())
+                        {
+                            <div class="px-3 mt-3">
+                                @RenderFavoritesSection()
+                                
+                                @if (!isCreatingFolder)
+                                {
+                                    <div class="d-flex gap-2 w-100">
+                                        <button class="btn btn-sm btn-outline-primary flex-grow-1" @onclick="ShowCreateFolder" title="Create a new folder to organize namespaces">
+                                            <i class="bi bi-folder-plus"></i> Folder
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success flex-grow-1" @onclick="@(() => NavState.ShowAddConnectionStringModalDialog(null))" title="Add a manual connection string or emulator connection">
+                                            <i class="bi bi-link-45deg"></i> Add CS
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="mt-3">
+                                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Folder name" 
+                                               @bind="newFolderName" 
+                                               @bind:event="oninput"
+                                               @onkeydown="HandleFolderNameKeyDown"
+                                               autofocus />
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-primary flex-fill" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(newFolderName)">Create</button>
+                                            <button class="btn btn-sm btn-secondary flex-fill" @onclick="CancelCreateFolder">Cancel</button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+            }
         </nav>
     </div>
 
     <!-- Fixed Bottom Section -->
     <div class="nav-footer">
         <div class="user-section-row">
-            @if (_isDemoMode)
+            @if (NavState.RunWithoutLogin)
+            {
+                <div class="user-section bg-warning text-dark" @onclick="ExitConnectionStringMode" style="cursor: pointer; justify-content: center;">
+                    <i class="bi bi-box-arrow-left text-dark"></i>
+                    <span class="ms-2 fw-semibold">Exit CS Mode</span>
+                </div>
+            }
+            else if (_isDemoMode)
             {
                 <div class="user-section bg-danger text-white" @onclick="ExitDemoMode" style="cursor: pointer; justify-content: center;">
                     <i class="bi bi-box-arrow-left"></i>
@@ -130,6 +181,12 @@
     private void ExitDemoMode()
     {
         // Force full reload to verify auth check again in Program.cs
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    private async Task ExitConnectionStringMode()
+    {
+        await NavState.SetRunWithoutLoginAsync(false);
         Navigation.NavigateTo("/", forceLoad: true);
     }
 
@@ -334,36 +391,7 @@
             var namespaces = defaultFolder.Namespaces.ToList();
             foreach (var ns in namespaces)
             {
-                var nsUrl = GetExplorerUrl(ns);
-                var nsFqn = ns.FullyQualifiedNamespace;
-                
-                // Change 'a' to 'div' to prevent native link dragging (Split View issue)
-                __builder.OpenElement(0, "div");
-                __builder.AddAttribute(1, "onclick", EventCallback.Factory.Create(this, () => Navigation.NavigateTo(nsUrl)));
-                __builder.AddAttribute(2, "class", "recent-namespace-tile d-block mb-2 p-2 user-select-none");
-                __builder.AddAttribute(3, "style", "cursor: pointer;");
-                __builder.AddAttribute(4, "draggable", "true");
-                __builder.AddAttribute(5, "ondragstart", EventCallback.Factory.Create(this, () => OnNamespaceDragStart(nsFqn)));
-                __builder.AddAttribute(6, "ondragend", EventCallback.Factory.Create(this, OnDragEnd));
-                
-                // Add drop handlers for reordering
-                __builder.AddAttribute(7, "ondragover", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnNamespaceDragOver(e, nsFqn)));
-                __builder.AddAttribute(8, "ondrop", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnNamespaceDropOnNamespace(e, nsFqn)));
-                __builder.AddEventPreventDefaultAttribute(9, "ondragover", true);
-                __builder.AddEventStopPropagationAttribute(10, "ondragover", true);
-                __builder.AddEventPreventDefaultAttribute(11, "ondrop", true);
-                __builder.AddEventStopPropagationAttribute(12, "ondrop", true);
-
-                __builder.OpenElement(13, "div");
-                __builder.AddAttribute(14, "class", "fw-semibold");
-                __builder.AddContent(15, ns.DisplayName);
-                __builder.CloseElement();
-                __builder.OpenElement(16, "small");
-                __builder.AddAttribute(17, "class", "text-muted text-truncate d-block");
-                __builder.AddAttribute(18, "title", nsFqn);
-                __builder.AddContent(19, nsFqn);
-                __builder.CloseElement();
-                __builder.CloseElement();
+                __builder.AddContent(0, RenderNamespaceTile(ns));
             }
         }
         
@@ -444,35 +472,7 @@
             // Namespaces
             foreach (var ns in namespaces)
             {
-                var nsUrl = GetExplorerUrl(ns);
-                var nsFqn = ns.FullyQualifiedNamespace;
-                
-                // Change 'a' to 'div'
-                __builder.OpenElement(35, "div");
-                __builder.AddAttribute(36, "onclick", EventCallback.Factory.Create(this, () => Navigation.NavigateTo(nsUrl)));
-                __builder.AddAttribute(37, "class", "recent-namespace-tile d-block mb-2 p-2 user-select-none");
-                __builder.AddAttribute(38, "style", "cursor: pointer;");
-                __builder.AddAttribute(39, "draggable", "true");
-                __builder.AddAttribute(40, "ondragstart", EventCallback.Factory.Create(this, () => OnNamespaceDragStart(nsFqn)));
-                __builder.AddAttribute(41, "ondragend", EventCallback.Factory.Create(this, OnDragEnd));
-                // Add drop handlers for reordering
-                __builder.AddAttribute(42, "ondragover", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnNamespaceDragOver(e, nsFqn)));
-                __builder.AddAttribute(43, "ondrop", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnNamespaceDropOnNamespace(e, nsFqn)));
-                __builder.AddEventPreventDefaultAttribute(44, "ondragover", true);
-                __builder.AddEventStopPropagationAttribute(45, "ondragover", true);
-                __builder.AddEventPreventDefaultAttribute(46, "ondrop", true);
-                __builder.AddEventStopPropagationAttribute(47, "ondrop", true);
-
-                __builder.OpenElement(48, "div");
-                __builder.AddAttribute(49, "class", "fw-semibold");
-                __builder.AddContent(50, ns.DisplayName);
-                __builder.CloseElement();
-                __builder.OpenElement(51, "small");
-                __builder.AddAttribute(52, "class", "text-muted text-truncate d-block");
-                __builder.AddAttribute(53, "title", nsFqn);
-                __builder.AddContent(54, nsFqn);
-                __builder.CloseElement();
-                __builder.CloseElement();
+                __builder.AddContent(35, RenderNamespaceTile(ns));
             }
             
             // Recursive child folders
@@ -485,5 +485,93 @@
         }
         
         __builder.CloseElement(); // outer div
+    };
+
+    private void ConfirmDeleteNamespace(NamespaceConnection ns)
+    {
+        ConfirmModal.Show(
+            "Delete Connection",
+            $"Are you sure you want to delete the manual connection '{ns.DisplayName}'?",
+            "This will remove the connection configuration and all manually registered queues/topics.",
+            "Delete",
+            "btn-danger",
+            async () =>
+            {
+                await NavState.RemoveFromFavoritesAsync(ns.FullyQualifiedNamespace);
+                Navigation.NavigateTo("/");
+            });
+    }
+
+    private RenderFragment RenderNamespaceTile(NamespaceConnection ns) => __builder =>
+    {
+        var nsUrl = GetExplorerUrl(ns);
+        var nsFqn = ns.FullyQualifiedNamespace;
+        
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "onclick", EventCallback.Factory.Create(this, () => Navigation.NavigateTo(nsUrl)));
+        __builder.AddAttribute(2, "class", "recent-namespace-tile d-block mb-2 p-2 user-select-none");
+        __builder.AddAttribute(3, "style", "cursor: pointer;");
+        __builder.AddAttribute(4, "draggable", "true");
+        __builder.AddAttribute(5, "ondragstart", EventCallback.Factory.Create(this, () => OnNamespaceDragStart(nsFqn)));
+        __builder.AddAttribute(6, "ondragend", EventCallback.Factory.Create(this, OnDragEnd));
+        __builder.AddAttribute(7, "ondragover", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnNamespaceDragOver(e, nsFqn)));
+        __builder.AddAttribute(8, "ondrop", EventCallback.Factory.Create<DragEventArgs>(this, (e) => OnNamespaceDropOnNamespace(e, nsFqn)));
+        __builder.AddEventPreventDefaultAttribute(9, "ondragover", true);
+        __builder.AddEventStopPropagationAttribute(10, "ondragover", true);
+        __builder.AddEventPreventDefaultAttribute(11, "ondrop", true);
+        __builder.AddEventStopPropagationAttribute(12, "ondrop", true);
+
+        __builder.OpenElement(13, "div");
+        __builder.AddAttribute(14, "class", "d-flex align-items-center justify-content-between w-100");
+
+        __builder.OpenElement(15, "div");
+        __builder.AddAttribute(16, "class", "flex-grow-1 min-width-0 pe-2");
+
+        __builder.OpenElement(17, "div");
+        __builder.AddAttribute(18, "class", "fw-semibold text-truncate");
+        __builder.AddAttribute(19, "title", ns.DisplayName);
+        __builder.AddContent(20, ns.DisplayName);
+        __builder.CloseElement();
+
+        __builder.OpenElement(21, "small");
+        __builder.AddAttribute(22, "class", "text-muted text-truncate d-block");
+        __builder.AddAttribute(23, "title", nsFqn);
+        __builder.AddContent(24, nsFqn);
+        __builder.CloseElement();
+
+        __builder.CloseElement(); // Text wrapper
+
+        if (!string.IsNullOrEmpty(ns.ConnectionString))
+        {
+            __builder.OpenElement(25, "div");
+            __builder.AddAttribute(26, "class", "ns-actions-wrapper d-flex gap-1");
+            __builder.AddAttribute(27, "onclick", EventCallback.Factory.Create(this, () => {})); // Stop navigation
+            __builder.AddEventStopPropagationAttribute(28, "onclick", true);
+
+            __builder.OpenElement(29, "button");
+            __builder.AddAttribute(30, "class", "btn btn-xs btn-link p-1 text-secondary");
+            __builder.AddAttribute(31, "style", "font-size: 0.85rem; line-height: 1;");
+            __builder.AddAttribute(32, "onclick", EventCallback.Factory.Create(this, () => NavState.ShowAddConnectionStringModalDialog(ns)));
+            __builder.AddAttribute(33, "title", "Edit connection");
+            __builder.OpenElement(34, "i");
+            __builder.AddAttribute(35, "class", "bi bi-gear");
+            __builder.CloseElement();
+            __builder.CloseElement();
+
+            __builder.OpenElement(36, "button");
+            __builder.AddAttribute(37, "class", "btn btn-xs btn-link p-1 text-danger");
+            __builder.AddAttribute(38, "style", "font-size: 0.85rem; line-height: 1;");
+            __builder.AddAttribute(39, "onclick", EventCallback.Factory.Create(this, () => ConfirmDeleteNamespace(ns)));
+            __builder.AddAttribute(40, "title", "Delete connection");
+            __builder.OpenElement(41, "i");
+            __builder.AddAttribute(42, "class", "bi bi-trash");
+            __builder.CloseElement();
+            __builder.CloseElement();
+
+            __builder.CloseElement(); // Actions wrapper
+        }
+
+        __builder.CloseElement(); // Flex layout
+        __builder.CloseElement(); // Outer card
     };
 }

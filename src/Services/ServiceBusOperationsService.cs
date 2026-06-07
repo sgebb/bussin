@@ -7,19 +7,31 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     private readonly IServiceBusJsInteropService _jsInterop;
     private readonly IAuthenticationService _authService;
     private readonly INotificationService _notificationService;
+    private readonly NavigationStateService _navState;
 
     public ServiceBusOperationsService(
         IServiceBusJsInteropService jsInterop,
         IAuthenticationService authService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        NavigationStateService navState)
     {
         _jsInterop = jsInterop;
         _authService = authService;
         _notificationService = notificationService;
+        _navState = navState;
     }
 
-    private async Task<string> GetTokenAsync()
+    private async Task<string> GetTokenAsync(string namespaceName, string entityPath)
     {
+        await _navState.InitializeAsync();
+        var connection = _navState.GetNamespaceConnection(namespaceName);
+        if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
+        {
+            var (endpoint, keyName, key, defaultEntityPath) = ServiceBusConnectionStringHelper.ParseConnectionString(connection.ConnectionString);
+            var activePath = !string.IsNullOrEmpty(defaultEntityPath) ? defaultEntityPath : entityPath;
+            return ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, activePath, TimeSpan.FromHours(2));
+        }
+
         var token = await _authService.GetServiceBusTokenAsync();
         if (string.IsNullOrEmpty(token))
         {
@@ -36,7 +48,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var entityPath = fromDeadLetter ? $"{queueName}/$DeadLetterQueue" : queueName;
+            var token = await GetTokenAsync(namespaceName, entityPath);
             var messages = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, count, 0, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "queue";
             _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source} '{queueName}'");
@@ -53,7 +66,9 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var subPath = $"{topicName}/subscriptions/{subscriptionName}";
+            var entityPath = fromDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
+            var token = await GetTokenAsync(namespaceName, entityPath);
             var messages = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, count, 0, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "subscription";
             _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source} '{topicName}/Subscriptions/{subscriptionName}'");
@@ -72,7 +87,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var token = await GetTokenAsync(namespaceName, queueName);
             await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, messageBody, properties);
             _notificationService.NotifySuccess($"Message sent successfully to queue '{queueName}'");
         }
@@ -87,7 +102,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var token = await GetTokenAsync(namespaceName, topicName);
             await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, messageBody, properties);
             _notificationService.NotifySuccess($"Message sent successfully to topic '{topicName}'");
         }
@@ -102,7 +117,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var token = await GetTokenAsync(namespaceName, queueName);
             await _jsInterop.SendQueueMessageBatchAsync(namespaceName, queueName, token, messages.ToArray());
             _notificationService.NotifySuccess($"Batch of {messages.Count} messages sent successfully to queue '{queueName}'");
             return new BatchOperationResult { SuccessCount = messages.Count };
@@ -118,7 +133,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var token = await GetTokenAsync(namespaceName, topicName);
             await _jsInterop.SendTopicMessageBatchAsync(namespaceName, topicName, token, messages.ToArray());
             _notificationService.NotifySuccess($"Batch of {messages.Count} messages sent successfully to topic '{topicName}'");
             return new BatchOperationResult { SuccessCount = messages.Count };
@@ -136,7 +151,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var entityPath = fromDeadLetter ? $"{queueName}/$DeadLetterQueue" : queueName;
+            var token = await GetTokenAsync(namespaceName, entityPath);
             var count = await _jsInterop.PurgeQueueAsync(namespaceName, queueName, token, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "queue";
             _notificationService.NotifySuccess($"{source} '{queueName}' purged successfully - deleted {count} message(s)");
@@ -153,7 +169,9 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var subPath = $"{topicName}/subscriptions/{subscriptionName}";
+            var entityPath = fromDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
+            var token = await GetTokenAsync(namespaceName, entityPath);
             var count = await _jsInterop.PurgeSubscriptionAsync(namespaceName, topicName, subscriptionName, token, fromDeadLetter);
             var source = fromDeadLetter ? "DLQ" : "subscription";
             _notificationService.NotifySuccess($"{source} '{topicName}/Subscriptions/{subscriptionName}' purged successfully - deleted {count} message(s)");
@@ -172,7 +190,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var entityPath = fromDeadLetter ? $"{queueName}/$DeadLetterQueue" : queueName;
+            var token = await GetTokenAsync(namespaceName, entityPath);
             var maxSeq = sequenceNumbers.Max();
             
             int itemsToLock = 0;
@@ -214,7 +233,9 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync();
+            var subPath = $"{topicName}/subscriptions/{subscriptionName}";
+            var entityPath = fromDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
+            var token = await GetTokenAsync(namespaceName, entityPath);
             var maxSeq = sequenceNumbers.Max();
             
             int itemsToLock = 0;
@@ -395,14 +416,14 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         bool fromDeadLetter,
         bool deleteOriginal)
     {
-        // Note: Direct AMQP receive-by-sequence-number operations only succeed for deferred messages.
-        // To resubmit standard active or dead-lettered messages, we use a three-step transactional flow:
-        // 1. Peek the message payloads by sequence number (read-only peek does support sequence queries).
-        // 2. Publish cloned messages as a new batch to the destination queue/topic.
-        // 3. If deleteOriginal is true, lock the original messages and complete them to clean up the queue.
         try
         {
-            var token = await GetTokenAsync();
+            string entityPath = queueName ?? topicName!;
+            if (subscriptionName != null)
+            {
+                entityPath = $"{topicName}/subscriptions/{subscriptionName}";
+            }
+            var token = await GetTokenAsync(namespaceName, entityPath);
             
             // Peek to get the message content we want to resend
             List<ServiceBusMessage> allMessages;

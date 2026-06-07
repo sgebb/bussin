@@ -467,6 +467,15 @@ a:hover,
     color: var(--primary-color) !important;
 }
 
+.recent-namespace-tile .ns-actions-wrapper {
+    opacity: 0.3;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.recent-namespace-tile:hover .ns-actions-wrapper {
+    opacity: 1;
+}
+
 .user-section {
     color: var(--text-color);
     border-radius: 8px;
@@ -1339,4 +1348,40 @@ mark {
     opacity: 0.35 !important;
     cursor: not-allowed !important;
     pointer-events: none !important;
+}
+
+/* Clickable column header zoom triggers */
+.entity-column-header.clickable-header {
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: background-color 0.2s ease, color 0.2s ease !important;
+}
+.entity-column-header.clickable-header:hover {
+    background-color: var(--secondary-hover) !important;
+    color: var(--primary-color) !important;
+}
+
+/* Zoom indicator icon inside header */
+.header-zoom-indicator {
+    opacity: 0.3 !important;
+    transition: opacity 0.2s ease, color 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+.entity-column-header.clickable-header:hover .header-zoom-indicator {
+    opacity: 1 !important;
+    color: var(--primary-color) !important;
+}
+
+/* Delete button next to entity items */
+.entity-delete-btn {
+    opacity: 0.3 !important;
+    transition: opacity 0.2s ease, color 0.2s ease !important;
+}
+.entity-item:hover .entity-delete-btn {
+    opacity: 0.7 !important;
+}
+.entity-delete-btn:hover {
+    opacity: 1.0 !important;
+    color: #ef4444 !important;
 }

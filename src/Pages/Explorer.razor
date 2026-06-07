@@ -1,8 +1,8 @@
 @page "/explorer"
 @using Microsoft.AspNetCore.Authorization
 @using Azure.Core
-@attribute [Authorize]
 @inject ExplorerViewModel VM
+@inject NavigationManager Navigation
 @implements IDisposable
 
 <PageTitle>Explorer - bussin</PageTitle>
@@ -59,21 +59,24 @@
                         <span class="visually-hidden">Loading...</span>
                     </div>
                 }
-                else
+                else if (!VM.IsConnectionStringMode)
                 {
                     <button class="namespace-action-btn refresh-btn" @onclick="VM.RefreshEntitiesAsync" title="Refresh queues and topics">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
                 }
-                <button class="namespace-action-btn stats-btn" @onclick="() => VM.ShowStatsModal = true" title="Statistics">
-                    <i class="bi bi-bar-chart-line"></i>
-                </button>
+                @if (!VM.IsConnectionStringMode)
+                {
+                    <button class="namespace-action-btn stats-btn" @onclick="() => VM.ShowStatsModal = true" title="Statistics">
+                        <i class="bi bi-bar-chart-line"></i>
+                    </button>
+                }
             </div>
         </div>
     </div>
 
     <!-- Section 2: Compact Entity Selector (3 Columns) -->
-    @if (VM.Queues.Count > 0 || VM.Topics.Count > 0)
+    @if (VM.Queues.Count > 0 || VM.Topics.Count > 0 || VM.IsConnectionStringMode)
     {
         <ExplorerEntitySelector Queues="@VM.Queues"
                                 Topics="@VM.Topics"
@@ -82,9 +85,16 @@
                                 SelectedTopicName="@VM.State.SelectedTopicName"
                                 SelectedSubscriptionName="@VM.State.SelectedSubscriptionName"
                                 IsLoadingSubscriptions="@VM.IsLoadingSubscriptions"
+                                IsConnectionStringMode="@VM.IsConnectionStringMode"
                                 OnQueueSelected="@VM.SelectQueue"
                                 OnTopicSelected="@VM.SelectTopicAsync"
-                                OnSubscriptionSelected="@VM.SelectSubscription" />
+                                OnSubscriptionSelected="@VM.SelectSubscription"
+                                OnAddQueue="TriggerAddQueue"
+                                OnAddTopic="TriggerAddTopic"
+                                OnAddSubscription="TriggerAddSubscription"
+                                OnDeleteQueue="HandleDeleteQueue"
+                                OnDeleteTopic="HandleDeleteTopic"
+                                OnDeleteSubscription="HandleDeleteSubscription" />
 
     }
 
@@ -281,6 +291,13 @@
             Topics="@VM.Topics"
             OnClose="@(() => VM.ShowStatsModal = false)" />
 
+<AddEntityModal IsVisible="@showAddEntityModal"
+                Title="@addEntityTitle"
+                Label="@addEntityLabel"
+                Placeholder="@addEntityPlaceholder"
+                OnClose="@(() => showAddEntityModal = false)"
+                OnSubmit="HandleAddEntitySubmit" />
+
 @code {
     [SupplyParameterFromQuery(Name = "namespace")]
     public string? NamespaceParam { get; set; }
@@ -297,9 +314,79 @@
     private ElementReference renameInputRef;
     private MessageList? _messageListRef;
 
+    private bool showAddEntityModal = false;
+    private string addEntityTitle = "";
+    private string addEntityLabel = "";
+    private string addEntityPlaceholder = "";
+    private Func<string, Task>? addEntitySubmitHandler;
+
     protected override async Task OnParametersSetAsync()
     {
         await VM.InitializeAsync(NamespaceParam, ResourceGroupParam, SubscriptionIdParam, NameParam);
+        
+        var isAuthenticated = await VM.IsAuthenticatedAsync();
+        if (!isAuthenticated && !VM.IsConnectionStringMode)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private void TriggerAddQueue()
+    {
+        addEntityTitle = "Register Queue";
+        addEntityLabel = "Queue Name";
+        addEntityPlaceholder = "e.g. order-processing";
+        addEntitySubmitHandler = async (name) => {
+            await VM.RegisterQueueAsync(name);
+        };
+        showAddEntityModal = true;
+    }
+
+    private void TriggerAddTopic()
+    {
+        addEntityTitle = "Register Topic";
+        addEntityLabel = "Topic Name";
+        addEntityPlaceholder = "e.g. invoice-events";
+        addEntitySubmitHandler = async (name) => {
+            await VM.RegisterTopicAsync(name);
+        };
+        showAddEntityModal = true;
+    }
+
+    private void TriggerAddSubscription()
+    {
+        if (string.IsNullOrEmpty(VM.State.SelectedTopicName)) return;
+        addEntityTitle = $"Register Subscription for '{VM.State.SelectedTopicName}'";
+        addEntityLabel = "Subscription Name";
+        addEntityPlaceholder = "e.g. invoice-billing-service";
+        addEntitySubmitHandler = async (name) => {
+            await VM.RegisterSubscriptionAsync(VM.State.SelectedTopicName, name);
+        };
+        showAddEntityModal = true;
+    }
+
+    private async Task HandleAddEntitySubmit(string entityName)
+    {
+        if (addEntitySubmitHandler != null)
+        {
+            await addEntitySubmitHandler(entityName);
+            showAddEntityModal = false;
+        }
+    }
+
+    private void HandleDeleteQueue(string name)
+    {
+        VM.UnregisterQueue(name);
+    }
+
+    private void HandleDeleteTopic(string name)
+    {
+        VM.UnregisterTopic(name);
+    }
+
+    private void HandleDeleteSubscription((string Topic, string Subscription) args)
+    {
+        VM.UnregisterSubscription(args.Topic, args.Subscription);
     }
 
     protected override void OnInitialized()

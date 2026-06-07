@@ -1,8 +1,9 @@
-﻿@using Microsoft.JSInterop
+@using Microsoft.JSInterop
 @using Bussin.Models
 @using Bussin.Services
 @inject IServiceBusJsInteropService JsInterop
 @inject IAuthenticationService AuthService
+@inject NavigationStateService NavState
 @implements IDisposable
 
 @if (IsVisible)
@@ -134,7 +135,29 @@
         try
         {
             errorMessage = null;
-            var token = await AuthService.GetServiceBusTokenAsync();
+            
+            string entityPath = "";
+            if (!string.IsNullOrEmpty(QueueName))
+            {
+                entityPath = QueueName;
+            }
+            else if (!string.IsNullOrEmpty(TopicName) && !string.IsNullOrEmpty(SubscriptionName))
+            {
+                entityPath = $"{TopicName}/subscriptions/{SubscriptionName}";
+            }
+
+            var connection = NavState.GetNamespaceConnection(NamespaceName);
+            string? token;
+            if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
+            {
+                var (endpoint, keyName, key, defaultEntityPath) = ServiceBusConnectionStringHelper.ParseConnectionString(connection.ConnectionString);
+                var activePath = !string.IsNullOrEmpty(defaultEntityPath) ? defaultEntityPath : entityPath;
+                token = ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, activePath, TimeSpan.FromHours(2));
+            }
+            else
+            {
+                token = await AuthService.GetServiceBusTokenAsync();
+            }
             
             if (string.IsNullOrEmpty(token))
             {

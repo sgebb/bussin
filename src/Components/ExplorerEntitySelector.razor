@@ -18,61 +18,71 @@
 
     <div class="explorer-entities-grid-3col" style="@GetGridTemplateColumns()">
         <!-- Queues Column -->
-        <div class="entity-column @(_activeTab == EntityTab.Queues ? "mobile-active" : "d-none d-md-flex") @(_isQueuesCollapsed ? "desktop-collapsed" : "")">
-            <div class="entity-column-header d-none d-md-flex align-items-center justify-content-between px-2 py-1">
-                @if (!_isQueuesCollapsed)
-                {
-                    <span><i class="bi bi-list-ul me-1"></i> Queues (@Queues.Count)</span>
-                }
-                <button class="btn btn-link p-0 text-muted shadow-none border-0 ms-auto text-decoration-none" @onclick="ToggleQueuesCollapse" title="@(_isQueuesCollapsed ? "Expand Queues" : "Collapse Queues")">
-                    <i class="bi @(_isQueuesCollapsed ? "bi-chevron-bar-right" : "bi-chevron-bar-left")"></i>
-                </button>
-            </div>
-            @if (_isQueuesCollapsed)
-            {
-                <div class="collapsed-column-placeholder d-none d-md-flex" @onclick="ToggleQueuesCollapse" title="Click to expand Queues">
-                    <i class="bi bi-list-ul fs-4 text-primary mb-1"></i>
-                    <span class="collapsed-title text-muted">Queues</span>
-                    <span class="collapsed-badge mt-1">@Queues.Count</span>
-                </div>
-            }
-            else
-            {
-                <div class="entity-list-scroll entity-list-grid">
-                    @foreach (var queue in Queues)
+        <div class="entity-column @(_activeTab == EntityTab.Queues ? "mobile-active" : "d-none d-md-flex")">
+            <div class="entity-column-header clickable-header d-none d-md-flex align-items-center justify-content-between px-2 py-1"
+                 @onclick="() => ToggleZoom(ZoomedColumn.Queues)"
+                 title="@(_zoomedColumn == ZoomedColumn.Queues ? "Click to make narrower" : "Click to make wider")">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-list-ul"></i> Queues (@Queues.Count)
+                    @if (IsConnectionStringMode)
                     {
-                        <div class="entity-item @(SelectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" 
-                             @onclick="() => OnQueueSelected.InvokeAsync(queue.Name)" title="@queue.Name">
-                            <div class="d-flex justify-content-between align-items-center w-100">
-                                <span class="entity-name-with-icons">
-                                    <span class="text-truncate">@queue.Name</span>
-                                    <span class="entity-icons">
-                                        @if (queue.Status != "Active")
-                                        {
-                                            <i class="bi bi-pause-circle" title="Status: @queue.Status"></i>
-                                        }
-                                        @if (queue.RequiresSession)
-                                        {
-                                            <i class="bi bi-person-badge" title="Session-enabled"></i>
-                                        }
-                                        @if (queue.EnablePartitioning)
-                                        {
-                                            <i class="bi bi-grid-3x3" title="Partitioned"></i>
-                                        }
-                                        @if (queue.RequiresDuplicateDetection)
-                                        {
-                                            <i class="bi bi-copy" title="Duplicate detection enabled"></i>
-                                        }
-                                        @if (!string.IsNullOrEmpty(queue.ForwardTo))
-                                        {
-                                            <i class="bi bi-arrow-right-circle" title="Forwards to: @queue.ForwardTo"></i>
-                                        }
-                                        @if (queue.ScheduledMessageCount > 0)
-                                        {
-                                            <i class="bi bi-clock" title="@queue.ScheduledMessageCount scheduled message(s)"></i>
-                                        }
-                                    </span>
+                        <button class="btn btn-xs btn-outline-primary p-0 border-0 bg-transparent" 
+                                @onclick="() => OnAddQueue.InvokeAsync()" 
+                                @onclick:stopPropagation="true" 
+                                title="Register new queue" style="line-height:1;">
+                            <i class="bi bi-plus-circle-fill fs-6 text-primary"></i>
+                        </button>
+                    }
+                </span>
+                <div class="header-zoom-indicator ms-auto d-flex align-items-center">
+                    @if (_zoomedColumn == ZoomedColumn.Queues)
+                    {
+                        <i class="bi bi-arrow-right" style="font-size: 0.85rem;"></i>
+                        <i class="bi bi-arrow-left" style="font-size: 0.85rem; margin-left: 3px;"></i>
+                    }
+                    else
+                    {
+                        <i class="bi bi-arrow-left" style="font-size: 0.85rem;"></i>
+                        <i class="bi bi-arrow-right" style="font-size: 0.85rem; margin-left: 3px;"></i>
+                    }
+                </div>
+            </div>
+            <div class="entity-list-scroll entity-list-grid">
+                @foreach (var queue in Queues)
+                {
+                    <div class="entity-item @(SelectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" 
+                         @onclick="() => OnQueueSelected.InvokeAsync(queue.Name)" title="@queue.Name">
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <span class="entity-name-with-icons text-truncate me-2">
+                                <span class="text-truncate">@queue.Name</span>
+                                <span class="entity-icons">
+                                    @if (queue.Status != "Active")
+                                    {
+                                        <i class="bi bi-pause-circle" title="Status: @queue.Status"></i>
+                                    }
+                                    @if (queue.RequiresSession)
+                                    {
+                                        <i class="bi bi-person-badge" title="Session-enabled"></i>
+                                    }
+                                    @if (queue.EnablePartitioning)
+                                    {
+                                        <i class="bi bi-grid-3x3" title="Partitioned"></i>
+                                    }
+                                    @if (queue.RequiresDuplicateDetection)
+                                    {
+                                        <i class="bi bi-copy" title="Duplicate detection enabled"></i>
+                                    }
+                                    @if (!string.IsNullOrEmpty(queue.ForwardTo))
+                                    {
+                                        <i class="bi bi-arrow-right-circle" title="Forwards to: @queue.ForwardTo"></i>
+                                    }
+                                    @if (queue.ScheduledMessageCount > 0)
+                                    {
+                                        <i class="bi bi-clock" title="@queue.ScheduledMessageCount scheduled message(s)"></i>
+                                    }
                                 </span>
+                            </span>
+                            <div class="d-flex align-items-center gap-2">
                                 @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0 || queue.ScheduledMessageCount > 0)
                                 {
                                     <span class="badge bg-secondary" title="Active (Scheduled) / Dead-lettered">
@@ -84,132 +94,179 @@
                                         / <span class="text-dlq-orange fw-bold">@queue.DeadLetterMessageCount</span>
                                     </span>
                                 }
+                                @if (IsConnectionStringMode)
+                                {
+                                    <button class="btn btn-link p-0 text-danger border-0 shadow-none entity-delete-btn" 
+                                            @onclick="() => OnDeleteQueue.InvokeAsync(queue.Name)" 
+                                            @onclick:stopPropagation="true" 
+                                            title="Forget registration">
+                                        <i class="bi bi-x-circle fs-6"></i>
+                                    </button>
+                                }
                             </div>
                         </div>
-                    }
-                </div>
-            }
+                    </div>
+                }
+            </div>
         </div>
 
         <!-- Topics Column -->
-        <div class="entity-column @(_activeTab == EntityTab.Topics ? "mobile-active" : "d-none d-md-flex") @(_isTopicsCollapsed ? "desktop-collapsed" : "")">
-            <div class="entity-column-header d-none d-md-flex align-items-center justify-content-between px-2 py-1">
-                @if (!_isTopicsCollapsed)
-                {
-                    <span><i class="bi bi-broadcast me-1"></i> Topics (@Topics.Count)</span>
-                }
-                <button class="btn btn-link p-0 text-muted shadow-none border-0 ms-auto text-decoration-none" @onclick="ToggleTopicsCollapse" title="@(_isTopicsCollapsed ? "Expand Topics" : "Collapse Topics")">
-                    <i class="bi @(_isTopicsCollapsed ? "bi-chevron-bar-right" : "bi-chevron-bar-left")"></i>
-                </button>
-            </div>
-            @if (_isTopicsCollapsed)
-            {
-                <div class="collapsed-column-placeholder d-none d-md-flex" @onclick="ToggleTopicsCollapse" title="Click to expand Topics">
-                    <i class="bi bi-broadcast fs-4 text-primary mb-1"></i>
-                    <span class="collapsed-title text-muted">Topics</span>
-                    <span class="collapsed-badge mt-1">@Topics.Count</span>
-                </div>
-            }
-            else
-            {
-                <div class="entity-list-scroll entity-list-grid">
-                    @foreach (var topic in Topics)
+        <div class="entity-column @(_activeTab == EntityTab.Topics ? "mobile-active" : "d-none d-md-flex")">
+            <div class="entity-column-header clickable-header d-none d-md-flex align-items-center justify-content-between px-2 py-1"
+                 @onclick="() => ToggleZoom(ZoomedColumn.Topics)"
+                 title="@(_zoomedColumn == ZoomedColumn.Topics ? "Click to make narrower" : "Click to make wider")">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-broadcast"></i> Topics (@Topics.Count)
+                    @if (IsConnectionStringMode)
                     {
-                        <div class="entity-item @(SelectedTopicName == topic.Name ? "active" : "")" 
-                             @onclick="() => SelectTopic(topic)" title="@topic.Name">
-                            <div class="d-flex justify-content-between align-items-center w-100">
-                                <span class="entity-name-with-icons">
-                                    <span class="text-truncate">@topic.Name</span>
-                                    <span class="entity-icons">
-                                        @if (topic.ScheduledMessageCount > 0)
-                                        {
-                                            <i class="bi bi-clock" title="@topic.ScheduledMessageCount scheduled message(s)"></i>
-                                        }
-                                    </span>
+                        <button class="btn btn-xs btn-outline-primary p-0 border-0 bg-transparent" 
+                                @onclick="() => OnAddTopic.InvokeAsync()" 
+                                @onclick:stopPropagation="true" 
+                                title="Register new topic" style="line-height:1;">
+                            <i class="bi bi-plus-circle-fill fs-6 text-primary"></i>
+                        </button>
+                    }
+                </span>
+                <div class="header-zoom-indicator ms-auto d-flex align-items-center">
+                    @if (_zoomedColumn == ZoomedColumn.Topics)
+                    {
+                        <i class="bi bi-arrow-right" style="font-size: 0.85rem;"></i>
+                        <i class="bi bi-arrow-left" style="font-size: 0.85rem; margin-left: 3px;"></i>
+                    }
+                    else
+                    {
+                        <i class="bi bi-arrow-left" style="font-size: 0.85rem;"></i>
+                        <i class="bi bi-arrow-right" style="font-size: 0.85rem; margin-left: 3px;"></i>
+                    }
+                </div>
+            </div>
+            <div class="entity-list-scroll entity-list-grid">
+                @foreach (var topic in Topics)
+                {
+                    <div class="entity-item @(SelectedTopicName == topic.Name ? "active" : "")" 
+                         @onclick="() => SelectTopic(topic)" title="@topic.Name">
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <span class="entity-name-with-icons text-truncate me-2">
+                                <span class="text-truncate">@topic.Name</span>
+                                <span class="entity-icons">
+                                    @if (topic.ScheduledMessageCount > 0)
+                                    {
+                                        <i class="bi bi-clock" title="@topic.ScheduledMessageCount scheduled message(s)"></i>
+                                    }
                                 </span>
+                            </span>
+                            <div class="d-flex align-items-center gap-2">
                                 @if (topic.ScheduledMessageCount > 0)
                                 {
                                     <span class="badge bg-info" title="Scheduled messages">
                                         <i class="bi bi-clock"></i> @topic.ScheduledMessageCount
                                     </span>
                                 }
+                                @if (IsConnectionStringMode)
+                                {
+                                    <button class="btn btn-link p-0 text-danger border-0 shadow-none entity-delete-btn" 
+                                            @onclick="() => OnDeleteTopic.InvokeAsync(topic.Name)" 
+                                            @onclick:stopPropagation="true" 
+                                            title="Forget registration">
+                                        <i class="bi bi-x-circle fs-6"></i>
+                                    </button>
+                                }
                             </div>
                         </div>
-                    }
-                </div>
-            }
+                    </div>
+                }
+            </div>
         </div>
 
         <!-- Subscriptions Column -->
-        <div class="entity-column @(_activeTab == EntityTab.Subscriptions ? "mobile-active" : "d-none d-md-flex") @(_isSubscriptionsCollapsed ? "desktop-collapsed" : "")">
-            <div class="entity-column-header d-none d-md-flex align-items-center justify-content-between px-2 py-1">
-                @if (!_isSubscriptionsCollapsed)
-                {
-                    <span><i class="bi bi-envelope me-1"></i> Subscriptions (@Subscriptions.Count)</span>
-                }
-                <button class="btn btn-link p-0 text-muted shadow-none border-0 ms-auto text-decoration-none" @onclick="ToggleSubscriptionsCollapse" title="@(_isSubscriptionsCollapsed ? "Expand Subscriptions" : "Collapse Subscriptions")">
-                    <i class="bi @(_isSubscriptionsCollapsed ? "bi-chevron-bar-right" : "bi-chevron-bar-left")"></i>
-                </button>
-            </div>
-            @if (_isSubscriptionsCollapsed)
-            {
-                <div class="collapsed-column-placeholder d-none d-md-flex" @onclick="ToggleSubscriptionsCollapse" title="Click to expand Subscriptions">
-                    <i class="bi bi-envelope fs-4 text-primary mb-1"></i>
-                    <span class="collapsed-title text-muted">Subs</span>
-                    <span class="collapsed-badge mt-1">@Subscriptions.Count</span>
-                </div>
-            }
-            else
-            {
-                <div class="entity-list-scroll entity-list-grid">
-                    @if (IsLoadingSubscriptions)
+        <div class="entity-column @(_activeTab == EntityTab.Subscriptions ? "mobile-active" : "d-none d-md-flex")">
+            <div class="entity-column-header clickable-header d-none d-md-flex align-items-center justify-content-between px-2 py-1"
+                 @onclick="() => ToggleZoom(ZoomedColumn.Subscriptions)"
+                 title="@(_zoomedColumn == ZoomedColumn.Subscriptions ? "Click to make narrower" : "Click to make wider")">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-envelope"></i> Subscriptions (@Subscriptions.Count)
+                    @if (IsConnectionStringMode && !string.IsNullOrEmpty(SelectedTopicName))
                     {
-                        <div class="text-center p-2">
-                            <div class="spinner-border spinner-border-sm"></div>
-                        </div>
+                        <button class="btn btn-xs btn-outline-primary p-0 border-0 bg-transparent" 
+                                @onclick="() => OnAddSubscription.InvokeAsync()" 
+                                @onclick:stopPropagation="true" 
+                                title="Register new subscription" style="line-height:1;">
+                            <i class="bi bi-plus-circle-fill fs-6 text-primary"></i>
+                        </button>
                     }
-                    else if (SelectedTopicName == null)
+                </span>
+                <div class="header-zoom-indicator ms-auto d-flex align-items-center">
+                    @if (_zoomedColumn == ZoomedColumn.Subscriptions)
                     {
-                        <div class="text-center p-3 text-muted small">
-                            Select a topic
-                        </div>
+                        <i class="bi bi-arrow-right" style="font-size: 0.85rem;"></i>
+                        <i class="bi bi-arrow-left" style="font-size: 0.85rem; margin-left: 3px;"></i>
                     }
                     else
                     {
-                        @foreach (var sub in Subscriptions)
-                        {
-                            <div class="entity-item @(SelectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" 
-                                 @onclick="() => OnSubscriptionSelected.InvokeAsync(sub.Name)" title="@sub.Name">
-                                <div class="d-flex justify-content-between align-items-center w-100">
-                                    <span class="entity-name-with-icons">
-                                        <span class="text-truncate">@sub.Name</span>
-                                        <span class="entity-icons">
-                                            @if (sub.Status != "Active")
-                                            {
-                                                <i class="bi bi-pause-circle" title="Status: @sub.Status"></i>
-                                            }
-                                            @if (sub.RequiresSession)
-                                            {
-                                                <i class="bi bi-person-badge" title="Session-enabled"></i>
-                                            }
-                                            @if (!string.IsNullOrEmpty(sub.ForwardTo))
-                                            {
-                                                <i class="bi bi-arrow-right-circle" title="Forwards to: @sub.ForwardTo"></i>
-                                            }
-                                        </span>
-                                    </span>
-                                    @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
-                                    {
-                                        <span class="badge bg-secondary" title="Active / Dead-lettered">
-                                            @sub.ActiveMessageCount / <span class="text-dlq-orange fw-bold">@sub.DeadLetterMessageCount</span>
-                                        </span>
-                                    }
-                                </div>
-                            </div>
-                        }
+                        <i class="bi bi-arrow-left" style="font-size: 0.85rem;"></i>
+                        <i class="bi bi-arrow-right" style="font-size: 0.85rem; margin-left: 3px;"></i>
                     }
                 </div>
-            }
+            </div>
+            <div class="entity-list-scroll entity-list-grid">
+                @if (IsLoadingSubscriptions)
+                {
+                    <div class="text-center p-2">
+                        <div class="spinner-border spinner-border-sm"></div>
+                    </div>
+                }
+                else if (SelectedTopicName == null)
+                {
+                    <div class="text-center p-3 text-muted small">
+                        Select a topic
+                    </div>
+                }
+                else
+                {
+                    @foreach (var sub in Subscriptions)
+                    {
+                        <div class="entity-item @(SelectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" 
+                             @onclick="() => OnSubscriptionSelected.InvokeAsync(sub.Name)" title="@sub.Name">
+                             <div class="d-flex justify-content-between align-items-center w-100">
+                                 <span class="entity-name-with-icons text-truncate me-2">
+                                     <span class="text-truncate">@sub.Name</span>
+                                     <span class="entity-icons">
+                                         @if (sub.Status != "Active")
+                                         {
+                                             <i class="bi bi-pause-circle" title="Status: @sub.Status"></i>
+                                         }
+                                         @if (sub.RequiresSession)
+                                         {
+                                             <i class="bi bi-person-badge" title="Session-enabled"></i>
+                                         }
+                                         @if (!string.IsNullOrEmpty(sub.ForwardTo))
+                                         {
+                                             <i class="bi bi-arrow-right-circle" title="Forwards to: @sub.ForwardTo"></i>
+                                         }
+                                     </span>
+                                 </span>
+                                 <div class="d-flex align-items-center gap-2">
+                                     @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
+                                     {
+                                         <span class="badge bg-secondary" title="Active / Dead-lettered">
+                                             @sub.ActiveMessageCount / <span class="text-dlq-orange fw-bold">@sub.DeadLetterMessageCount</span>
+                                         </span>
+                                     }
+                                     @if (IsConnectionStringMode)
+                                     {
+                                         <button class="btn btn-link p-0 text-danger border-0 shadow-none entity-delete-btn" 
+                                                 @onclick="() => OnDeleteSubscription.InvokeAsync((SelectedTopicName!, sub.Name))" 
+                                                 @onclick:stopPropagation="true" 
+                                                 title="Forget registration">
+                                             <i class="bi bi-x-circle fs-6"></i>
+                                         </button>
+                                     }
+                                 </div>
+                             </div>
+                        </div>
+                    }
+                }
+            </div>
         </div>
     </div>
 </div>
@@ -218,6 +275,11 @@
     [Parameter] public List<ServiceBusQueueInfo> Queues { get; set; } = new();
     [Parameter] public List<ServiceBusTopicInfo> Topics { get; set; } = new();
     [Parameter] public List<ServiceBusSubscriptionInfo> Subscriptions { get; set; } = new();
+    
+    [Parameter] public bool IsConnectionStringMode { get; set; }
+    [Parameter] public EventCallback OnAddQueue { get; set; }
+    [Parameter] public EventCallback OnAddTopic { get; set; }
+    [Parameter] public EventCallback OnAddSubscription { get; set; }
     
     [Parameter] public string? SelectedQueueName { get; set; }
     [Parameter] public string? SelectedTopicName { get; set; }
@@ -228,13 +290,15 @@
     [Parameter] public EventCallback<string> OnQueueSelected { get; set; }
     [Parameter] public EventCallback<string> OnTopicSelected { get; set; }
     [Parameter] public EventCallback<string> OnSubscriptionSelected { get; set; }
+    [Parameter] public EventCallback<string> OnDeleteQueue { get; set; }
+    [Parameter] public EventCallback<string> OnDeleteTopic { get; set; }
+    [Parameter] public EventCallback<(string Topic, string Subscription)> OnDeleteSubscription { get; set; }
 
     private enum EntityTab { Queues, Topics, Subscriptions }
     private EntityTab _activeTab = EntityTab.Queues;
 
-    private bool _isQueuesCollapsed = false;
-    private bool _isTopicsCollapsed = false;
-    private bool _isSubscriptionsCollapsed = false;
+    private enum ZoomedColumn { None, Queues, Topics, Subscriptions }
+    private ZoomedColumn _zoomedColumn = ZoomedColumn.None;
 
     private void SetActiveTab(EntityTab tab)
     {
@@ -270,15 +334,28 @@
         return selectedTopic != null && selectedTopic.SubscriptionCount > 0;
     }
 
-    private void ToggleQueuesCollapse() => _isQueuesCollapsed = !_isQueuesCollapsed;
-    private void ToggleTopicsCollapse() => _isTopicsCollapsed = !_isTopicsCollapsed;
-    private void ToggleSubscriptionsCollapse() => _isSubscriptionsCollapsed = !_isSubscriptionsCollapsed;
+    private void ToggleZoom(ZoomedColumn col)
+    {
+        if (_zoomedColumn == col)
+        {
+            _zoomedColumn = ZoomedColumn.None;
+        }
+        else
+        {
+            _zoomedColumn = col;
+        }
+    }
 
     private string GetGridTemplateColumns()
     {
-        var q = _isQueuesCollapsed ? "70px" : "1fr";
-        var t = _isTopicsCollapsed ? "70px" : "1fr";
-        var s = _isSubscriptionsCollapsed ? "70px" : "1fr";
+        if (_zoomedColumn == ZoomedColumn.None)
+        {
+            return "grid-template-columns: 1fr 1fr 1fr; transition: grid-template-columns 0.3s ease;";
+        }
+
+        var q = _zoomedColumn == ZoomedColumn.Queues ? "4fr" : "1fr";
+        var t = _zoomedColumn == ZoomedColumn.Topics ? "4fr" : "1fr";
+        var s = _zoomedColumn == ZoomedColumn.Subscriptions ? "4fr" : "1fr";
         return $"grid-template-columns: {q} {t} {s}; transition: grid-template-columns 0.3s ease;";
     }
 }

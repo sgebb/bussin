@@ -54,7 +54,32 @@ public sealed class BackgroundResubmitService : IDisposable
             {
                 Console.WriteLine($"[BackgroundResubmit] Starting resubmit for {entityType} {entityPath}");
                 
-                var token = await authService.GetServiceBusTokenAsync();
+                var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
+                await navState.InitializeAsync();
+                var connection = navState.GetNamespaceConnection(namespaceName);
+                string? token;
+                
+                if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
+                {
+                    // For resubmitting from DLQ, the entityPath is queueName/$DeadLetterQueue or subPath/$DeadLetterQueue
+                    var dlqPath = entityPath;
+                    if (entityType == "queue")
+                    {
+                        dlqPath = $"{entityPath}/$DeadLetterQueue";
+                    }
+                    else
+                    {
+                        var parts = entityPath.Split('/');
+                        var subPath = parts.Length >= 3 ? $"{parts[0]}/subscriptions/{parts[2]}" : entityPath;
+                        dlqPath = $"{subPath}/$DeadLetterQueue";
+                    }
+                    token = ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, dlqPath, TimeSpan.FromHours(2));
+                }
+                else
+                {
+                    token = await authService.GetServiceBusTokenAsync();
+                }
+                
                 if (string.IsNullOrEmpty(token))
                 {
                     throw new Exception("Service Bus token not available");
