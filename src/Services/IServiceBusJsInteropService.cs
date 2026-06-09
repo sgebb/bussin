@@ -1,4 +1,4 @@
-﻿using Microsoft.JSInterop;
+using Microsoft.JSInterop;
 using Bussin.Models;
 
 namespace Bussin.Services;
@@ -39,6 +39,10 @@ public interface IServiceBusJsInteropService
     // Delete by sequence number (direct, no lock needed)
     Task DeleteQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false);
     Task DeleteSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false);
+    
+    // Cancel scheduled messages by sequence numbers (direct, no lock needed)
+    Task CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers);
+    Task CancelScheduledTopicMessagesAsync(string namespaceName, string topicName, string token, long[] sequenceNumbers);
     
     // Dead letter by sequence number (direct, no FIFO lock needed)
     Task DeadLetterQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, string reason = "Manual dead letter", string description = "Moved by user");

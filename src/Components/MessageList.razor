@@ -220,18 +220,7 @@
     {
         if (!SelectedMessages.Any()) return;
         
-        // Filter out scheduled messages - they cannot be deleted, only cancelled
-        var (regularMessages, scheduledCount) = FilterOutScheduledMessages(SelectedMessages);
-        
-        if (scheduledCount > 0)
-        {
-            await OnScheduledMessageWarning.InvokeAsync($"{scheduledCount} scheduled message(s) were excluded. Scheduled messages cannot be deleted - they can only be cancelled before their scheduled time.");
-        }
-        
-        if (regularMessages.Any())
-        {
-            await OnDeleteMessages.InvokeAsync(regularMessages);
-        }
+        await OnDeleteMessages.InvokeAsync(SelectedMessages.ToList());
     }
 
     private async Task OnResubmitSelected()

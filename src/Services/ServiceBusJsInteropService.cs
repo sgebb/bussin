@@ -1,4 +1,4 @@
-﻿using Microsoft.JSInterop;
+using Microsoft.JSInterop;
 using System.Text.Json;
 using Bussin.Models;
 
@@ -406,6 +406,36 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         catch (Exception ex)
         {
             Console.WriteLine($"Error deleting subscription messages by sequence: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.cancelScheduledQueueMessages",
+                namespaceName, queueName, token, sequenceNumbers);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cancelling scheduled queue messages: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task CancelScheduledTopicMessagesAsync(string namespaceName, string topicName, string token, long[] sequenceNumbers)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.cancelScheduledTopicMessages",
+                namespaceName, topicName, token, sequenceNumbers);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cancelling scheduled topic messages: {ex.Message}");
             throw;
         }
     }

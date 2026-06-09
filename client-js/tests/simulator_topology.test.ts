@@ -137,4 +137,29 @@ describe('Simulator Topology & Fidelity Tests', () => {
         expect(finalMsg.application_properties.RetryCount).toBe(1);
         expect(finalMsg.application_properties.OriginalTry).toBe(1);
     });
+
+    it('should cancel a scheduled message', async () => {
+        const queueName = 'test-queue';
+        GlobalMockBroker.createQueue(queueName);
+
+        // Send a scheduled message
+        const payload = { test: 'cancel-scheduled' };
+        
+        // Push message to queue
+        GlobalMockBroker.pushMessage(queueName, {
+            body: JSON.stringify(payload),
+            message_id: 'msg-scheduled',
+            application_properties: {}
+        });
+
+        const messagesBefore = GlobalMockBroker.getMessages(queueName);
+        expect(messagesBefore.length).toBe(1);
+        const seqNum = messagesBefore[0]._sequenceNumber;
+
+        // Cancel the scheduled message
+        await ServiceBusAPI.cancelScheduledQueueMessages(ns, queueName, 'token', [seqNum]);
+
+        const messagesAfter = GlobalMockBroker.getMessages(queueName);
+        expect(messagesAfter.length).toBe(0); // cancelled!
+    });
 });

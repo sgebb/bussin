@@ -177,6 +177,12 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
     public async Task DeleteSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
         => await InvokeSimulatorVoidAsync("deleteSubscriptionMessagesBySequence", namespaceName, topicName, subscriptionName, token, sequenceNumbers, fromDeadLetter);
 
+    public async Task CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers)
+        => await InvokeSimulatorVoidAsync("cancelScheduledQueueMessages", namespaceName, queueName, token, sequenceNumbers);
+
+    public async Task CancelScheduledTopicMessagesAsync(string namespaceName, string topicName, string token, long[] sequenceNumbers)
+        => await InvokeSimulatorVoidAsync("cancelScheduledTopicMessages", namespaceName, topicName, token, sequenceNumbers);
+
     public async Task DeadLetterQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, string reason = "Manual dead letter", string description = "Moved by user")
         => await InvokeSimulatorVoidAsync("deadLetterQueueMessagesBySequence", namespaceName, queueName, token, sequenceNumbers, reason, description);
 

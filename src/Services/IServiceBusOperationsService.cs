@@ -1,4 +1,4 @@
-﻿using Bussin.Models;
+using Bussin.Models;
 
 namespace Bussin.Services;
 
@@ -35,4 +35,8 @@ public interface IServiceBusOperationsService
     Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true);
     Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers);
     Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers);
+    
+    // Cancel scheduled messages operations
+    Task<BatchOperationResult> CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers);
+    Task<BatchOperationResult> CancelScheduledTopicMessagesAsync(string namespaceName, string topicName, long[] sequenceNumbers);
 }

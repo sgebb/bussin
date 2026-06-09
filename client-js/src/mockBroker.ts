@@ -302,6 +302,29 @@ class MockConnection extends EventEmitter {
                     response.application_properties['status-code'] = 200;
                 }
 
+            } else if (operation === 'com.microsoft:cancel-scheduled-message') {
+                // Cancel scheduled messages by sequence numbers
+                const rawSeqNums = msg.body?.['sequence-numbers'];
+                const seqNums: number[] = (Array.isArray(rawSeqNums) ? rawSeqNums : (rawSeqNums?.value ?? [])).map((sn: any) => {
+                    if (sn instanceof Uint8Array && sn.length === 8) {
+                        let val = BigInt(0);
+                        for (let i = 0; i < 8; i++) val = (val << BigInt(8)) + BigInt(sn[i]);
+                        return Number(val);
+                    }
+                    return Number(sn);
+                });
+                const queue = this.broker.getMessages(entityPath);
+
+                seqNums.forEach(seq => {
+                    const idx = queue.findIndex(m => m._sequenceNumber === seq);
+                    if (idx !== -1) {
+                        queue.splice(idx, 1);
+                        this.broker.log(`CANCEL_SCHEDULED (${entityPath}) via management`);
+                    }
+                });
+                response.application_properties.statusCode = 200;
+                response.application_properties['status-code'] = 200;
+
             } else if (operation === 'com.microsoft:update-disposition') {
                 // Update disposition: completed, abandoned, or suspended (dead-letter)
                 const disposition = msg.body?.['disposition-status'];

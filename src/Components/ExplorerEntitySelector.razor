@@ -47,7 +47,7 @@
                     }
                 </div>
             </div>
-            <div class="entity-list-scroll entity-list-grid">
+            <div class="entity-list-scroll entity-list-grid @(_zoomedColumn == ZoomedColumn.Queues ? "zoomed" : "")">
                 @foreach (var queue in Queues)
                 {
                     <div class="entity-item @(SelectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" 
@@ -140,7 +140,7 @@
                     }
                 </div>
             </div>
-            <div class="entity-list-scroll entity-list-grid">
+            <div class="entity-list-scroll entity-list-grid @(_zoomedColumn == ZoomedColumn.Topics ? "zoomed" : "")">
                 @foreach (var topic in Topics)
                 {
                     <div class="entity-item @(SelectedTopicName == topic.Name ? "active" : "")" 
@@ -208,7 +208,7 @@
                     }
                 </div>
             </div>
-            <div class="entity-list-scroll entity-list-grid">
+            <div class="entity-list-scroll entity-list-grid @(_zoomedColumn == ZoomedColumn.Subscriptions ? "zoomed" : "")">
                 @if (IsLoadingSubscriptions)
                 {
                     <div class="text-center p-2">

@@ -1043,6 +1043,60 @@ async function deleteMessagesBySequence(
 }
 
 // ============================================================================
+// CANCEL SCHEDULED MESSAGES (Management API)
+// ============================================================================
+
+/**
+ * Cancel scheduled messages from a queue by sequence numbers
+ */
+async function cancelScheduledQueueMessages(
+    namespace: string,
+    queueName: string,
+    token: string,
+    sequenceNumbers: number[]
+): Promise<void> {
+    return await cancelScheduledMessages(namespace, queueName, token, sequenceNumbers);
+}
+
+/**
+ * Cancel scheduled messages from a topic by sequence numbers
+ */
+async function cancelScheduledTopicMessages(
+    namespace: string,
+    topicName: string,
+    token: string,
+    sequenceNumbers: number[]
+): Promise<void> {
+    return await cancelScheduledMessages(namespace, topicName, token, sequenceNumbers);
+}
+
+// Internal implementation
+async function cancelScheduledMessages(
+    namespace: string,
+    entityPath: string,
+    token: string,
+    sequenceNumbers: number[]
+): Promise<void> {
+    const connection = new ServiceBusConnection(namespace, token);
+
+    try {
+        await connection.connect();
+        await connection.authenticateCBS(entityPath);
+
+        const managementClient = new ManagementClient(connection, entityPath);
+        await managementClient.open();
+
+        await managementClient.cancelScheduledMessages(sequenceNumbers);
+
+        managementClient.close();
+        connection.close();
+    } catch (err) {
+        connection.close();
+        throw new Error(`Cancel scheduled messages failed: ${(err as Error).message}`);
+    }
+}
+
+// ============================================================================
 // DEAD LETTER BY SEQUENCE NUMBER (Management API)
 // ============================================================================
 
@@ -1534,6 +1588,8 @@ if (typeof window !== 'undefined') {
         purgeSubscription,
         deleteQueueMessagesBySequence,
         deleteSubscriptionMessagesBySequence,
+        cancelScheduledQueueMessages,
+        cancelScheduledTopicMessages,
         deadLetterQueueMessagesBySequence,
         deadLetterSubscriptionMessagesBySequence,
         purgeQueueDirect,
@@ -1584,6 +1640,8 @@ export {
     purgeSubscription,
     deleteQueueMessagesBySequence,
     deleteSubscriptionMessagesBySequence,
+    cancelScheduledQueueMessages,
+    cancelScheduledTopicMessages,
     deadLetterQueueMessagesBySequence,
     deadLetterSubscriptionMessagesBySequence,
     purgeQueueDirect,

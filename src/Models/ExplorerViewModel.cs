@@ -1280,23 +1280,101 @@ public sealed class ExplorerViewModel : IDisposable
         _notificationService.NotifySuccess("Background search started.");
     }
 
+    private bool IsScheduledMessage(ServiceBusMessage msg)
+    {
+        if (!msg.ScheduledEnqueueTime.HasValue || msg.ScheduledEnqueueTime.Value == 0)
+            return false;
+        
+        var scheduledTime = DateTimeOffset.FromUnixTimeMilliseconds(msg.ScheduledEnqueueTime.Value);
+        return scheduledTime > DateTimeOffset.UtcNow;
+    }
+
     public void DeleteMessages(List<long> sequenceNumbers)
     {
-        _confirmModal.Show(
-            title: "Confirm Delete",
-            message: $"Are you sure you want to delete {sequenceNumbers.Count} message(s)?",
-            detail: "This action cannot be undone.",
-            confirmText: "Delete Messages",
-            confirmClass: "btn-danger",
-            onConfirm: () => ExecuteBatchOperationAsync(sequenceNumbers, "delete", async (seqNums) =>
+        var scheduledSeqNums = new List<long>();
+        var regularSeqNums = new List<long>();
+        
+        foreach (var seq in sequenceNumbers)
+        {
+            var msg = PeekedMessages.FirstOrDefault(m => m.SequenceNumber == seq);
+            if (msg != null && IsScheduledMessage(msg))
             {
-                if (State.IsQueueSelected)
-                    await _operationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, State.SelectedQueueName!, seqNums.ToArray(), State.IsViewingDLQ);
-                else if (State.IsSubscriptionSelected)
-                    await _operationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, State.SelectedTopicName!, State.SelectedSubscriptionName!, seqNums.ToArray(), State.IsViewingDLQ);
-            })
+                scheduledSeqNums.Add(seq);
+            }
+            else
+            {
+                regularSeqNums.Add(seq);
+            }
+        }
+
+        string title = "Confirm Delete";
+        string message = $"Are you sure you want to delete {sequenceNumbers.Count} message(s)?";
+        string confirmText = "Delete Messages";
+        
+        if (scheduledSeqNums.Any() && !regularSeqNums.Any())
+        {
+            title = "Confirm Cancel Scheduled";
+            message = $"Are you sure you want to cancel {scheduledSeqNums.Count} scheduled message(s)?";
+            confirmText = "Cancel Messages";
+        }
+        else if (scheduledSeqNums.Any() && regularSeqNums.Any())
+        {
+            title = "Confirm Delete & Cancel";
+            message = $"Are you sure you want to delete {regularSeqNums.Count} message(s) and cancel {scheduledSeqNums.Count} scheduled message(s)?";
+            confirmText = "Confirm";
+        }
+
+        _confirmModal.Show(
+            title: title,
+            message: message,
+            detail: "This action cannot be undone.",
+            confirmText: confirmText,
+            confirmClass: "btn-danger",
+            onConfirm: () => ExecuteBatchDeleteAndCancelAsync(regularSeqNums, scheduledSeqNums)
         );
         IsResubmitModal = false;
+    }
+
+    private async Task ExecuteBatchDeleteAndCancelAsync(List<long> regularSeqNums, List<long> scheduledSeqNums)
+    {
+        _confirmModal.IsProcessing = true;
+        ErrorMessage = null;
+        try
+        {
+            if (regularSeqNums.Any())
+            {
+                if (State.IsQueueSelected)
+                    await _operationsService.DeleteQueueMessagesAsync(NamespaceNameOnly, State.SelectedQueueName!, regularSeqNums.ToArray(), State.IsViewingDLQ);
+                else if (State.IsSubscriptionSelected)
+                    await _operationsService.DeleteSubscriptionMessagesAsync(NamespaceNameOnly, State.SelectedTopicName!, State.SelectedSubscriptionName!, regularSeqNums.ToArray(), State.IsViewingDLQ);
+                
+                PeekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && regularSeqNums.Contains(m.SequenceNumber.Value));
+            }
+
+            if (scheduledSeqNums.Any())
+            {
+                if (State.IsQueueSelected)
+                    await _operationsService.CancelScheduledQueueMessagesAsync(NamespaceNameOnly, State.SelectedQueueName!, scheduledSeqNums.ToArray());
+                else if (State.IsSubscriptionSelected)
+                    await _operationsService.CancelScheduledTopicMessagesAsync(NamespaceNameOnly, State.SelectedTopicName!, scheduledSeqNums.ToArray());
+                
+                PeekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && scheduledSeqNums.Contains(m.SequenceNumber.Value));
+            }
+
+            if (PeekedMessages.Count == 0) PeekFromSequence = 0;
+            
+            OnClearSelectionRequested?.Invoke();
+            _confirmModal.Close();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to delete/cancel messages: {ex.Message}";
+        }
+        finally
+        {
+            _confirmModal.IsProcessing = false;
+            NotifyStateChanged();
+        }
     }
 
     public void ResubmitMessages(List<long> sequenceNumbers)

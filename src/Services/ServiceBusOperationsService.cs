@@ -616,4 +616,36 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             throw;
         }
     }
+
+    public async Task<BatchOperationResult> CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers)
+    {
+        try
+        {
+            var token = await GetTokenAsync(namespaceName, queueName);
+            await _jsInterop.CancelScheduledQueueMessagesAsync(namespaceName, queueName, token, sequenceNumbers);
+            _notificationService.NotifySuccess($"Cancelled {sequenceNumbers.Length} scheduled message(s) from queue '{queueName}' successfully.");
+            return new BatchOperationResult { SuccessCount = sequenceNumbers.Length };
+        }
+        catch (Exception ex)
+        {
+            _notificationService.NotifyError($"Failed to cancel scheduled messages: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<BatchOperationResult> CancelScheduledTopicMessagesAsync(string namespaceName, string topicName, long[] sequenceNumbers)
+    {
+        try
+        {
+            var token = await GetTokenAsync(namespaceName, topicName);
+            await _jsInterop.CancelScheduledTopicMessagesAsync(namespaceName, topicName, token, sequenceNumbers);
+            _notificationService.NotifySuccess($"Cancelled {sequenceNumbers.Length} scheduled message(s) from topic '{topicName}' successfully.");
+            return new BatchOperationResult { SuccessCount = sequenceNumbers.Length };
+        }
+        catch (Exception ex)
+        {
+            _notificationService.NotifyError($"Failed to cancel scheduled messages: {ex.Message}");
+            throw;
+        }
+    }
 }

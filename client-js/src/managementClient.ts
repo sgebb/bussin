@@ -293,6 +293,60 @@ export class ManagementClient {
     }
 
     /**
+     * Cancel scheduled messages by sequence numbers
+     */
+    async cancelScheduledMessages(sequenceNumbers: number[]): Promise<void> {
+        if (!this.sender || !this.receiver || !this.replyTo) {
+            throw new Error('Management client not opened');
+        }
+
+        return new Promise((resolve, reject) => {
+            const replyTo = this.replyTo!;
+            const messageId = `cancel-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+            const responseHandler = (context: any) => {
+                if (context.message.correlation_id !== messageId) return;
+
+                const statusCode = context.message.application_properties?.statusCode;
+                const statusDescription = context.message.application_properties?.statusDescription;
+
+                if (statusCode === 200 || statusCode === 204) {
+                    resolve();
+                } else {
+                    reject(new Error(`Cancel scheduled messages failed: ${statusCode} - ${statusDescription}`));
+                }
+
+                this.receiver!.removeListener('message', responseHandler);
+            };
+
+            this.receiver!.on('message', responseHandler);
+
+            // Build sequence number array as 8-byte big-endian buffers, wrapped as AMQP long array (0x81)
+            const seqNumBuffers = sequenceNumbers.map(seq => longToBytes(seq));
+            const wrappedSeqNums = rhea.types.wrap_array(seqNumBuffers, 0x81, undefined);
+
+            const messageBody: Record<string, any> = {};
+            messageBody['sequence-numbers'] = wrappedSeqNums;
+
+            const request = {
+                body: messageBody,
+                reply_to: replyTo,
+                application_properties: {
+                    operation: 'com.microsoft:cancel-scheduled-message'
+                },
+                message_id: messageId
+            };
+
+            this.sender!.send(request);
+
+            setTimeout(() => {
+                this.receiver!.removeListener('message', responseHandler);
+                reject(new Error('Cancel scheduled messages request timeout'));
+            }, 10000);
+        });
+    }
+
+    /**
      * Update disposition of locked messages (complete, abandon, dead-letter)
      */
     async updateDisposition(lockTokens: string[], disposition: 'completed' | 'abandoned' | 'suspended', deadLetterReason?: string, deadLetterDescription?: string): Promise<void> {

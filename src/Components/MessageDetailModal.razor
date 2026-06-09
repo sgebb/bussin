@@ -254,7 +254,7 @@
                         {
                             <div class="alert alert-info d-flex align-items-center mb-0">
                                 <i class="bi bi-info-circle me-2"></i>
-                                <span><strong>Scheduled message.</strong> Scheduled messages cannot be deleted or moved. They can only wait for their scheduled time or be cancelled via the Service Bus API.</span>
+                                <span><strong>Scheduled message.</strong> Scheduled messages cannot be moved, but they can be cancelled before their scheduled time.</span>
                             </div>
                         }
                     }
@@ -300,14 +300,28 @@
                             <i class="bi bi-pencil-square me-1"></i> Edit
                         </button>
                         
-                        <button class="btn btn-danger me-2" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
-                                title="@GetDeleteButtonTitle()">
-                            @if (IsProcessing)
-                            {
-                                <span class="spinner-border spinner-border-sm me-2"></span>
-                            }
-                            Delete
-                        </button>
+                        @if (IsScheduledMessage)
+                        {
+                            <button class="btn btn-danger me-2" @onclick="DeleteMessage" disabled="@IsProcessing"
+                                    title="Cancel scheduled message">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Cancel Scheduled
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-danger me-2" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession)"
+                                    title="@GetDeleteButtonTitle()">
+                                @if (IsProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Delete
+                            </button>
+                        }
                         @if (IsDLQ)
                         {
                             <button class="btn btn-primary" @onclick="ResubmitMessage" disabled="@IsProcessing">
@@ -538,7 +552,7 @@
     private string GetDeleteButtonTitle()
     {
         if (IsScheduledMessage)
-            return "Scheduled messages cannot be deleted";
+            return "Cancel scheduled message";
         if (RequiresSession)
             return "Delete not supported for session-enabled entities";
         return "Delete message";

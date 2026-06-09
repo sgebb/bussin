@@ -1404,13 +1404,21 @@ mark {
 
 /* Delete button next to entity items */
 .entity-delete-btn {
-    opacity: 0.3 !important;
-    transition: opacity 0.2s ease, color 0.2s ease !important;
+    opacity: 0.60 !important;
+    color: var(--destructive-color) !important;
+    transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+.entity-delete-btn i {
+    font-size: 1.15rem !important;
 }
 .entity-item:hover .entity-delete-btn {
-    opacity: 0.7 !important;
+    opacity: 0.90 !important;
 }
 .entity-delete-btn:hover {
     opacity: 1.0 !important;
-    color: #ef4444 !important;
+    color: var(--destructive-hover) !important;
+    transform: scale(1.2) !important;
 }
