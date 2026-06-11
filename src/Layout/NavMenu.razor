@@ -454,12 +454,12 @@
         
         // Delete button
         __builder.OpenElement(26, "button");
-        __builder.AddAttribute(27, "class", "btn btn-sm btn-outline-danger folder-delete-btn");
+        __builder.AddAttribute(27, "class", "btn-link text-danger folder-delete-btn");
         __builder.AddAttribute(28, "onclick", EventCallback.Factory.Create(this, () => NavState.ShowDeleteFolderConfirmation(folderId, folderName)));
         __builder.AddEventStopPropagationAttribute(29, "onclick", true);
         __builder.AddAttribute(30, "title", "Delete folder");
         __builder.OpenElement(31, "i");
-        __builder.AddAttribute(32, "class", "bi bi-x-lg");
+        __builder.AddAttribute(32, "class", "bi bi-trash-fill");
         __builder.CloseElement();
         __builder.CloseElement();
         
