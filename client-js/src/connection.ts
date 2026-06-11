@@ -80,7 +80,7 @@ export class ServiceBusConnection {
                     port: port,
                     transport: isSecure ? 'ssl' : undefined,
                     reconnect: false
-                });
+                } as any);
             }
 
             this.connection!.on('connection_open', () => {

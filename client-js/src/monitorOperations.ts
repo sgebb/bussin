@@ -52,11 +52,12 @@ async function startMonitoring(
     let lastAuthTime = Date.now();
     const tokenRefreshIntervalMs = 20 * 60 * 1000; // Refresh every 20 minutes
 
-    const setupManagementLink = async () => {
+    const setupManagementLink = async (): Promise<ManagementClient> => {
         await connection.connect();
         await connection.authenticateCBS(entityPath);
-        managementClient = new ManagementClient(connection, entityPath);
-        await managementClient.open();
+        const client = new ManagementClient(connection, entityPath);
+        await client.open();
+        return client;
     };
 
     const pollForMessages = async () => {
@@ -81,7 +82,7 @@ async function startMonitoring(
 
             // Ensure connection and managementClient are open
             if (!connection.connection || !managementClient) {
-                await setupManagementLink();
+                managementClient = await setupManagementLink();
             }
 
             // Peek messages starting from the last sequence number + 1
@@ -125,7 +126,7 @@ async function startMonitoring(
 
     // Start monitoring
     try {
-        await setupManagementLink();
+        managementClient = await setupManagementLink();
 
         // Get initial sequence number to start from (try to get the latest message)
         const initialMessages = await managementClient!.peekMessages(0, 100);
