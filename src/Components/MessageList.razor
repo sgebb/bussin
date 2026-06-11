@@ -1,5 +1,7 @@
 @using Bussin.Models
 @using System.Text.RegularExpressions
+@inject MessageListState MessageListState
+@inject IJSRuntime JSRuntime
 
 
 <div class="message-list">
@@ -80,9 +82,18 @@
         </div>
 
         <div class="list-group">
-            @foreach (var message in DisplayedMessages)
+            @{
+                var displayed = DisplayedMessages;
+            }
+            @for (int i = 0; i < displayed.Count; i++)
             {
-                <div class="list-group-item message-item @(message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value) ? "selected" : "")"
+                var index = i;
+                var message = displayed[index];
+                var isSelected = message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value);
+                var isNavigated = index == MessageListState.NavigatedIndex;
+
+                <div class="list-group-item message-item @(isSelected ? "selected" : "") @(isNavigated ? "navigated-active" : "")"
+                     id="@(isNavigated ? "navigated-msg" : null)"
                      @onclick="() => OnMessageClick(message)">
                     <div class="d-flex align-items-center">
                         <div class="message-checkbox-wrapper" @onclick:stopPropagation="true">
@@ -161,19 +172,27 @@
     [Parameter] public EventCallback OnDownloadLoaded { get; set; }
     [Parameter] public EventCallback OnDownloadEntireEntity { get; set; }
 
-    private string SearchTerm { get; set; } = "";
-
-    private List<ServiceBusMessage> DisplayedMessages
+    private string SearchTerm
     {
-        get
+        get => MessageListState.SearchTerm;
+        set
         {
-            if (string.IsNullOrWhiteSpace(SearchTerm))
-                return Messages;
-            
-            return Messages
-                .Where(m => (m.Body?.ToString() ?? "").Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
-                            (m.MessageId ?? "").Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            if (MessageListState.SearchTerm != value)
+            {
+                MessageListState.SearchTerm = value;
+                MessageListState.NavigatedIndex = -1; // Reset navigation on search
+                MessageListState.NotifyUpdate();
+            }
+        }
+    }
+
+    private List<ServiceBusMessage> DisplayedMessages => MessageListState.FilteredMessages;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (MessageListState.NavigatedIndex != -1)
+        {
+            await JSRuntime.InvokeVoidAsync("scrollNavigatedIntoView");
         }
     }
 

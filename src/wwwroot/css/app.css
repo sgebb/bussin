@@ -684,6 +684,11 @@ pre {
     color: #0D022C;
 }
 
+.message-list .message-item.navigated-active {
+    outline: 2px solid var(--link-color) !important;
+    outline-offset: -2px;
+}
+
 [data-theme="dark"] .message-list .form-check-label {
     color: var(--text-color);
 }
@@ -1491,4 +1496,40 @@ code {
 
 .text-dlq-orange {
     color: #fd7e14 !important;
+}
+
+/* Header and Mobile theme toggles */
+.header-theme-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 1.15rem;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+}
+
+.header-theme-toggle:hover {
+    opacity: 1;
+}
+
+.mobile-theme-toggle {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 1.25rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
 }

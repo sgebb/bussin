@@ -7,12 +7,12 @@ public interface IServiceBusJsInteropService
 {
     IJSRuntime JSRuntime { get; }
     // Queue Operations
-    Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false);
+    Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null);
     Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, MessageProperties? properties = null);
     Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token, bool fromDeadLetter = false);
     
     // Topic/Subscription Operations
-    Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false);
+    Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null);
     Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, MessageProperties? properties = null);
     Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, bool fromDeadLetter = false);
     
@@ -21,8 +21,8 @@ public interface IServiceBusJsInteropService
     Task SendTopicMessageBatchAsync(string namespaceName, string topicName, string token, object[] messages);
     
     // Lock-based operations (new API)
-    Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1);
-    Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1);
+    Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null);
+    Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null);
     Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens);
     Task<BatchOperationResult> AbandonMessagesAsync(string[] lockTokens);
     Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null);
@@ -55,4 +55,14 @@ public interface IServiceBusJsInteropService
     // Peek specific messages by sequence numbers
     Task<List<ServiceBusMessage>> PeekQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false);
     Task<List<ServiceBusMessage>> PeekSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false);
+
+    // Rule Operations
+    Task<List<SubscriptionRule>> EnumerateRulesAsync(string namespaceName, string topicName, string subscriptionName, string token);
+    Task AddRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName, string filterType, object filterExpression, string? action);
+    Task RemoveRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName);
+
+    // Session Operations
+    Task<List<string>> GetMessageSessionsAsync(string namespaceName, string entityPath, string token, DateTime? lastUpdatedTime = null, int skip = 0, int top = 100);
+    Task<string> GetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId);
+    Task SetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId, string? state);
 }

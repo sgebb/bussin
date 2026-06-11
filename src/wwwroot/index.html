@@ -118,7 +118,8 @@
                 queueName,
                 token,
                 (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
-                (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
+                (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error'),
+                dotnetRef
             );
         };
 
@@ -129,7 +130,8 @@
                 subscriptionName,
                 token,
                 (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
-                (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error')
+                (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error'),
+                dotnetRef
             );
         };
 
@@ -181,6 +183,37 @@
                 promise: Promise.resolve(value),
                 stop: () => console.log('Mock controller stopped')
             };
+        };
+        // Keyboard Shortcuts listener
+        window.registerKeyboardShortcuts = function (dotnetRef) {
+            document.addEventListener('keydown', (evt) => {
+                const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+                if (activeTag === 'input' || activeTag === 'textarea') {
+                    if (evt.key === 'Escape') {
+                        dotnetRef.invokeMethodAsync('OnGlobalKeyDown', 'Escape', false);
+                    }
+                    return;
+                }
+
+                let key = evt.key;
+                let ctrl = evt.ctrlKey || evt.metaKey;
+
+                if (ctrl && (key === 'k' || key === 'K')) {
+                    evt.preventDefault();
+                    dotnetRef.invokeMethodAsync('OnGlobalKeyDown', 'k', true);
+                } else if (!ctrl && ['r', 'R', 's', 'S', 'm', 'M', 'd', 'D', 'Escape', 'ArrowUp', 'ArrowDown', 'Enter'].includes(key)) {
+                    evt.preventDefault();
+                    dotnetRef.invokeMethodAsync('OnGlobalKeyDown', key, false);
+                }
+            });
+        };
+
+        // Scroll active navigated message list item into view
+        window.scrollNavigatedIntoView = function () {
+            const el = document.getElementById('navigated-msg');
+            if (el) {
+                el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
         };
     </script>
 

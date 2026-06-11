@@ -1,4 +1,4 @@
-﻿@using Bussin.Models
+@using Bussin.Models
 @inject IServiceBusOperationsService OperationsService
 
 @if (IsVisible)
@@ -12,16 +12,24 @@
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-@(RequiresSession ? "4" : "6")">
                             <label class="form-label">Number of Messages</label>
                             <input type="number" class="form-control" @bind="messageCount" min="1" max="100" />
                             <small class="text-muted">Lock up to 100 messages at once</small>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-@(RequiresSession ? "4" : "6")">
                             <label class="form-label">Timeout (seconds)</label>
                             <input type="number" class="form-control" @bind="timeoutSeconds" min="1" max="60" />
                             <small class="text-muted">How long to wait for messages</small>
                         </div>
+                        @if (RequiresSession)
+                        {
+                            <div class="col-md-4">
+                                <label class="form-label">Session ID</label>
+                                <input type="text" class="form-control" @bind="sessionId" placeholder="Enter session ID..." />
+                                <small class="text-muted">Session ID is required for this entity</small>
+                            </div>
+                        }
                     </div>
 
                     <div class="mb-3">
@@ -114,11 +122,13 @@
 @code {
     [Parameter] public bool IsVisible { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
-    [Parameter] public Func<int, int, bool, Task<List<ServiceBusMessage>>>? OnLockMessages { get; set; }
+    [Parameter] public Func<int, int, bool, string?, Task<List<ServiceBusMessage>>>? OnLockMessages { get; set; }
+    [Parameter] public bool RequiresSession { get; set; } = false;
 
     private List<ServiceBusMessage> lockedMessages = new();
     private int messageCount = 10;
     private int timeoutSeconds = 5;
+    private string sessionId = "";
     private bool isLocking = false;
     private bool isProcessing = false;
     private string? errorMessage;
@@ -131,9 +141,16 @@
         errorMessage = null;
         lockedMessages.Clear();
 
+        if (RequiresSession && string.IsNullOrWhiteSpace(sessionId))
+        {
+            errorMessage = "Session ID is required for session-enabled entities";
+            isLocking = false;
+            return;
+        }
+
         try
         {
-            var messages = await OnLockMessages(messageCount, timeoutSeconds, false);
+            var messages = await OnLockMessages(messageCount, timeoutSeconds, false, RequiresSession ? sessionId : null);
             lockedMessages = messages;
             
             if (!lockedMessages.Any())

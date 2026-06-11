@@ -3,7 +3,7 @@
 
 @if (IsVisible)
 {
-    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnClose">
+    <div class="modal fade show" tabindex="-1" data-theme="@(IsDarkMode ? "dark" : "light")" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onclick="OnClose">
         <div class="modal-dialog modal-lg">
             <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
@@ -67,6 +67,7 @@
 
 @code {
     [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public bool IsDarkMode { get; set; }
     [Parameter] public NamespaceConnection? NamespaceToEdit { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<NamespaceConnection> OnSave { get; set; }

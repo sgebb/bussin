@@ -1,8 +1,10 @@
 @using Bussin.Services.Demo
+@using Bussin.Services
 @inject NavigationStateService NavState
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IConfirmModalService ConfirmModal
+@inject ExplorerDialogService DialogService
 @implements IDisposable
 
 <div class="nav-menu">
@@ -124,14 +126,14 @@
             }
             
             <div class="footer-icons">
-                <button class="footer-icon-btn" @onclick="NavState.ShowBuildModalDialog" title="Build Information">
-                    <i class="bi bi-hammer"></i>
-                </button>
-                <button class="footer-icon-btn" @onclick="NavState.ShowSupportModalDialog" title="Support & Contribute">
-                    <i class="bi bi-heart-fill"></i>
+                <button class="footer-icon-btn d-none d-md-inline-block" @onclick="ShowKeyboardShortcuts" title="Keyboard Shortcuts (Ctrl+K)">
+                    <i class="bi bi-keyboard"></i>
                 </button>
                 <button class="footer-icon-btn" @onclick="OnDarkModeToggle" title="@(IsDarkMode ? "Switch to light mode" : "Switch to dark mode")">
                     <i class="bi @(IsDarkMode ? "bi-moon-fill" : "bi-brightness-high-fill")"></i>
+                </button>
+                <button class="footer-icon-btn" @onclick="NavState.ShowSupportModalDialog" title="Support & Contribute">
+                    <i class="bi bi-heart-fill"></i>
                 </button>
             </div>
         </div>
@@ -569,4 +571,9 @@
         __builder.CloseElement(); // Flex layout
         __builder.CloseElement(); // Outer card
     };
+
+    private void ShowKeyboardShortcuts()
+    {
+        DialogService.ShowKeyboardShortcutsModal = true;
+    }
 }

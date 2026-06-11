@@ -1,0 +1,367 @@
+@using Bussin.Models
+@using Bussin.Services
+@inject IServiceBusJsInteropService JsInterop
+@inject PeekService PeekService
+@inject INotificationService NotificationService
+
+@if (IsVisible)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5); z-index: 1050;" @onmousedown="OnBackdropClick">
+        <div class="modal-dialog modal-lg modal-dialog-centered" @onmousedown="HandleContentMouseDown" @onmousedown:stopPropagation="true">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-funnel-fill text-primary"></i> Subscription Filters: <span class="text-secondary">@SubscriptionName</span>
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="Close" tabindex="9"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger mb-3 py-2">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> @errorMessage
+                        </div>
+                    }
+
+                    <!-- Existing Rules Table -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Active Filters</h6>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="RefreshRules" disabled="@isLoading" tabindex="10">
+                                @if (isLoading)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-clockwise me-1"></i>
+                                }
+                                Refresh
+                            </button>
+                        </div>
+
+                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;">
+                            <table class="table align-middle mb-0">
+                                <thead>
+                                    <tr style="font-size: 0.85rem;">
+                                        <th class="ps-3">Filter Name</th>
+                                        <th>Type</th>
+                                        <th>Filter Expression</th>
+                                        <th>Action</th>
+                                        <th class="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (rulesList == null)
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4 text-muted">
+                                                <span class="spinner-border spinner-border-sm me-2" role="status"></span> Loading subscription filters...
+                                            </td>
+                                        </tr>
+                                    }
+                                    else if (rulesList.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="text-center py-4 text-muted">
+                                                No filters defined on this subscription.
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var rule in rulesList)
+                                        {
+                                            <tr>
+                                                <td class="ps-3 fw-semibold text-white">@rule.Name</td>
+                                                <td>
+                                                    <span class="badge bg-secondary bg-opacity-25 text-white">@rule.FilterType</span>
+                                                </td>
+                                                <td>
+                                                    @if (rule.FilterType == "Sql" || rule.FilterType == "True" || rule.FilterType == "False")
+                                                    {
+                                                        <code style="color: var(--text-color) !important;">@rule.SqlExpression</code>
+                                                    }
+                                                    else if (rule.FilterType == "Correlation")
+                                                    {
+                                                        <small class="text-muted">
+                                                            @if (!string.IsNullOrEmpty(rule.CorrelationId)) { <span>CorrelationId: '@rule.CorrelationId'; </span> }
+                                                            @if (!string.IsNullOrEmpty(rule.MessageId)) { <span>MessageId: '@rule.MessageId'; </span> }
+                                                            @if (!string.IsNullOrEmpty(rule.Label)) { <span>Label/Subject: '@rule.Label'; </span> }
+                                                            @if (!string.IsNullOrEmpty(rule.SessionId)) { <span>SessionId: '@rule.SessionId'; </span> }
+                                                        </small>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (!string.IsNullOrEmpty(rule.ActionExpression))
+                                                    {
+                                                        <code style="color: var(--text-color) !important;">@rule.ActionExpression</code>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted font-italic">-</span>
+                                                    }
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    @if (rule.Name != "$Default")
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-danger py-1" style="border-radius: 6px;" type="button" @onclick="() => ConfirmDeleteRule(rule.Name)" disabled="@isLoading" tabindex="11">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted small">System</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <hr class="my-3" />
+
+                    <!-- Add New Rule Form -->
+                    <div class="card p-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
+                        <h6 class="mb-3">Add Filter</h6>
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-6">
+                                <label for="ruleNameInput" class="form-label small mb-1">Filter Name</label>
+                                <input type="text" class="form-control form-control-sm" id="ruleNameInput" value="@newRuleName" @oninput="(e) => newRuleName = e.Value?.ToString() ?? string.Empty" placeholder="e.g. MyFilter" tabindex="1">
+                            </div>
+                            <div class="col-sm-6">
+                                <label for="filterTypeSelect" class="form-label small mb-1">Filter Type</label>
+                                <select class="form-select form-select-sm" id="filterTypeSelect" @bind="newFilterType" tabindex="2">
+                                    <option value="Sql">SQL Filter</option>
+                                    <option value="Correlation">Correlation Filter</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        @if (newFilterType == "Sql")
+                        {
+                            <div class="mb-3">
+                                <label for="sqlExprInput" class="form-label small mb-1">SQL Expression</label>
+                                <input type="text" class="form-control form-control-sm" id="sqlExprInput" @bind="newSqlExpression" placeholder="e.g. user.priority = 'high' OR sys.Label = 'alert'" tabindex="3">
+                                <div class="form-text text-muted" style="font-size: 0.75rem;">A standard SQL-92 query expression. Use <code>sys.</code> or custom headers.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="actionExprInput" class="form-label small mb-1">Action Expression (Optional)</label>
+                                <input type="text" class="form-control form-control-sm" id="actionExprInput" @bind="newActionExpression" placeholder="e.g. SET user.processed = 'true'" tabindex="4">
+                                <div class="form-text text-muted" style="font-size: 0.75rem;">SQL Action executed on matching messages. Leave empty if none.</div>
+                            </div>
+                        }
+                        else if (newFilterType == "Correlation")
+                        {
+                            <div class="row g-2 mb-3">
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1">Correlation ID</label>
+                                    <input type="text" class="form-control form-control-sm" @bind="newCorrId" tabindex="3">
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1">Message ID</label>
+                                    <input type="text" class="form-control form-control-sm" @bind="newMsgId" tabindex="4">
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1">Label (Subject)</label>
+                                    <input type="text" class="form-control form-control-sm" @bind="newLabel" tabindex="5">
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1">Session ID</label>
+                                    <input type="text" class="form-control form-control-sm" @bind="newSessionId" tabindex="6">
+                                </div>
+                            </div>
+                        }
+
+                        <div class="d-flex justify-content-end gap-2 mt-3">
+                            <button type="button" class="btn btn-primary btn-sm px-4" @onclick="AddFilterRule" disabled="@(isLoading || string.IsNullOrWhiteSpace(newRuleName))" tabindex="7">
+                                @if (isLoading)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                }
+                                Add Filter
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="text-danger mt-3 text-center small fw-semibold">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        WARNING: Subscription filters limit which messages are accepted by the subscriber; incorrect filters will cause messages to be lost. This affects the live subscription in Azure Service Bus.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close" tabindex="8">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string NamespaceName { get; set; } = "";
+    [Parameter] public string TopicName { get; set; } = "";
+    [Parameter] public string SubscriptionName { get; set; } = "";
+    [Parameter] public string EntityPath { get; set; } = "";
+
+    private List<SubscriptionRule>? rulesList = null;
+    private bool isLoading = false;
+    private string? errorMessage = null;
+
+    // Form inputs
+    private string newRuleName = "";
+    private string newFilterType = "Sql";
+    private string newSqlExpression = "";
+    private string newActionExpression = "";
+    
+    // Correlation filter inputs
+    private string newCorrId = "";
+    private string newMsgId = "";
+    private string newLabel = "";
+    private string newSessionId = "";
+
+    private bool mouseDownInContent = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && rulesList == null && !isLoading)
+        {
+            await RefreshRules();
+        }
+    }
+
+    private async Task RefreshRules()
+    {
+        if (string.IsNullOrEmpty(TopicName) || string.IsNullOrEmpty(SubscriptionName)) return;
+
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var token = await PeekService.GetTokenAsync(EntityPath);
+            rulesList = await JsInterop.EnumerateRulesAsync(NamespaceName, TopicName, SubscriptionName, token);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to fetch rules: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddFilterRule()
+    {
+        if (string.IsNullOrWhiteSpace(newRuleName)) return;
+
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var token = await PeekService.GetTokenAsync(EntityPath);
+            
+            object filterExpression;
+            if (newFilterType == "Sql")
+            {
+                filterExpression = newSqlExpression;
+            }
+            else
+            {
+                // correlation filter payload dictionary
+                filterExpression = new Dictionary<string, object?>
+                {
+                    ["correlationId"] = string.IsNullOrWhiteSpace(newCorrId) ? null : newCorrId,
+                    ["messageId"] = string.IsNullOrWhiteSpace(newMsgId) ? null : newMsgId,
+                    ["label"] = string.IsNullOrWhiteSpace(newLabel) ? null : newLabel,
+                    ["sessionId"] = string.IsNullOrWhiteSpace(newSessionId) ? null : newSessionId
+                };
+            }
+
+            await JsInterop.AddRuleAsync(
+                NamespaceName, 
+                TopicName, 
+                SubscriptionName, 
+                token, 
+                newRuleName, 
+                newFilterType, 
+                filterExpression, 
+                string.IsNullOrWhiteSpace(newActionExpression) ? null : newActionExpression);
+
+            NotificationService.NotifySuccess($"Rule '{newRuleName}' added successfully.");
+            
+            // Reset form
+            newRuleName = "";
+            newSqlExpression = "";
+            newActionExpression = "";
+            newCorrId = "";
+            newMsgId = "";
+            newLabel = "";
+            newSessionId = "";
+
+            await RefreshRules();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to add rule: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmDeleteRule(string ruleName)
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var token = await PeekService.GetTokenAsync(EntityPath);
+            await JsInterop.RemoveRuleAsync(NamespaceName, TopicName, SubscriptionName, token, ruleName);
+            NotificationService.NotifySuccess($"Rule '{ruleName}' deleted successfully.");
+            await RefreshRules();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete rule: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleContentMouseDown()
+    {
+        mouseDownInContent = true;
+    }
+
+    private void OnBackdropClick()
+    {
+        if (!mouseDownInContent)
+        {
+            Close();
+        }
+        mouseDownInContent = false;
+    }
+
+    private void Close()
+    {
+        rulesList = null;
+        OnClose.InvokeAsync();
+    }
+}

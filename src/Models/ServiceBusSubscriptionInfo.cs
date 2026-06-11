@@ -1,4 +1,4 @@
-﻿namespace Bussin.Models;
+namespace Bussin.Models;
 
 public record ServiceBusSubscriptionInfo
 {
@@ -15,4 +15,8 @@ public record ServiceBusSubscriptionInfo
     public bool DeadLetteringOnMessageExpiration { get; init; }
     public string? ForwardTo { get; init; }
     public string? ForwardDeadLetteredMessagesTo { get; init; }
+    
+    // Custom filter properties
+    public bool HasCustomFilter { get; init; } = false;
+    public string? CustomFilterTooltip { get; init; }
 }

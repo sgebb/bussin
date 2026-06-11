@@ -16,7 +16,7 @@ export class ServiceBusConnection {
     public readonly namespace: string;
     public readonly hostname: string;
     public connection: Connection | null = null;
-    private readonly token: string;
+    public token: string;
     private cbsAuthenticated: boolean = false;
     private useMock: boolean = false;
     private readonly customWebSocketUrl: string | null = null;

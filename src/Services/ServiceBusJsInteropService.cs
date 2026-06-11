@@ -50,13 +50,13 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     
     // Queue Operations
     
-    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
+    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null)
     {
         try
         {
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
                 "ServiceBusAPI.peekQueueMessages",
-                namespaceName, queueName, token, count, fromSequence, fromDeadLetter);
+                namespaceName, queueName, token, count, fromSequence, fromDeadLetter, sessionId);
             
             return result.Select(SafeDeserializeMessage)
                 .OfType<ServiceBusMessage>()
@@ -107,13 +107,13 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
 
     // Lock-based operations (new API)
     
-    public async Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1)
+    public async Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null)
     {
         try
         {
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
                 "ServiceBusAPI.receiveAndLockQueueMessage",
-                namespaceName, queueName, token, timeoutSeconds, fromDeadLetter, count);
+                namespaceName, queueName, token, timeoutSeconds, fromDeadLetter, count, sessionId);
             
             return result.Select(SafeDeserializeMessage)
                 .OfType<ServiceBusMessage>()
@@ -125,13 +125,13 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1)
+    public async Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null)
     {
         try
         {
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
                 "ServiceBusAPI.receiveAndLockSubscriptionMessage",
-                namespaceName, topicName, subscriptionName, token, timeoutSeconds, fromDeadLetter, count);
+                namespaceName, topicName, subscriptionName, token, timeoutSeconds, fromDeadLetter, count, sessionId);
             
             return result.Select(SafeDeserializeMessage)
                 .OfType<ServiceBusMessage>()
@@ -194,13 +194,13 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
 
     // Topic/Subscription Operations
     
-    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
+    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null)
     {
         try
         {
             var result = await jsRuntime.InvokeAsync<JsonElement[]>(
                 "ServiceBusAPI.peekSubscriptionMessages",
-                namespaceName, topicName, subscriptionName, token, count, fromSequence, fromDeadLetter);
+                namespaceName, topicName, subscriptionName, token, count, fromSequence, fromDeadLetter, sessionId);
             
             return result.Select(SafeDeserializeMessage)
                 .OfType<ServiceBusMessage>()
@@ -550,4 +550,102 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
+    // Rule Operations
+
+    public async Task<List<SubscriptionRule>> EnumerateRulesAsync(string namespaceName, string topicName, string subscriptionName, string token)
+    {
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<JsonElement[]>(
+                "ServiceBusAPI.enumerateRules",
+                namespaceName, topicName, subscriptionName, token);
+            
+            var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            return result.Select(elem => JsonSerializer.Deserialize<SubscriptionRule>(elem.GetRawText(), options)!)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error enumerating rules: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task AddRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName, string filterType, object filterExpression, string? action)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.addRule",
+                namespaceName, topicName, subscriptionName, token, ruleName, filterType, filterExpression, action);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding rule: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task RemoveRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.removeRule",
+                namespaceName, topicName, subscriptionName, token, ruleName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error removing rule: {ex.Message}");
+            throw;
+        }
+    }
+
+    // Session Operations
+
+    public async Task<List<string>> GetMessageSessionsAsync(string namespaceName, string entityPath, string token, DateTime? lastUpdatedTime = null, int skip = 0, int top = 100)
+    {
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<List<string>>(
+                "ServiceBusAPI.getMessageSessions",
+                namespaceName, entityPath, token, lastUpdatedTime, skip, top);
+            return result ?? new List<string>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting message sessions: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task<string> GetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId)
+    {
+        try
+        {
+            return await jsRuntime.InvokeAsync<string>(
+                "ServiceBusAPI.getSessionState",
+                namespaceName, entityPath, token, sessionId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting session state: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task SetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId, string? state)
+    {
+        try
+        {
+            await jsRuntime.InvokeVoidAsync(
+                "ServiceBusAPI.setSessionState",
+                namespaceName, entityPath, token, sessionId, state);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error setting session state: {ex.Message}");
+            throw;
+        }
+    }
 }

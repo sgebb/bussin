@@ -83,6 +83,12 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddSingleton<BackgroundPurgeService>();
 builder.Services.AddSingleton<BackgroundResubmitService>();
 builder.Services.AddSingleton<BackgroundSearchService>();
-builder.Services.AddScoped<ExplorerViewModel>();
+builder.Services.AddScoped<EntitySelectionState>();
+builder.Services.AddScoped<MessageListState>();
+builder.Services.AddScoped<PeekService>();
+builder.Services.AddScoped<SendService>();
+builder.Services.AddScoped<MonitorService>();
+builder.Services.AddScoped<SearchStateService>();
+builder.Services.AddScoped<ExplorerDialogService>();
 
 await builder.Build().RunAsync();

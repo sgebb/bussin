@@ -127,10 +127,10 @@ public sealed class AzureResourceService : IAzureResourceService
         ServiceBusNamespaceInfo namespaceInfo,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo);
+        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo, cancellationToken);
         if (serviceBusNamespace == null) yield break;
 
-        await foreach (var queue in serviceBusNamespace.GetServiceBusQueues().GetAllAsync())
+        await foreach (var queue in serviceBusNamespace.GetServiceBusQueues().GetAllAsync(cancellationToken: cancellationToken))
         {
             if (cancellationToken.IsCancellationRequested) yield break;
             
@@ -177,10 +177,10 @@ public sealed class AzureResourceService : IAzureResourceService
         ServiceBusNamespaceInfo namespaceInfo,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo);
+        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo, cancellationToken);
         if (serviceBusNamespace == null) yield break;
 
-        await foreach (var topic in serviceBusNamespace.GetServiceBusTopics().GetAllAsync())
+        await foreach (var topic in serviceBusNamespace.GetServiceBusTopics().GetAllAsync(cancellationToken: cancellationToken))
         {
             if (cancellationToken.IsCancellationRequested) yield break;
             
@@ -220,12 +220,12 @@ public sealed class AzureResourceService : IAzureResourceService
         string topicName,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo);
+        var serviceBusNamespace = await GetServiceBusNamespaceResourceAsync(credential, namespaceInfo, cancellationToken);
         if (serviceBusNamespace == null) yield break;
 
-        var topic = await serviceBusNamespace.GetServiceBusTopicAsync(topicName);
+        var topic = await serviceBusNamespace.GetServiceBusTopicAsync(topicName, cancellationToken);
 
-        await foreach (var sub in topic.Value.GetServiceBusSubscriptions().GetAllAsync())
+        await foreach (var sub in topic.Value.GetServiceBusSubscriptions().GetAllAsync(cancellationToken: cancellationToken))
         {
             if (cancellationToken.IsCancellationRequested) yield break;
             
@@ -247,7 +247,8 @@ public sealed class AzureResourceService : IAzureResourceService
 
     private async Task<ServiceBusNamespaceResource> GetServiceBusNamespaceResourceAsync(
         TokenCredential credential,
-        ServiceBusNamespaceInfo namespaceInfo)
+        ServiceBusNamespaceInfo namespaceInfo,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(namespaceInfo.SubscriptionId) || 
             string.IsNullOrEmpty(namespaceInfo.ResourceGroup) || 
@@ -261,7 +262,7 @@ public sealed class AzureResourceService : IAzureResourceService
         var armClient = new ArmClient(credential);
         var resourceId = new Azure.Core.ResourceIdentifier(
             $"/subscriptions/{namespaceInfo.SubscriptionId}/resourceGroups/{namespaceInfo.ResourceGroup}/providers/Microsoft.ServiceBus/namespaces/{namespaceInfo.Name}");
-        return await armClient.GetServiceBusNamespaceResource(resourceId).GetAsync();
+        return await armClient.GetServiceBusNamespaceResource(resourceId).GetAsync(cancellationToken);
     }
 
     public async IAsyncEnumerable<TenantInfo> ListTenantsAsync(

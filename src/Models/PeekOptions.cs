@@ -8,6 +8,7 @@ public class PeekOptions
     public string MessageIdFilter { get; set; } = "";
     public string SubjectFilter { get; set; } = "";
     public bool PeekFromNewest { get; set; } = false;
+    public string SessionId { get; set; } = "";
     
     /// <summary>
     /// Returns true if any filter is active

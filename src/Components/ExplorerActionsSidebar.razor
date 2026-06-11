@@ -60,6 +60,20 @@
             <i class="bi bi-trash"></i> Purge
         </button>
     </div>
+
+    @if (IsSubscriptionSelected)
+    {
+        <!-- Filters Actions -->
+        <div class="action-btn-group">
+            <div class="action-btn-group-title">Filters</div>
+            <button class="btn btn-action btn-warning w-100 @(SelectedSubscriptionHasAutoforwarding ? "disabled-grey" : "")"
+                    @onclick="OnManageFilters"
+                    disabled="@SelectedSubscriptionHasAutoforwarding"
+                    title="@(SelectedSubscriptionHasAutoforwarding ? "Filters cannot be managed on subscriptions with auto-forwarding enabled" : "Manage Filters")">
+                <i class="bi bi-funnel"></i> Manage Filters
+            </button>
+        </div>
+    }
 </div>
 
 @code {
@@ -72,6 +86,8 @@
     [Parameter] public object? CurrentPurgeOperation { get; set; }
     [Parameter] public object? CurrentResubmitOperation { get; set; }
     [Parameter] public bool SelectedEntityRequiresSession { get; set; }
+    [Parameter] public bool IsSubscriptionSelected { get; set; }
+    [Parameter] public bool SelectedSubscriptionHasAutoforwarding { get; set; }
     
     [Parameter] public EventCallback OnShowSendMessage { get; set; }
     [Parameter] public EventCallback OnToggleDLQ { get; set; }
@@ -80,4 +96,6 @@
     [Parameter] public EventCallback OnShowPeekOptions { get; set; }
     [Parameter] public EventCallback OnResubmitAll { get; set; }
     [Parameter] public EventCallback OnPurge { get; set; }
+    [Parameter] public EventCallback OnManageFilters { get; set; }
+    [Parameter] public EventCallback OnStartLiveMonitor { get; set; }
 }

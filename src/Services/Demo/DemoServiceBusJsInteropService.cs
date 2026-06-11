@@ -95,8 +95,8 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
 
     public Task SetupEmulatorAsync(object? options) => Task.CompletedTask;
 
-    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekQueueMessages", namespaceName, queueName, token, count, fromSequence, fromDeadLetter);
+    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null)
+        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekQueueMessages", namespaceName, queueName, token, count, fromSequence, fromDeadLetter, sessionId);
 
     public async Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, MessageProperties? properties = null)
         => await InvokeSimulatorVoidAsync("sendQueueMessage", namespaceName, queueName, token, messageBody, properties);
@@ -117,8 +117,8 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
         return result.TryGetProperty("deletedCount", out var prop) ? prop.GetInt32() : 0;
     }
 
-    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekSubscriptionMessages", namespaceName, topicName, subscriptionName, token, count, fromSequence, fromDeadLetter);
+    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null)
+        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekSubscriptionMessages", namespaceName, topicName, subscriptionName, token, count, fromSequence, fromDeadLetter, sessionId);
 
     public async Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, MessageProperties? properties = null)
         => await InvokeSimulatorVoidAsync("sendTopicMessage", namespaceName, topicName, token, messageBody, properties);
@@ -139,11 +139,11 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
         await InvokeSimulatorVoidAsync("sendTopicMessageBatch", namespaceName, topicName, token, messages);
     }
 
-    public async Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("receiveAndLockQueueMessage", namespaceName, queueName, token, timeoutSeconds, fromDeadLetter, count);
+    public async Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null)
+        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("receiveAndLockQueueMessage", namespaceName, queueName, token, timeoutSeconds, fromDeadLetter, count, sessionId);
 
-    public async Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("receiveAndLockSubscriptionMessage", namespaceName, topicName, subscriptionName, token, timeoutSeconds, fromDeadLetter, count);
+    public async Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null)
+        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("receiveAndLockSubscriptionMessage", namespaceName, topicName, subscriptionName, token, timeoutSeconds, fromDeadLetter, count, sessionId);
 
     public async Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens)
         => await InvokeSimulatorAsync<BatchOperationResult>("complete", (object)lockTokens);
@@ -200,4 +200,27 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
 
     public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
         => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekSubscriptionMessagesBySequence", namespaceName, topicName, subscriptionName, token, sequenceNumbers, fromDeadLetter);
+    public async Task<List<SubscriptionRule>> EnumerateRulesAsync(string namespaceName, string topicName, string subscriptionName, string token)
+    {
+        var result = await InvokeSimulatorAsync<JsonElement[]>("enumerateRules", namespaceName, topicName, subscriptionName, token);
+        return result.Select(elem => JsonSerializer.Deserialize<SubscriptionRule>(elem.GetRawText())!).ToList();
+    }
+
+    public async Task AddRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName, string filterType, object filterExpression, string? action)
+        => await InvokeSimulatorVoidAsync("addRule", namespaceName, topicName, subscriptionName, token, ruleName, filterType, filterExpression, action);
+
+    public async Task RemoveRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName)
+        => await InvokeSimulatorVoidAsync("removeRule", namespaceName, topicName, subscriptionName, token, ruleName);
+
+    public async Task<List<string>> GetMessageSessionsAsync(string namespaceName, string entityPath, string token, DateTime? lastUpdatedTime = null, int skip = 0, int top = 100)
+    {
+        var result = await InvokeSimulatorAsync<List<string>>("getMessageSessions", namespaceName, entityPath, token, lastUpdatedTime, skip, top);
+        return result ?? new List<string>();
+    }
+
+    public async Task<string> GetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId)
+        => await InvokeSimulatorAsync<string>("getSessionState", namespaceName, entityPath, token, sessionId);
+
+    public async Task SetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId, string? state)
+        => await InvokeSimulatorVoidAsync("setSessionState", namespaceName, entityPath, token, sessionId, state);
 }

@@ -1,4 +1,4 @@
-﻿using Microsoft.JSInterop;
+using Microsoft.JSInterop;
 using Bussin.Models;
 using System.Text.Json;
 
@@ -11,11 +11,16 @@ public class MessageMonitorCallback
 {
     private readonly Action<ServiceBusMessage> _onMessage;
     private readonly Action<string>? _onError;
+    private readonly Func<Task<string>>? _getFreshToken;
 
-    public MessageMonitorCallback(Action<ServiceBusMessage> onMessage, Action<string>? onError = null)
+    public MessageMonitorCallback(
+        Action<ServiceBusMessage> onMessage, 
+        Action<string>? onError = null,
+        Func<Task<string>>? getFreshToken = null)
     {
         _onMessage = onMessage;
         _onError = onError;
+        _getFreshToken = getFreshToken;
     }
 
     [JSInvokable]
@@ -39,5 +44,15 @@ public class MessageMonitorCallback
     public void OnError(string error)
     {
         _onError?.Invoke(error);
+    }
+
+    [JSInvokable]
+    public async Task<string> GetFreshToken()
+    {
+        if (_getFreshToken != null)
+        {
+            return await _getFreshToken();
+        }
+        return string.Empty;
     }
 }

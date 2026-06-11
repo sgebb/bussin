@@ -413,22 +413,6 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         OnSupportModalChange?.Invoke();
     }
 
-    private bool _showBuildModal = false;
-    public bool ShowBuildModal => _showBuildModal;
-    public event Action? OnBuildModalChange;
-
-    public void ShowBuildModalDialog()
-    {
-        _showBuildModal = true;
-        OnBuildModalChange?.Invoke();
-    }
-
-    public void HideBuildModal()
-    {
-        _showBuildModal = false;
-        OnBuildModalChange?.Invoke();
-    }
-
     public async Task ReorderFolderAsync(string folderId, int newIndex)
     {
         if (!_isInitialized || _preferences?.Folders == null) return;

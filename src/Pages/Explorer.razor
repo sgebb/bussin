@@ -1,9 +1,18 @@
 @page "/explorer"
 @using Microsoft.AspNetCore.Authorization
 @using Azure.Core
-@inject ExplorerViewModel VM
+@inject EntitySelectionState SelectionState
+@inject MessageListState MessageListState
+@inject PeekService PeekService
+@inject SendService SendService
+@inject MonitorService MonitorService
+@inject SearchStateService SearchStateService
+@inject ExplorerDialogService DialogService
+@inject IAuthenticationService AuthService
+@inject INotificationService NotificationService
 @inject NavigationManager Navigation
 @inject NavigationStateService NavState
+@inject IServiceBusJsInteropService JsInterop
 @implements IDisposable
 
 <PageTitle>Explorer - bussin</PageTitle>
@@ -12,21 +21,21 @@
     <!-- Section 1: Restructured Header -->
     <div class="explorer-header">
         <div class="explorer-header-left">
-            @if (VM.IsEditingDisplayName)
+            @if (DialogService.IsEditingDisplayName)
             {
                 <div class="namespace-edit-section">
-                    <div class="namespace-edit-wrapper" data-value="@VM.EditDisplayName">
+                    <div class="namespace-edit-wrapper" data-value="@DialogService.EditDisplayName">
                         <input type="text" class="form-control namespace-rename-input"
-                               @bind="VM.EditDisplayName"
+                               @bind="DialogService.EditDisplayName"
                                @bind:event="oninput"
                                @onkeydown="HandleRenameKeyDown"
-                               @onblur="VM.CancelRename"
+                               @onblur="CancelRename"
                                @ref="renameInputRef" />
                     </div>
-                    <button class="btn btn-sm btn-success" @onmousedown="VM.SaveDisplayNameAsync" @onmousedown:preventDefault="true" disabled="@string.IsNullOrWhiteSpace(VM.EditDisplayName)">
+                    <button class="btn btn-sm btn-success" @onmousedown="SaveDisplayNameAsync" @onmousedown:preventDefault="true" disabled="@string.IsNullOrWhiteSpace(DialogService.EditDisplayName)">
                         <i class="bi bi-check-lg"></i>
                     </button>
-                    <button class="btn btn-sm btn-secondary" @onmousedown="VM.CancelRename" @onmousedown:preventDefault="true">
+                    <button class="btn btn-sm btn-secondary" @onmousedown="CancelRename" @onmousedown:preventDefault="true">
                         <i class="bi bi-x-lg"></i>
                     </button>
                 </div>
@@ -35,19 +44,19 @@
             {
                 <div class="namespace-title-section">
                     <div class="namespace-title-row">
-                        <h1 class="explorer-namespace-title @(VM.IsFavorite ? "editable" : "")" 
-                            @onclick="@(VM.IsFavorite ? VM.StartRename : (Action)(() => {}))"
-                            title="@(VM.IsFavorite ? "Click to rename" : VM.DisplayName)">
-                            @VM.DisplayName
+                        <h1 class="explorer-namespace-title @(SelectionState.IsFavorite ? "editable" : "")" 
+                            @onclick="@(SelectionState.IsFavorite ? StartRename : (Action)(() => {}))"
+                            title="@(SelectionState.IsFavorite ? "Click to rename" : SelectionState.DisplayName)">
+                            @SelectionState.DisplayName
                         </h1>
-                        <button class="namespace-action-btn favorite-toggle-btn @(VM.IsFavorite ? "favorited" : "not-favorited")"
-                                @onclick="VM.ToggleFavoriteAsync"
-                                title="@(VM.IsFavorite ? "Remove from favorites" : "Add to favorites")">
-                            <i class="bi @(VM.IsFavorite ? "bi-star-fill" : "bi-star")"></i>
+                        <button class="namespace-action-btn favorite-toggle-btn @(SelectionState.IsFavorite ? "favorited" : "not-favorited")"
+                                @onclick="SelectionState.ToggleFavoriteAsync"
+                                title="@(SelectionState.IsFavorite ? "Remove from favorites" : "Add to favorites")">
+                            <i class="bi @(SelectionState.IsFavorite ? "bi-star-fill" : "bi-star")"></i>
                         </button>
-                        @if (VM.IsConnectionStringMode)
+                        @if (SelectionState.IsConnectionStringMode)
                         {
-                            var currentConn = NavState.GetNamespaceConnection(VM.State.FullyQualifiedNamespace ?? NamespaceParam ?? "");
+                            var currentConn = NavState.GetNamespaceConnection(SelectionState.State.FullyQualifiedNamespace ?? NamespaceParam ?? "");
                             if (currentConn != null)
                             {
                                 <button class="namespace-action-btn edit-connection-btn ms-2"
@@ -66,21 +75,21 @@
         </div>
         <div class="explorer-header-right">
             <div class="header-action-buttons">
-                @if (VM.IsLoadingEntities)
+                @if (SelectionState.IsLoadingEntities)
                 {
                     <div class="spinner-border spinner-border-sm text-muted" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                 }
-                else if (!VM.IsConnectionStringMode)
+                else if (!SelectionState.IsConnectionStringMode)
                 {
-                    <button class="namespace-action-btn refresh-btn" @onclick="VM.RefreshEntitiesAsync" title="Refresh queues and topics">
+                    <button class="namespace-action-btn refresh-btn" @onclick="SelectionState.RefreshEntitiesAsync" title="Refresh queues and topics">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
                 }
-                @if (!VM.IsConnectionStringMode)
+                @if (!SelectionState.IsConnectionStringMode)
                 {
-                    <button class="namespace-action-btn stats-btn" @onclick="() => VM.ShowStatsModal = true" title="Statistics">
+                    <button class="namespace-action-btn stats-btn" @onclick="() => DialogService.ShowStatsModal = true" title="Statistics">
                         <i class="bi bi-bar-chart-line"></i>
                     </button>
                 }
@@ -89,19 +98,19 @@
     </div>
 
     <!-- Section 2: Compact Entity Selector (3 Columns) -->
-    @if (VM.Queues.Count > 0 || VM.Topics.Count > 0 || VM.IsConnectionStringMode)
+    @if (SelectionState.Queues.Count > 0 || SelectionState.Topics.Count > 0 || SelectionState.IsConnectionStringMode)
     {
-        <ExplorerEntitySelector Queues="@VM.Queues"
-                                Topics="@VM.Topics"
-                                Subscriptions="@VM.Subscriptions"
-                                SelectedQueueName="@VM.State.SelectedQueueName"
-                                SelectedTopicName="@VM.State.SelectedTopicName"
-                                SelectedSubscriptionName="@VM.State.SelectedSubscriptionName"
-                                IsLoadingSubscriptions="@VM.IsLoadingSubscriptions"
-                                IsConnectionStringMode="@VM.IsConnectionStringMode"
-                                OnQueueSelected="@VM.SelectQueue"
-                                OnTopicSelected="@VM.SelectTopicAsync"
-                                OnSubscriptionSelected="@VM.SelectSubscription"
+        <ExplorerEntitySelector Queues="@SelectionState.Queues"
+                                Topics="@SelectionState.Topics"
+                                Subscriptions="@SelectionState.Subscriptions"
+                                SelectedQueueName="@SelectionState.State.SelectedQueueName"
+                                SelectedTopicName="@SelectionState.State.SelectedTopicName"
+                                SelectedSubscriptionName="@SelectionState.State.SelectedSubscriptionName"
+                                IsLoadingSubscriptions="@SelectionState.IsLoadingSubscriptions"
+                                IsConnectionStringMode="@SelectionState.IsConnectionStringMode"
+                                OnQueueSelected="@SelectionState.SelectQueue"
+                                OnTopicSelected="@SelectionState.SelectTopic"
+                                OnSubscriptionSelected="@SelectionState.SelectSubscription"
                                 OnAddQueue="TriggerAddQueue"
                                 OnAddTopic="TriggerAddTopic"
                                 OnAddSubscription="TriggerAddSubscription"
@@ -119,7 +128,7 @@
 
         <div class="explorer-messages-content">
             <div class="explorer-messages-main">
-                @if (VM.SelectedEntityRequiresSession)
+                @if (SelectionState.SelectedEntityRequiresSession)
                 {
                     <div class="session-warning-banner">
                         <i class="bi bi-info-circle me-1"></i>
@@ -128,27 +137,27 @@
                 }
 
                 <div class="explorer-messages-list">
-                    @if (VM.PeekedMessages.Count > 0)
+                    @if (MessageListState.PeekedMessages.Count > 0)
                     {
                         <MessageList @ref="_messageListRef"
-                                     Messages="@VM.PeekedMessages"
-                                     IsDLQ="@VM.State.IsViewingDLQ"
-                                     IsProcessing="@VM.IsProcessingBatch"
-                                     RequiresSession="@VM.SelectedEntityRequiresSession"
-                                     OnMessageSelected="@VM.ShowMessageDetail"
-                                     OnDeleteMessages="@VM.DeleteMessages"
-                                     OnResubmitMessages="@VM.ResubmitMessages"
-                                     OnMoveToDLQMessages="@VM.MoveToDLQMessages"
-                                     OnScheduledMessageWarning="@VM.ShowScheduledMessageWarning"
-                                     OnClearMessages="@VM.ClearPeekedMessages"
-                                     OnDownloadSelected="@VM.DownloadSelectedMessagesAsync"
-                                     OnDownloadLoaded="@VM.DownloadLoadedMessagesAsync"
-                                     OnDownloadEntireEntity="@VM.DownloadEntireEntityMessagesAsync" />
+                                     Messages="@MessageListState.PeekedMessages"
+                                     IsDLQ="@SelectionState.State.IsViewingDLQ"
+                                     IsProcessing="@PeekService.IsProcessingBatch"
+                                     RequiresSession="@SelectionState.SelectedEntityRequiresSession"
+                                     OnMessageSelected="@ShowMessageDetail"
+                                     OnDeleteMessages="@PeekService.DeleteMessages"
+                                     OnResubmitMessages="@PeekService.ResubmitMessages"
+                                     OnMoveToDLQMessages="@PeekService.MoveToDLQMessages"
+                                     OnScheduledMessageWarning="@ShowScheduledMessageWarning"
+                                     OnClearMessages="@(() => MessageListState.Clear())"
+                                     OnDownloadSelected="@PeekService.DownloadSelectedMessagesAsync"
+                                     OnDownloadLoaded="@PeekService.DownloadLoadedMessagesAsync"
+                                     OnDownloadEntireEntity="@PeekService.DownloadEntireEntityMessagesAsync" />
                     }
-                    else if (VM.State.SelectedQueueName != null || VM.State.SelectedSubscriptionName != null)
+                    else if (SelectionState.State.SelectedQueueName != null || SelectionState.State.SelectedSubscriptionName != null)
                     {
                         <div class="text-center text-muted p-4">
-                            <p>@(VM.HasPeeked ? "No messages found" : "Click 'Peek' to load messages")</p>
+                            <p>@(MessageListState.HasPeeked ? "No messages found" : "Click 'Peek' to load messages")</p>
                         </div>
                     }
                     else
@@ -160,36 +169,45 @@
                 </div>
             </div>
 
-            <ExplorerActionsSidebar IsViewingDLQ="@VM.State.IsViewingDLQ"
-                                    CanSend="@VM.CanSend"
-                                    HasQueueOrSubscriptionSelected="@VM.HasQueueOrSubscriptionSelected"
-                                    IsPeeking="@VM.IsPeeking"
-                                    PeekedMessagesCount="@VM.PeekedMessages.Count"
-                                    ArePeekOptionsModified="@VM.ArePeekOptionsModified"
-                                    CurrentPurgeOperation="@VM.CurrentPurgeOperation"
-                                    CurrentResubmitOperation="@VM.CurrentResubmitOperation"
-                                    SelectedEntityRequiresSession="@VM.SelectedEntityRequiresSession"
-                                    OnShowSendMessage="@(() => VM.ShowSendMessageModal = true)"
-                                    OnToggleDLQ="@VM.ToggleDLQ"
-                                    OnPeek="@(() => VM.PeekMessagesAsync())"
-                                    OnPeekNext="@(() => VM.PeekMessagesAsync(append: true))"
-                                    OnShowPeekOptions="@(() => VM.ShowPeekOptionsModal = true)"
-                                    OnResubmitAll="@VM.ResubmitAllMessages"
-                                    OnPurge="@(() => VM.PurgeMessages())" />
+            <ExplorerActionsSidebar IsViewingDLQ="@SelectionState.State.IsViewingDLQ"
+                                    CanSend="@(SelectionState.HasEntitySelected && !SelectionState.State.IsViewingDLQ)"
+                                    HasQueueOrSubscriptionSelected="@SelectionState.HasQueueOrSubscriptionSelected"
+                                    IsPeeking="@PeekService.IsPeeking"
+                                    PeekedMessagesCount="@MessageListState.PeekedMessages.Count"
+                                    ArePeekOptionsModified="@MessageListState.ArePeekOptionsModified"
+                                    CurrentPurgeOperation="@PeekService.CurrentPurgeOperation"
+                                    CurrentResubmitOperation="@PeekService.CurrentResubmitOperation"
+                                    SelectedEntityRequiresSession="@SelectionState.SelectedEntityRequiresSession"
+                                    IsSubscriptionSelected="@SelectionState.State.IsSubscriptionSelected"
+                                    SelectedSubscriptionHasAutoforwarding="@SelectedSubscriptionHasAutoforwarding"
+                                    OnShowSendMessage="@(() => DialogService.ShowSendMessageModal = true)"
+                                    OnToggleDLQ="@SelectionState.ToggleDLQ"
+                                    OnPeek="@(() => PeekService.PeekMessagesAsync())"
+                                    OnPeekNext="@(() => PeekService.PeekMessagesAsync(append: true))"
+                                    OnShowPeekOptions="@(() => DialogService.ShowPeekOptionsModal = true)"
+                                    OnResubmitAll="@PeekService.ResubmitAllMessages"
+                                    OnPurge="@(() => PeekService.PurgeMessages())"
+                                    OnManageFilters="@(() => DialogService.ShowManageRulesModal = true)"
+                                    OnStartLiveMonitor="@(() => DialogService.ShowMonitorModal = true)" />
 
         </div>
-        @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+        
+        @{
+            var errorMsg = PeekService.ErrorMessage ?? SendService.ErrorMessage ?? SelectionState.ErrorMessage;
+            var rawErrorMsg = PeekService.RawErrorMessage ?? SendService.RawErrorMessage ?? SelectionState.RawErrorMessage;
+        }
+        @if (!string.IsNullOrEmpty(errorMsg))
         {
-            @if (PermissionErrorHelper.IsPermissionError(VM.RawErrorMessage ?? ""))
+            @if (PermissionErrorHelper.IsPermissionError(rawErrorMsg ?? ""))
             {
-                var permissionType = PermissionErrorHelper.GetPermissionType(VM.RawErrorMessage ?? "");
+                var permissionType = PermissionErrorHelper.GetPermissionType(rawErrorMsg ?? "");
                 var roles = PermissionErrorHelper.GetRecommendedRoles(permissionType);
                 <div class="alert alert-warning alert-dismissible mt-2">
-                    <button type="button" class="btn-close" @onclick="VM.ClearError"></button>
+                    <button type="button" class="btn-close" @onclick="ClearError"></button>
                     <div class="d-flex align-items-start">
                         <i class="bi bi-shield-exclamation me-2 fs-5"></i>
                         <div>
-                            <strong>@VM.ErrorMessage</strong>
+                            <strong>@errorMsg</strong>
                             <div class="mt-2">
                                 <small>To perform this operation, you need one of these Azure RBAC roles:</small>
                                 <ul class="mb-2 mt-1">
@@ -203,7 +221,7 @@
                                 <summary class="text-muted" style="cursor: pointer; font-size: 0.8rem;">
                                     <i class="bi bi-code-slash me-1"></i>Technical details
                                 </summary>
-                                <pre class="mt-1 p-2 bg-dark text-light rounded" style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto;">@VM.RawErrorMessage</pre>
+                                <pre class="mt-1 p-2 bg-dark text-light rounded" style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; max-height: 100px; overflow-y: auto;">@rawErrorMsg</pre>
                             </details>
                         </div>
                     </div>
@@ -212,8 +230,8 @@
             else
             {
                 <div class="alert alert-danger alert-dismissible alert-sm mt-2" style="max-height: 120px; overflow-y: auto;">
-                    <button type="button" class="btn-close" @onclick="VM.ClearError"></button>
-                    <strong>Error:</strong> @VM.ErrorMessage
+                    <button type="button" class="btn-close" @onclick="ClearError"></button>
+                    <strong>Error:</strong> @errorMsg
                 </div>
             }
         }
@@ -221,74 +239,85 @@
 </div>
 
 <!-- Modals -->
-<SendMessageModal IsVisible="@VM.ShowSendMessageModal"
-                  IsSending="@VM.IsSending"
-                  RequiresSession="@VM.SelectedEntityRequiresSession"
-                  OnClose="@(() => VM.ShowSendMessageModal = false)"
-                  OnSend="@VM.SendMessageAsync" 
-                  OnBatchSend="@VM.SendBatchMessagesAsync" />
+<SendMessageModal IsVisible="@DialogService.ShowSendMessageModal"
+                  IsSending="@SendService.IsSending"
+                  RequiresSession="@SelectionState.SelectedEntityRequiresSession"
+                  OnClose="@(() => DialogService.ShowSendMessageModal = false)"
+                  OnSend="@HandleSendAsync" 
+                  OnBatchSend="@HandleBatchSendAsync" />
 
-<MessageDetailModal IsVisible="@VM.ShowMessageDetailModal"
-                    Message="@VM.SelectedMessage"
-                    IsDLQ="@VM.State.IsViewingDLQ"
-                    IsProcessing="@VM.IsProcessingBatch"
-                    RequiresSession="@VM.SelectedEntityRequiresSession"
-                    OnClose="@VM.CloseMessageDetail"
-                    OnDelete="@VM.DeleteSingleMessage"
-                    OnResubmit="@VM.ResubmitSingleMessage"
-                    OnMoveToDLQ="@VM.MoveToDLQSingleMessage"
-                    OnEditResubmit="@VM.EditAndResubmitMessageAsync" />
+<MessageDetailModal IsVisible="@DialogService.ShowMessageDetailModal"
+                    Message="@MessageListState.SelectedMessage"
+                    IsDLQ="@SelectionState.State.IsViewingDLQ"
+                    IsProcessing="@PeekService.IsProcessingBatch"
+                    RequiresSession="@SelectionState.SelectedEntityRequiresSession"
+                    OnClose="@DialogService.CloseMessageDetail"
+                    OnDelete="@PeekService.DeleteSingleMessage"
+                    OnResubmit="@PeekService.ResubmitSingleMessage"
+                    OnMoveToDLQ="@PeekService.MoveToDLQSingleMessage"
+                    OnEditResubmit="@SendService.EditAndResubmitMessageAsync" />
 
-<PeekLockModal IsVisible="@VM.ShowPeekLockModal"
-               IsProcessing="@VM.IsPeeking"
-               InitialCount="@VM.PeekLockCount"
-               InitialDuration="@VM.PeekLockDuration"
-               OnClose="@(() => VM.ShowPeekLockModal = false)"
-               OnPeekLock="@VM.PeekLockMessagesWithSettings" />
+<PeekLockModal IsVisible="@DialogService.ShowPeekLockModal"
+               IsProcessing="@PeekService.IsPeeking"
+               InitialCount="@PeekService.PeekLockCount"
+               InitialDuration="@PeekService.PeekLockDuration"
+               OnClose="@(() => DialogService.ShowPeekLockModal = false)"
+               OnPeekLock="@PeekService.PeekLockMessagesWithSettings" />
 
-<PeekOptionsModal IsVisible="@VM.ShowPeekOptionsModal"
-                  OnClose="@(() => VM.ShowPeekOptionsModal = false)"
-                  InitialOptions="@VM.LastPeekOptions"
-                  MessageCount="@VM.CurrentEntityMessageCount"
-                  IsViewingDLQ="@VM.State.IsViewingDLQ"
-                  OnPeek="@(async (options) => await VM.PeekWithOptionsAsync(options, append: false))"
-                  OnBackgroundSearch="@VM.StartBackgroundSearchAsync"
-                  OnStartLiveMonitor="@(() => VM.ShowMonitorModal = true)" />
+<PeekOptionsModal IsVisible="@DialogService.ShowPeekOptionsModal"
+                  OnClose="@(() => DialogService.ShowPeekOptionsModal = false)"
+                  InitialOptions="@MessageListState.LastPeekOptions"
+                  MessageCount="@SelectionState.CurrentEntityMessageCount"
+                  IsViewingDLQ="@SelectionState.State.IsViewingDLQ"
+                  RequiresSession="@SelectionState.SelectedEntityRequiresSession"
+                  NamespaceName="@SelectionState.NamespaceNameOnly"
+                  EntityPath="@SelectionState.State.GetEntityPath()"
+                  OnPeek="@(async (options) => await PeekService.PeekWithOptionsAsync(options, append: false))"
+                  OnBackgroundSearch="@SearchStateService.StartBackgroundSearchAsync"
+                  OnStartLiveMonitor="@(() => DialogService.ShowMonitorModal = true)" />
 
-<MessageMonitorModal IsVisible="@VM.ShowMonitorModal"
-                     NamespaceName="@VM.NamespaceNameOnly"
-                     QueueName="@VM.State.SelectedQueueName"
-                     TopicName="@VM.State.SelectedTopicName"
-                     SubscriptionName="@VM.State.SelectedSubscriptionName"
-                     OnClose="@(() => VM.ShowMonitorModal = false)" />
+<MessageMonitorModal IsVisible="@DialogService.ShowMonitorModal"
+                     NamespaceName="@SelectionState.NamespaceNameOnly"
+                     QueueName="@SelectionState.State.SelectedQueueName"
+                     TopicName="@SelectionState.State.SelectedTopicName"
+                     SubscriptionName="@SelectionState.State.SelectedSubscriptionName"
+                     OnClose="@(() => DialogService.ShowMonitorModal = false)" />
 
-<ReceiveAndLockModal IsVisible="@VM.ShowReceiveAndLockModal"
-                     OnClose="@(() => VM.ShowReceiveAndLockModal = false)"
-                     OnLockMessages="@VM.LockMessagesForModalAsync" />
+<ReceiveAndLockModal IsVisible="@DialogService.ShowReceiveAndLockModal"
+                     OnClose="@(() => DialogService.ShowReceiveAndLockModal = false)"
+                     RequiresSession="@SelectionState.SelectedEntityRequiresSession"
+                     OnLockMessages="@PeekService.LockMessagesForModalAsync" />
 
-<ExportOptionsModal IsVisible="@VM.ShowExportOptionsModal"
-                    Options="@VM.MessageExportOptions"
-                    OnClose="@(() => VM.ShowExportOptionsModal = false)"
-                    OnExport="@VM.ExecuteExportAsync" />
+<ManageRulesModal IsVisible="@DialogService.ShowManageRulesModal"
+                  NamespaceName="@SelectionState.NamespaceNameOnly"
+                  TopicName="@SelectionState.State.SelectedTopicName"
+                  SubscriptionName="@SelectionState.State.SelectedSubscriptionName"
+                  EntityPath="@SelectionState.State.GetEntityPath()"
+                  OnClose="@(() => DialogService.ShowManageRulesModal = false)" />
 
-<ConfirmModal IsVisible="@VM.ConfirmModalVisible"
-              Title="@VM.ConfirmModalTitle"
-              Message="@VM.ConfirmModalMessage"
-              DetailMessage="@VM.ConfirmModalDetailMessage"
-              ConfirmButtonText="@VM.ConfirmModalConfirmButtonText"
-              ConfirmButtonClass="@VM.ConfirmModalConfirmButtonClass"
-              AlternativeConfirmButtonText="@VM.ConfirmModalAlternativeButtonText"
-              AlternativeConfirmButtonClass="@VM.ConfirmModalAlternativeButtonClass"
-              IsProcessing="@VM.ConfirmModalIsProcessing"
-              ProgressCount="@VM.ConfirmModalProgressCount"
-              OnConfirm="@VM.OnConfirmModalConfirmAsync"
-              OnAlternativeConfirm="@VM.OnConfirmModalAlternativeConfirmAsync"
-              OnCancel="@VM.OnConfirmModalCancelAsync">
-    @if (VM.IsResubmitModal)
+<ExportOptionsModal IsVisible="@DialogService.ShowExportOptionsModal"
+                    Options="@DialogService.MessageExportOptions"
+                    OnClose="@(() => DialogService.ShowExportOptionsModal = false)"
+                    OnExport="@PeekService.ExecuteExportAsync" />
+
+<ConfirmModal IsVisible="@DialogService.ConfirmModalVisible"
+              Title="@DialogService.ConfirmModalTitle"
+              Message="@DialogService.ConfirmModalMessage"
+              DetailMessage="@DialogService.ConfirmModalDetailMessage"
+              ConfirmButtonText="@DialogService.ConfirmModalConfirmButtonText"
+              ConfirmButtonClass="@DialogService.ConfirmModalConfirmButtonClass"
+              AlternativeConfirmButtonText="@DialogService.ConfirmModalAlternativeButtonText"
+              AlternativeConfirmButtonClass="@DialogService.ConfirmModalAlternativeButtonClass"
+              IsProcessing="@DialogService.ConfirmModalIsProcessing"
+              ProgressCount="@DialogService.ConfirmModalProgressCount"
+              OnConfirm="@DialogService.OnConfirmModalConfirmAsync"
+              OnAlternativeConfirm="@DialogService.OnConfirmModalAlternativeConfirmAsync"
+              OnCancel="@DialogService.OnConfirmModalCancelAsync">
+    @if (DialogService.IsResubmitModal)
     {
         <div class="resubmit-delete-option mt-3 p-3 rounded">
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="removeFromDlq" @bind="VM.ResubmitRemoveFromDLQ">
+                <input class="form-check-input" type="checkbox" id="removeFromDlq" @bind="DialogService.ResubmitRemoveFromDLQ">
                 <label class="form-check-label" for="removeFromDlq">
                     <strong>Delete from Dead Letter Queue after resubmit</strong>
                     <small class="d-block text-muted">This will permanently remove the message from the DLQ</small>
@@ -298,11 +327,11 @@
     }
 </ConfirmModal>
 
-<StatsModal IsVisible="@VM.ShowStatsModal"
-            NamespaceInfo="@VM.State.CurrentNamespace"
-            Queues="@VM.Queues"
-            Topics="@VM.Topics"
-            OnClose="@(() => VM.ShowStatsModal = false)" />
+<StatsModal IsVisible="@DialogService.ShowStatsModal"
+            NamespaceInfo="@SelectionState.State.CurrentNamespace"
+            Queues="@SelectionState.Queues"
+            Topics="@SelectionState.Topics"
+            OnClose="@(() => DialogService.ShowStatsModal = false)" />
 
 <AddEntityModal IsVisible="@showAddEntityModal"
                 Title="@addEntityTitle"
@@ -324,6 +353,18 @@
     [SupplyParameterFromQuery(Name = "name")]
     public string? NameParam { get; set; }
 
+    [SupplyParameterFromQuery(Name = "queue")]
+    public string? QueueParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "topic")]
+    public string? TopicParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "subscription")]
+    public string? SubscriptionParam { get; set; }
+
+    [SupplyParameterFromQuery(Name = "dlq")]
+    public bool DlqParam { get; set; }
+
     private ElementReference renameInputRef;
     private MessageList? _messageListRef;
 
@@ -333,12 +374,35 @@
     private string addEntityPlaceholder = "";
     private Func<string, Task>? addEntitySubmitHandler;
 
+    private readonly HashSet<string> _loadedSubscriptionRules = new();
+    private string? _currentNamespace;
+    private string? _lastSelectedTopic;
+
     protected override async Task OnParametersSetAsync()
     {
-        await VM.InitializeAsync(NamespaceParam, ResourceGroupParam, SubscriptionIdParam, NameParam);
+        bool nsChanged = NamespaceParam != _currentNamespace;
+        if (nsChanged)
+        {
+            _currentNamespace = NamespaceParam;
+            lock (_loadedSubscriptionRules)
+            {
+                _loadedSubscriptionRules.Clear();
+            }
+            MessageListState.Clear();
+        }
+
+        await SelectionState.InitializeAsync(
+            NamespaceParam, 
+            ResourceGroupParam, 
+            SubscriptionIdParam, 
+            NameParam,
+            QueueParam,
+            TopicParam,
+            SubscriptionParam,
+            DlqParam);
         
-        var isAuthenticated = await VM.IsAuthenticatedAsync();
-        if (!isAuthenticated && !VM.IsConnectionStringMode)
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!isAuthenticated && !SelectionState.IsConnectionStringMode)
         {
             Navigation.NavigateTo("/");
         }
@@ -350,7 +414,7 @@
         addEntityLabel = "Queue Name";
         addEntityPlaceholder = "e.g. order-processing";
         addEntitySubmitHandler = async (name) => {
-            await VM.RegisterQueueAsync(name);
+            await SelectionState.RegisterQueueAsync(name);
         };
         showAddEntityModal = true;
     }
@@ -361,19 +425,19 @@
         addEntityLabel = "Topic Name";
         addEntityPlaceholder = "e.g. invoice-events";
         addEntitySubmitHandler = async (name) => {
-            await VM.RegisterTopicAsync(name);
+            await SelectionState.RegisterTopicAsync(name);
         };
         showAddEntityModal = true;
     }
 
     private void TriggerAddSubscription()
     {
-        if (string.IsNullOrEmpty(VM.State.SelectedTopicName)) return;
-        addEntityTitle = $"Register Subscription for '{VM.State.SelectedTopicName}'";
+        if (string.IsNullOrEmpty(SelectionState.State.SelectedTopicName)) return;
+        addEntityTitle = $"Register Subscription for '{SelectionState.State.SelectedTopicName}'";
         addEntityLabel = "Subscription Name";
         addEntityPlaceholder = "e.g. invoice-billing-service";
         addEntitySubmitHandler = async (name) => {
-            await VM.RegisterSubscriptionAsync(VM.State.SelectedTopicName, name);
+            await SelectionState.RegisterSubscriptionAsync(SelectionState.State.SelectedTopicName, name);
         };
         showAddEntityModal = true;
     }
@@ -389,43 +453,239 @@
 
     private void HandleDeleteQueue(string name)
     {
-        VM.UnregisterQueue(name);
+        SelectionState.UnregisterQueue(name);
     }
 
     private void HandleDeleteTopic(string name)
     {
-        VM.UnregisterTopic(name);
+        SelectionState.UnregisterTopic(name);
     }
 
     private void HandleDeleteSubscription((string Topic, string Subscription) args)
     {
-        VM.UnregisterSubscription(args.Topic, args.Subscription);
+        SelectionState.UnregisterSubscription(args.Topic, args.Subscription);
     }
 
     protected override void OnInitialized()
     {
-        VM.OnChange += StateHasChanged;
-        VM.OnClearSelectionRequested = () => 
+        SelectionState.OnChange += OnSelectionStateChange;
+        MessageListState.OnChange += StateHasChanged;
+        PeekService.OnChange += StateHasChanged;
+        SendService.OnChange += StateHasChanged;
+        DialogService.OnChange += StateHasChanged;
+        MonitorService.OnChange += StateHasChanged;
+        SearchStateService.OnChange += StateHasChanged;
+
+        SelectionState.OnEntitySelectionChanged += () =>
         {
+            MessageListState.Clear();
             if (_messageListRef != null) 
                 _messageListRef.ClearSelection();
-            return Task.CompletedTask;
         };
-        VM.OnFocusRenameInputRequested = async () =>
-        {
-            await Task.Delay(10); // Wait for render
-            try { await renameInputRef.FocusAsync(); } catch { }
-        };
+    }
+
+    private void StartRename()
+    {
+        DialogService.EditDisplayName = SelectionState.DisplayName;
+        DialogService.IsEditingDisplayName = true;
+        _ = FocusRenameInputAsync();
+    }
+
+    private async Task FocusRenameInputAsync()
+    {
+        await Task.Delay(10); // Wait for render
+        try { await renameInputRef.FocusAsync(); } catch { }
+    }
+
+    private void CancelRename()
+    {
+        DialogService.IsEditingDisplayName = false;
+        DialogService.EditDisplayName = "";
+    }
+
+    private async Task SaveDisplayNameAsync()
+    {
+        if (string.IsNullOrWhiteSpace(DialogService.EditDisplayName) || string.IsNullOrEmpty(SelectionState.State.FullyQualifiedNamespace)) return;
+        await NavState.RenameNamespaceAsync(SelectionState.State.FullyQualifiedNamespace, DialogService.EditDisplayName.Trim());
+        SelectionState.DisplayName = DialogService.EditDisplayName.Trim();
+        DialogService.IsEditingDisplayName = false;
+        DialogService.EditDisplayName = "";
+        NotificationService.NotifySuccess("Namespace renamed successfully.");
     }
 
     private async Task HandleRenameKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") await VM.SaveDisplayNameAsync();
-        else if (e.Key == "Escape") VM.CancelRename();
+        if (e.Key == "Enter") await SaveDisplayNameAsync();
+        else if (e.Key == "Escape") CancelRename();
+    }
+
+    private void ShowMessageDetail(ServiceBusMessage message)
+    {
+        MessageListState.SelectedMessage = message;
+        DialogService.ShowMessageDetailModal = true;
+    }
+
+    private void ShowScheduledMessageWarning(string message)
+    {
+        NotificationService.NotifyWarning(message);
+    }
+
+    private async Task HandleSendAsync(SendMessageModal.SendMessageRequest request)
+    {
+        await SendService.SendMessageAsync(request);
+        if (SendService.ErrorMessage == null)
+        {
+            DialogService.ShowSendMessageModal = false;
+        }
+    }
+
+    private async Task HandleBatchSendAsync(List<SendMessageModal.SendMessageRequest> requests)
+    {
+        await SendService.SendBatchMessagesAsync(requests);
+        if (SendService.ErrorMessage == null)
+        {
+            DialogService.ShowSendMessageModal = false;
+        }
+    }
+
+    private void ClearError()
+    {
+        PeekService.ClearError();
+        SendService.ClearError();
+        SelectionState.ErrorMessage = null;
+        SelectionState.RawErrorMessage = null;
     }
 
     public void Dispose()
     {
-        VM.OnChange -= StateHasChanged;
+        SelectionState.OnChange -= OnSelectionStateChange;
+        MessageListState.OnChange -= StateHasChanged;
+        PeekService.OnChange -= StateHasChanged;
+        SendService.OnChange -= StateHasChanged;
+        DialogService.OnChange -= StateHasChanged;
+        MonitorService.OnChange -= StateHasChanged;
+        SearchStateService.OnChange -= StateHasChanged;
+    }
+
+    private bool SelectedSubscriptionHasAutoforwarding
+    {
+        get
+        {
+            if (SelectionState.State.SelectedSubscriptionName != null &&
+                SelectionState.SubscriptionDict.TryGetValue(SelectionState.State.SelectedSubscriptionName, out var sub))
+            {
+                return !string.IsNullOrEmpty(sub.ForwardTo);
+            }
+            return false;
+        }
+    }
+
+    private void OnSelectionStateChange()
+    {
+        // Whenever subscriptions change or load, lazy-load rules for any subscriptions that aren't loaded yet
+        var currentTopic = SelectionState.State.SelectedTopicName;
+        if (currentTopic != _lastSelectedTopic)
+        {
+            _lastSelectedTopic = currentTopic;
+            lock (_loadedSubscriptionRules)
+            {
+                _loadedSubscriptionRules.Clear();
+            }
+        }
+
+        if (!string.IsNullOrEmpty(currentTopic) && currentTopic == SelectionState.LoadedSubscriptionsForTopic)
+        {
+            var subs = SelectionState.Subscriptions;
+            foreach (var sub in subs)
+            {
+                // Skip if subscription has auto-forwarding enabled, as ASB throws an error trying to read/peek rules on autoforwarded entities
+                if (!string.IsNullOrEmpty(sub.ForwardTo)) continue;
+
+                string ruleKey = $"{currentTopic}/{sub.Name}";
+                bool alreadyLoaded;
+                lock (_loadedSubscriptionRules)
+                {
+                    alreadyLoaded = _loadedSubscriptionRules.Contains(ruleKey);
+                }
+
+                if (!alreadyLoaded)
+                {
+                    // Fire and forget on the UI thread
+                    _ = LazyLoadSubscriptionRulesAsync(currentTopic, sub.Name);
+                }
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task LazyLoadSubscriptionRulesAsync(string topicName, string subscriptionName)
+    {
+        string ruleKey = $"{topicName}/{subscriptionName}";
+        lock (_loadedSubscriptionRules)
+        {
+            if (_loadedSubscriptionRules.Contains(ruleKey)) return;
+            _loadedSubscriptionRules.Add(ruleKey);
+        }
+
+        try
+        {
+            if (SelectionState.State.SelectedTopicName != topicName) return;
+
+            // Get token for the subscription path
+            string entityPath = $"{topicName}/subscriptions/{subscriptionName}";
+            string token = await PeekService.GetTokenAsync(entityPath);
+            if (string.IsNullOrEmpty(token)) return;
+
+            if (SelectionState.State.SelectedTopicName != topicName) return;
+
+            var rules = await JsInterop.EnumerateRulesAsync(SelectionState.NamespaceNameOnly, topicName, subscriptionName, token);
+            
+            if (SelectionState.State.SelectedTopicName != topicName) return;
+
+            if (rules != null)
+            {
+                // Check if there are rules other than the default rule
+                var customRules = rules.Where(r => r.Name != "$Default").ToList();
+                bool hasCustom = customRules.Any();
+
+                if (SelectionState.State.SelectedTopicName == topicName &&
+                    SelectionState.SubscriptionDict.TryGetValue(subscriptionName, out var subInfo))
+                {
+                    string? tooltip = null;
+                    if (hasCustom)
+                    {
+                        tooltip = string.Join("\n", customRules.Select(r => 
+                            $"{r.Name}: {(!string.IsNullOrEmpty(r.SqlExpression) ? r.SqlExpression : (r.FilterType == "Correlation" ? "Correlation" : r.FilterType))}"
+                        ));
+                    }
+
+                    // Update subInfo in dictionary
+                    SelectionState.SubscriptionDict[subscriptionName] = subInfo with 
+                    { 
+                        HasCustomFilter = hasCustom, 
+                        CustomFilterTooltip = tooltip 
+                    };
+                    
+                    // Trigger state change so selector updates
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (SelectionState.State.SelectedTopicName == topicName)
+            {
+                Console.WriteLine($"Error lazy loading rules for {ruleKey}: {ex.Message}");
+            }
+            else
+            {
+                // If we navigated away, remove from cache so we can retry if we navigate back
+                lock (_loadedSubscriptionRules)
+                {
+                    _loadedSubscriptionRules.Remove(ruleKey);
+                }
+            }
+        }
     }
 }

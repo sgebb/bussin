@@ -80,7 +80,7 @@ public class SimulatorTopologyTests
         // Setup the JS mock to return our message on the first Peek, and empty on the second Peek (after DLQ)
         _jsRuntimeMock.SetupSequence(js => js.InvokeAsync<List<ServiceBusMessage>>(
             "ServiceBusAPI.peekQueueMessages",
-            It.Is<object?[]>(args => args.Contains(queue) && !(bool)args.Last()!))) // not DLQ
+            It.Is<object?[]>(args => args.Contains(queue) && args.Length > 5 && args[5] is bool && !(bool)args[5]))) // not DLQ
             .ReturnsAsync(returnedMessages)
             .ReturnsAsync(new List<ServiceBusMessage>());
 
@@ -134,7 +134,7 @@ public class SimulatorTopologyTests
         // Mock Peek to return the message in the DLQ
         _jsRuntimeMock.Setup(js => js.InvokeAsync<List<ServiceBusMessage>>(
             "ServiceBusAPI.peekQueueMessagesBySequence",
-            It.Is<object?[]>(args => args.Contains(queue) && (bool)args.Last()!))) // is DLQ
+            It.Is<object?[]>(args => args.Contains(queue) && args.Length > 4 && args[4] is bool && (bool)args[4]))) // is DLQ
             .ReturnsAsync(new List<ServiceBusMessage> { originalMessage });
 
         // 2. Act: Run the resubmit operation

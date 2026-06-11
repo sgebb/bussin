@@ -1,15 +1,21 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using Bussin.Services
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject IPreferencesService PreferencesService
 @inject NavigationStateService NavState
 @inject AuthenticationStateProvider AuthStateProvider
 @inject INotificationService NotificationService
-
 @inject BackgroundSearchService BackgroundSearch
 @inject NavigationManager Navigation
+@inject ExplorerDialogService DialogService
+@inject PeekService PeekService
+@inject MessageListState MessageListState
+@inject IJSRuntime JSRuntime
+@inject EntitySelectionState SelectionState
+@inject HttpClient Http
 
 <CascadingValue Value="@_isInitialized" Name="LayoutInitialized">
     @if (NavState.RunWithoutLogin)
@@ -82,8 +88,26 @@
         NavState.OnSupportModalChange += OnSupportModalChange;
         NavState.OnChange += OnNavStateChange;
         NavState.OnAddConnectionStringModalChange += OnAddConnectionStringModalChange;
+        DialogService.OnChange += OnDialogStateChange;
         
         await InitializeIfAuthenticatedAsync();
+
+        try
+        {
+            buildInfo = await Http.GetFromJsonAsync<BuildInfoModel>("buildinfo.json");
+        }
+        catch
+        {
+            buildInfo = new BuildInfoModel
+            {
+                CommitHash = "dev",
+                CommitShort = "dev",
+                BuildTime = DateTime.UtcNow.ToString("o"),
+                Branch = "local",
+                Repository = "local-development",
+                VerifyUrl = "#"
+            };
+        }
     }
 
     private void OnNavStateChange()
@@ -102,6 +126,11 @@
     }
 
     private void OnAddConnectionStringModalChange()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnDialogStateChange()
     {
         InvokeAsync(StateHasChanged);
     }
@@ -164,6 +193,8 @@
         NavState.OnSupportModalChange -= OnSupportModalChange;
         NavState.OnChange -= OnNavStateChange;
         NavState.OnAddConnectionStringModalChange -= OnAddConnectionStringModalChange;
+        DialogService.OnChange -= OnDialogStateChange;
+        _selfReference?.Dispose();
     }
 
     private RenderFragment RenderLayoutShell() => __builder =>
@@ -178,6 +209,9 @@
                     <img src="favicon.svg" alt="bussin logo" class="mobile-logo" />
                     <span>bussin</span>
                 </a>
+                <button class="mobile-theme-toggle" @onclick="ToggleDarkMode" title="@(_isDarkMode ? "Switch to light mode" : "Switch to dark mode")">
+                    <i class="bi @(_isDarkMode ? "bi-moon-fill" : "bi-brightness-high-fill")"></i>
+                </button>
             </div>
 
             <!-- Sidebar drawer overlay on mobile -->
@@ -199,7 +233,6 @@
         </div>
 
         <div data-theme="@(_isDarkMode ? "dark" : "light")">
-            <BuildInfo />
             <NotificationsSidebar />
             <TasksSidebar OnViewSearchResults="@HandleViewSearchResults" />
         </div>
@@ -224,6 +257,25 @@
                                     <i class="bi bi-cup-hot-fill me-1"></i> Buy me a coffee
                                 </a>
                             </div>
+                            
+                            @if (buildInfo != null)
+                            {
+                                <div class="mt-4 pt-3 border-top text-center text-muted" style="font-size: 0.72rem; line-height: 1.4;">
+                                    <div class="mb-1">Version: <code>@buildInfo.CommitShort</code></div>
+                                    @if (buildInfo.BuildTime != "Unknown" && buildInfo.CommitShort != "dev")
+                                    {
+                                        <div class="mb-1">Built: @FormatBuildTime(buildInfo.BuildTime)</div>
+                                    }
+                                    @if (buildInfo.VerifyUrl != "#")
+                                    {
+                                        <a href="@buildInfo.VerifyUrl" target="_blank" class="text-muted text-decoration-underline" style="font-size: 0.68rem;">Verify source code</a>
+                                    }
+                                    else
+                                    {
+                                        <a href="https://github.com/sgebb/bussin" target="_blank" class="text-muted text-decoration-underline" style="font-size: 0.68rem;">GitHub Repository</a>
+                                    }
+                                </div>
+                            }
                         </div>
                     </div>
                 </div>
@@ -262,9 +314,160 @@
         @if (NavState.ShowAddConnectionStringModal)
         {
             <AddConnectionStringModal IsVisible="true"
+                                      IsDarkMode="@_isDarkMode"
                                       NamespaceToEdit="@NavState.EditingNamespace"
                                       OnClose="NavState.HideAddConnectionStringModal"
                                       OnSave="SaveManualNamespace" />
         }
+
+        <!-- Keyboard Shortcuts Modal -->
+        <KeyboardShortcutsModal IsVisible="@DialogService.ShowKeyboardShortcutsModal"
+                                IsDarkMode="@_isDarkMode"
+                                OnClose="@(() => DialogService.ShowKeyboardShortcutsModal = false)" />
     };
+
+    private DotNetObjectReference<MainLayout>? _selfReference;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfReference = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("registerKeyboardShortcuts", _selfReference);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnGlobalKeyDown(string key, bool ctrl)
+    {
+        var keyLower = key.ToLower();
+        if (ctrl)
+        {
+            if (keyLower == "k")
+            {
+                DialogService.ShowKeyboardShortcutsModal = !DialogService.ShowKeyboardShortcutsModal;
+                await InvokeAsync(StateHasChanged);
+            }
+            return;
+        }
+
+        if (key == "Escape" || keyLower == "escape")
+        {
+            if (DialogService.ShowKeyboardShortcutsModal)
+                DialogService.ShowKeyboardShortcutsModal = false;
+            else if (DialogService.ShowSendMessageModal)
+                DialogService.ShowSendMessageModal = false;
+            else if (DialogService.ShowMessageDetailModal)
+                DialogService.ShowMessageDetailModal = false;
+            else if (DialogService.ShowPeekLockModal)
+                DialogService.ShowPeekLockModal = false;
+            else if (DialogService.ShowMonitorModal)
+                DialogService.ShowMonitorModal = false;
+            else if (DialogService.ShowReceiveAndLockModal)
+                DialogService.ShowReceiveAndLockModal = false;
+            else if (DialogService.ShowPeekOptionsModal)
+                DialogService.ShowPeekOptionsModal = false;
+            else if (DialogService.ShowStatsModal)
+                DialogService.ShowStatsModal = false;
+            else if (DialogService.ShowExportOptionsModal)
+                DialogService.ShowExportOptionsModal = false;
+            else if (DialogService.ShowManageRulesModal)
+                DialogService.ShowManageRulesModal = false;
+            
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var uri = Navigation.Uri;
+        if (!uri.Contains("/explorer")) return;
+
+        if (keyLower == "r")
+        {
+            if (SelectionState.HasQueueOrSubscriptionSelected)
+            {
+                await PeekService.PeekMessagesAsync();
+            }
+        }
+        else if (keyLower == "s")
+        {
+            if (SelectionState.HasEntitySelected && !SelectionState.State.IsViewingDLQ)
+            {
+                DialogService.ShowSendMessageModal = true;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        else if (keyLower == "m")
+        {
+            if (SelectionState.HasQueueOrSubscriptionSelected)
+            {
+                DialogService.ShowMonitorModal = true;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        else if (keyLower == "d")
+        {
+            await ToggleDarkMode();
+            await InvokeAsync(StateHasChanged);
+        }
+        else if (key == "ArrowDown")
+        {
+            var messages = MessageListState.FilteredMessages;
+            if (messages.Any())
+            {
+                if (MessageListState.NavigatedIndex < messages.Count - 1)
+                {
+                    MessageListState.NavigatedIndex++;
+                    MessageListState.NotifyUpdate();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        else if (key == "ArrowUp")
+        {
+            var messages = MessageListState.FilteredMessages;
+            if (messages.Any())
+            {
+                if (MessageListState.NavigatedIndex > 0)
+                {
+                    MessageListState.NavigatedIndex--;
+                    MessageListState.NotifyUpdate();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        else if (key == "Enter")
+        {
+            var messages = MessageListState.FilteredMessages;
+            if (MessageListState.NavigatedIndex >= 0 && MessageListState.NavigatedIndex < messages.Count)
+            {
+                var msg = messages[MessageListState.NavigatedIndex];
+                MessageListState.SelectedMessage = msg;
+                DialogService.ShowMessageDetailModal = true;
+                MessageListState.NotifyUpdate();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private BuildInfoModel? buildInfo;
+
+    private string FormatBuildTime(string? buildTime)
+    {
+        if (string.IsNullOrEmpty(buildTime)) return "Unknown";
+        if (DateTime.TryParse(buildTime, out var dt))
+        {
+            return dt.ToString("yyyy-MM-dd HH:mm UTC");
+        }
+        return buildTime;
+    }
+
+    private class BuildInfoModel
+    {
+        public string CommitHash { get; set; } = "";
+        public string CommitShort { get; set; } = "";
+        public string BuildTime { get; set; } = "";
+        public string Branch { get; set; } = "";
+        public string Repository { get; set; } = "";
+        public string VerifyUrl { get; set; } = "";
+    }
 }

@@ -1,0 +1,59 @@
+@if (IsVisible)
+{
+    <div class="modal show d-block" tabindex="-1" data-theme="@(IsDarkMode ? "dark" : "light")" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 9999;" @onclick="OnClose">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2">
+                        <i class="bi bi-keyboard-fill text-primary"></i> Keyboard Shortcuts
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="OnClose"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-4">Enhance your workflow with global keyboard commands. Shortcuts are active when not typing in text fields.</p>
+                    
+                    <div class="d-flex flex-column gap-3">
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                            <span>Show Shortcuts Help</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">Ctrl + K</kbd>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                            <span>Refresh / Re-peek Messages</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">R</kbd>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                            <span>Open Send Message Modal</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">S</kbd>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                            <span>Open Live Monitor Modal</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">M</kbd>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                            <span>Toggle Dark Mode</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">D</kbd>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                            <span>Navigate Message List</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">↑ / ↓</kbd>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                            <span>Open Selected Message</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">Enter</kbd>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2">
+                            <span>Close active modal / overlay</span>
+                            <kbd class="px-2 py-1 bg-dark text-white border border-secondary border-opacity-50">Esc</kbd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public bool IsDarkMode { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+}

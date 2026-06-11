@@ -123,20 +123,20 @@
 
     /* Theme Layout Elements matching website styles.css */
     --bg-color: #03060D;
-    --surface-color: #0C1422;
-    --surface-border: rgba(34, 194, 183, 0.12);
+    --surface-color: #101C30;
+    --surface-border: rgba(34, 194, 183, 0.22);
 
     --text-color: #E7F5FF;
     --header-text: #FFFFFF;
     --text-muted: #9CDBE8;
 
-    --sidebar-bg: #070C14;
-    --card-bg: #0C1422;
-    --border-color: rgba(255, 255, 255, 0.06);
-    --input-bg: #050A12;
-    --input-border: rgba(34, 194, 183, 0.2);
+    --sidebar-bg: #070D18;
+    --card-bg: #101C30;
+    --border-color: rgba(255, 255, 255, 0.12);
+    --input-bg: #080F1B;
+    --input-border: rgba(34, 194, 183, 0.3);
 
-    --hover-bg: rgba(34, 194, 183, 0.08);
+    --hover-bg: rgba(34, 194, 183, 0.14);
 
     /* Invert black logo to white in dark mode for high contrast */
     --logo-filter: brightness(0) invert(1);
@@ -1421,4 +1421,62 @@ mark {
     opacity: 1.0 !important;
     color: var(--destructive-hover) !important;
     transform: scale(1.2) !important;
+}
+
+/* Custom premium floating card styling for Explorer Page */
+@media (min-width: 768px) {
+    .explorer-layout {
+        padding: 1.5rem !important;
+        gap: 1.25rem !important;
+        background: transparent !important;
+    }
+
+    .explorer-header {
+        border: 1px solid var(--border-color) !important;
+        border-radius: 16px !important;
+        box-shadow: var(--card-shadow, 0 4px 20px rgba(0, 0, 0, 0.05)) !important;
+    }
+
+    .explorer-entities {
+        border: 1px solid var(--border-color) !important;
+        border-radius: 16px !important;
+        box-shadow: var(--card-shadow, 0 4px 20px rgba(0, 0, 0, 0.05)) !important;
+    }
+
+    .explorer-messages {
+        padding: 0 !important;
+    }
+
+    .explorer-messages-list {
+        border: 1px solid var(--border-color) !important;
+        border-radius: 16px !important;
+        box-shadow: var(--card-shadow, 0 4px 20px rgba(0, 0, 0, 0.05)) !important;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .explorer-layout {
+        padding: 0.75rem !important;
+        gap: 0.75rem !important;
+        background: transparent !important;
+    }
+
+    .explorer-header {
+        border: 1px solid var(--border-color) !important;
+        border-radius: 12px !important;
+    }
+
+    .explorer-entities {
+        border: 1px solid var(--border-color) !important;
+        border-radius: 12px !important;
+    }
+
+    .explorer-messages {
+        padding: 0 !important;
+    }
+
+    .explorer-messages-list {
+        border: 1px solid var(--border-color) !important;
+        border-radius: 12px !important;
+    }
 }

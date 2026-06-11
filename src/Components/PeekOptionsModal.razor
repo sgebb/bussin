@@ -1,4 +1,7 @@
 @using Bussin.Models
+@using Bussin.Services
+@inject IServiceBusJsInteropService JsInterop
+@inject PeekService PeekService
 
 <style>
     /* Hide number input spinners */
@@ -46,7 +49,7 @@
                                    id="fromSequence" 
                                    @bind="fromSequenceNumber" 
                                    min="0" 
-                                   disabled="@peekFromNewest">
+                                   disabled="@(peekFromNewest || isLiveMonitorMode)">
                         </div>
                     </div>
                     
@@ -66,26 +69,109 @@
                         </div>
                     </div>
 
-                    @if (!IsViewingDLQ)
+                    <!-- Live Monitor Mode -->
+                    <div class="card mb-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
+                        <div class="card-body py-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="liveMonitorMode" checked="@isLiveMonitorMode" @onchange="OnLiveMonitorModeChanged">
+                                <label class="form-check-label" for="liveMonitorMode">
+                                    <i class="bi bi-broadcast text-success me-1"></i>
+                                    <strong>Live Monitor Mode</strong>
+                                    <i class="bi bi-info-circle text-muted ms-1" 
+                                       style="cursor: help; font-size: 0.85em;" 
+                                       title="Continuously peek messages in real-time as they arrive. Messages are not consumed or deleted."></i>
+                                </label>
+                            </div>
+                            @if (isLiveMonitorMode)
+                            {
+                                <small class="text-muted d-block mt-1 ms-4">
+                                    Peek messages in real-time as they arrive. Messages are not consumed.
+                                </small>
+                            }
+                        </div>
+                    </div>
+
+                    @if (RequiresSession)
                     {
-                        <!-- Live Monitor Mode -->
                         <div class="card mb-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
+                            <div class="card-header py-2 d-flex align-items-center">
+                                <i class="bi bi-tag-fill me-2"></i>
+                                <span>Session Settings</span>
+                            </div>
                             <div class="card-body py-2">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="liveMonitorMode" checked="@isLiveMonitorMode" @onchange="OnLiveMonitorModeChanged">
-                                    <label class="form-check-label" for="liveMonitorMode">
-                                        <i class="bi bi-broadcast text-success me-1"></i>
-                                        <strong>Live Monitor Mode</strong>
-                                        <i class="bi bi-info-circle text-muted ms-1" 
-                                           style="cursor: help; font-size: 0.85em;" 
-                                           title="Continuously peek messages in real-time as they arrive. Messages are not consumed or deleted."></i>
-                                    </label>
+                                <div class="mb-3">
+                                    <label for="sessionIdInput" class="form-label small mb-1">Session ID</label>
+                                    <div class="input-group input-group-sm" style="position: relative;">
+                                        <input type="text" class="form-control" id="sessionIdInput" @bind="sessionId" placeholder="Enter session ID...">
+                                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" @onclick="LoadActiveSessions" disabled="@isLoadingSessions">
+                                            @if (isLoadingSessions)
+                                            {
+                                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                            }
+                                            else
+                                            {
+                                                <span>Select Session</span>
+                                            }
+                                        </button>
+                                        @if (activeSessions != null)
+                                        {
+                                            <ul class="dropdown-menu dropdown-menu-end show" style="display: block; max-height: 200px; overflow-y: auto; z-index: 1070; position: absolute; right: 0; top: 100%;">
+                                                @if (activeSessions.Count == 0)
+                                                {
+                                                    <li><span class="dropdown-item-text text-muted">No active sessions found</span></li>
+                                                }
+                                                else
+                                                {
+                                                    @foreach (var sess in activeSessions)
+                                                    {
+                                                        <li><button class="dropdown-item" type="button" @onclick="() => SelectSession(sess)">@sess</button></li>
+                                                    }
+                                                }
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><button class="dropdown-item text-danger" type="button" @onclick="CloseSessionsDropdown">Close List</button></li>
+                                            </ul>
+                                        }
+                                    </div>
                                 </div>
-                                @if (isLiveMonitorMode)
+
+                                @if (!string.IsNullOrWhiteSpace(sessionId))
                                 {
-                                    <small class="text-muted d-block mt-1 ms-4">
-                                        Peek messages in real-time as they arrive. Messages are not consumed.
-                                    </small>
+                                    <div class="p-2 border border-secondary border-opacity-25 rounded" style="background: rgba(255,255,255,0.02);">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="small fw-semibold">Session State</span>
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-link py-0 text-decoration-none" style="font-size: 0.8rem;" type="button" @onclick="GetSessionState" disabled="@isFetchingState">
+                                                    @if (isFetchingState)
+                                                    {
+                                                        <span>Loading...</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span><i class="bi bi-arrow-clockwise"></i> Get/Refresh</span>
+                                                    }
+                                                </button>
+                                                @if (!string.IsNullOrEmpty(sessionStateValue))
+                                                {
+                                                    <button class="btn btn-link py-0 text-danger text-decoration-none" style="font-size: 0.8rem;" type="button" @onclick="ClearSessionState" disabled="@isSavingState">Clear</button>
+                                                }
+                                            </div>
+                                        </div>
+
+                                        <textarea class="form-control form-control-sm" style="font-size: 0.85rem; font-family: monospace; background: rgba(0,0,0,0.2); color: #22c55e; border-color: rgba(255,255,255,0.1);" rows="3" @bind="sessionStateValue" placeholder="Session state is empty or not loaded..."></textarea>
+                                        
+                                        @if (sessionStateValueHasChanged)
+                                        {
+                                            <div class="d-flex justify-content-end mt-2">
+                                                <button type="button" class="btn btn-primary btn-sm px-3" @onclick="SaveSessionState" disabled="@isSavingState">
+                                                    @if (isSavingState)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                                    }
+                                                    Save State
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
                                 }
                             </div>
                         </div>
@@ -156,7 +242,7 @@
                             <i class="bi bi-search"></i> Peek
                         </button>
                     }
-            </div>
+                </div>
         </div>
     </div>
     </div>
@@ -171,6 +257,9 @@
     [Parameter] public PeekOptions? InitialOptions { get; set; }
     [Parameter] public long MessageCount { get; set; } = 0;
     [Parameter] public bool IsViewingDLQ { get; set; } = false;
+    [Parameter] public bool RequiresSession { get; set; } = false;
+    [Parameter] public string NamespaceName { get; set; } = "";
+    [Parameter] public string EntityPath { get; set; } = "";
     
     /// <summary>
     /// Threshold above which we suggest background search when filters are active
@@ -186,6 +275,16 @@
     private bool isLiveMonitorMode = false;
     private string? validationError = null;
     private bool mouseDownInContent = false;
+
+    private string sessionId = "";
+    private List<string>? activeSessions = null;
+    private bool isLoadingSessions = false;
+    
+    private string sessionStateValue = "";
+    private string originalSessionStateValue = "";
+    private bool isFetchingState = false;
+    private bool isSavingState = false;
+    private bool sessionStateValueHasChanged => sessionStateValue != originalSessionStateValue;
 
     private bool HasMessageIdFilter => !string.IsNullOrWhiteSpace(messageIdFilter);
     private bool HasActiveFilters => !string.IsNullOrWhiteSpace(bodyFilter) || !string.IsNullOrWhiteSpace(messageIdFilter) || !string.IsNullOrWhiteSpace(subjectFilter);
@@ -209,6 +308,7 @@
                 messageIdFilter = InitialOptions.MessageIdFilter;
                 subjectFilter = InitialOptions.SubjectFilter;
                 peekFromNewest = InitialOptions.PeekFromNewest;
+                sessionId = InitialOptions.SessionId;
             }
             else
             {
@@ -218,8 +318,13 @@
                 messageIdFilter = "";
                 subjectFilter = "";
                 peekFromNewest = false;
+                sessionId = "";
             }
             
+            activeSessions = null;
+            sessionStateValue = "";
+            originalSessionStateValue = "";
+
             // Re-validate LIFO constraint
             if (!AllowReversePeek && peekFromNewest)
             {
@@ -343,7 +448,8 @@
             BodyFilter = bodyFilter?.Trim() ?? "",
             MessageIdFilter = messageIdFilter?.Trim() ?? "",
             SubjectFilter = subjectFilter?.Trim() ?? "",
-            PeekFromNewest = peekFromNewest
+            PeekFromNewest = peekFromNewest,
+            SessionId = RequiresSession ? (sessionId?.Trim() ?? "") : ""
         };
         
         await OnPeek.InvokeAsync(options);
@@ -360,7 +466,8 @@
             BodyFilter = bodyFilter?.Trim() ?? "",
             MessageIdFilter = messageIdFilter?.Trim() ?? "",
             SubjectFilter = subjectFilter?.Trim() ?? "",
-            PeekFromNewest = false
+            PeekFromNewest = false,
+            SessionId = RequiresSession ? (sessionId?.Trim() ?? "") : ""
         };
         
         await OnBackgroundSearch.InvokeAsync(options);
@@ -373,6 +480,8 @@
         {
             // Reset other options when enabling live monitor
             peekFromNewest = false;
+            fromSequenceNumber = 0;
+            maxCount = 50;
         }
     }
 
@@ -380,6 +489,117 @@
     {
         await OnClose.InvokeAsync();
         await OnStartLiveMonitor.InvokeAsync();
+    }
+
+    private async Task LoadActiveSessions()
+    {
+        if (activeSessions != null)
+        {
+            activeSessions = null;
+            return;
+        }
+
+        isLoadingSessions = true;
+        activeSessions = null;
+        StateHasChanged();
+        try
+        {
+            var token = await PeekService.GetTokenAsync(EntityPath);
+            activeSessions = await JsInterop.GetMessageSessionsAsync(NamespaceName, EntityPath, token);
+        }
+        catch (Exception ex)
+        {
+            validationError = $"Failed to load sessions: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingSessions = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SelectSession(string sess)
+    {
+        sessionId = sess;
+        activeSessions = null;
+        sessionStateValue = "";
+        originalSessionStateValue = "";
+        _ = GetSessionState();
+    }
+
+    private void CloseSessionsDropdown()
+    {
+        activeSessions = null;
+    }
+
+    private async Task GetSessionState()
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return;
+
+        isFetchingState = true;
+        StateHasChanged();
+        try
+        {
+            var token = await PeekService.GetTokenAsync(EntityPath);
+            sessionStateValue = await JsInterop.GetSessionStateAsync(NamespaceName, EntityPath, token, sessionId);
+            originalSessionStateValue = sessionStateValue;
+        }
+        catch (Exception ex)
+        {
+            validationError = $"Failed to get session state: {ex.Message}";
+        }
+        finally
+        {
+            isFetchingState = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveSessionState()
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return;
+
+        isSavingState = true;
+        StateHasChanged();
+        try
+        {
+            var token = await PeekService.GetTokenAsync(EntityPath);
+            await JsInterop.SetSessionStateAsync(NamespaceName, EntityPath, token, sessionId, sessionStateValue);
+            originalSessionStateValue = sessionStateValue;
+        }
+        catch (Exception ex)
+        {
+            validationError = $"Failed to save session state: {ex.Message}";
+        }
+        finally
+        {
+            isSavingState = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClearSessionState()
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return;
+
+        isSavingState = true;
+        StateHasChanged();
+        try
+        {
+            var token = await PeekService.GetTokenAsync(EntityPath);
+            await JsInterop.SetSessionStateAsync(NamespaceName, EntityPath, token, sessionId, null);
+            sessionStateValue = "";
+            originalSessionStateValue = "";
+        }
+        catch (Exception ex)
+        {
+            validationError = $"Failed to clear session state: {ex.Message}";
+        }
+        finally
+        {
+            isSavingState = false;
+            StateHasChanged();
+        }
     }
 }
 
