@@ -40,8 +40,8 @@ jobs:
         run: |
           cd client-js
           npm ci --ignore-scripts
-          npm test
           npm run build
+          npm test
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
