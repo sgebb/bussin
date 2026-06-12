@@ -27,7 +27,7 @@
                     <div class="mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="mb-0">Active Filters</h6>
-                            <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="RefreshRules" disabled="@isLoading" tabindex="10">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="RefreshRules" disabled="@(isLoading || IsAutoForwardingEnabled)" tabindex="10">
                                 @if (isLoading)
                                 {
                                     <span class="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -122,75 +122,78 @@
                         </div>
                     </div>
 
-                    <hr class="my-3" />
+                    @if (!IsAutoForwardingEnabled)
+                    {
+                        <hr class="my-3" />
 
-                    <!-- Add New Rule Form -->
-                    <div class="card p-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
-                        <h6 class="mb-3">Add Filter</h6>
-                        <div class="row g-3 mb-3">
-                            <div class="col-sm-6">
-                                <label for="ruleNameInput" class="form-label small mb-1">Filter Name</label>
-                                <input type="text" class="form-control form-control-sm" id="ruleNameInput" value="@newRuleName" @oninput="(e) => newRuleName = e.Value?.ToString() ?? string.Empty" placeholder="e.g. MyFilter" tabindex="1">
+                        <!-- Add New Rule Form -->
+                        <div class="card p-3" style="background-color: var(--bg-color); border-color: var(--border-color);">
+                            <h6 class="mb-3">Add Filter</h6>
+                            <div class="row g-3 mb-3">
+                                <div class="col-sm-6">
+                                    <label for="ruleNameInput" class="form-label small mb-1">Filter Name</label>
+                                    <input type="text" class="form-control form-control-sm" id="ruleNameInput" value="@newRuleName" @oninput="(e) => newRuleName = e.Value?.ToString() ?? string.Empty" placeholder="e.g. MyFilter" tabindex="1">
+                                </div>
+                                <div class="col-sm-6">
+                                    <label for="filterTypeSelect" class="form-label small mb-1">Filter Type</label>
+                                    <select class="form-select form-select-sm" id="filterTypeSelect" @bind="newFilterType" tabindex="2">
+                                        <option value="Sql">SQL Filter</option>
+                                        <option value="Correlation">Correlation Filter</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="col-sm-6">
-                                <label for="filterTypeSelect" class="form-label small mb-1">Filter Type</label>
-                                <select class="form-select form-select-sm" id="filterTypeSelect" @bind="newFilterType" tabindex="2">
-                                    <option value="Sql">SQL Filter</option>
-                                    <option value="Correlation">Correlation Filter</option>
-                                </select>
+
+                            @if (newFilterType == "Sql")
+                            {
+                                <div class="mb-3">
+                                    <label for="sqlExprInput" class="form-label small mb-1">SQL Expression</label>
+                                    <input type="text" class="form-control form-control-sm" id="sqlExprInput" @bind="newSqlExpression" placeholder="e.g. user.priority = 'high' OR sys.Label = 'alert'" tabindex="3">
+                                    <div class="form-text text-muted" style="font-size: 0.75rem;">A standard SQL-92 query expression. Use <code>sys.</code> or custom headers.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="actionExprInput" class="form-label small mb-1">Action Expression (Optional)</label>
+                                    <input type="text" class="form-control form-control-sm" id="actionExprInput" @bind="newActionExpression" placeholder="e.g. SET user.processed = 'true'" tabindex="4">
+                                    <div class="form-text text-muted" style="font-size: 0.75rem;">SQL Action executed on matching messages. Leave empty if none.</div>
+                                </div>
+                            }
+                            else if (newFilterType == "Correlation")
+                            {
+                                <div class="row g-2 mb-3">
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">Correlation ID</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="newCorrId" tabindex="3">
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">Message ID</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="newMsgId" tabindex="4">
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">Label (Subject)</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="newLabel" tabindex="5">
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">Session ID</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="newSessionId" tabindex="6">
+                                    </div>
+                                </div>
+                            }
+
+                            <div class="d-flex justify-content-end gap-2 mt-3">
+                                <button type="button" class="btn btn-primary btn-sm px-4" @onclick="AddFilterRule" disabled="@(isLoading || string.IsNullOrWhiteSpace(newRuleName))" tabindex="7">
+                                    @if (isLoading)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    }
+                                    Add Filter
+                                </button>
                             </div>
                         </div>
 
-                        @if (newFilterType == "Sql")
-                        {
-                            <div class="mb-3">
-                                <label for="sqlExprInput" class="form-label small mb-1">SQL Expression</label>
-                                <input type="text" class="form-control form-control-sm" id="sqlExprInput" @bind="newSqlExpression" placeholder="e.g. user.priority = 'high' OR sys.Label = 'alert'" tabindex="3">
-                                <div class="form-text text-muted" style="font-size: 0.75rem;">A standard SQL-92 query expression. Use <code>sys.</code> or custom headers.</div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="actionExprInput" class="form-label small mb-1">Action Expression (Optional)</label>
-                                <input type="text" class="form-control form-control-sm" id="actionExprInput" @bind="newActionExpression" placeholder="e.g. SET user.processed = 'true'" tabindex="4">
-                                <div class="form-text text-muted" style="font-size: 0.75rem;">SQL Action executed on matching messages. Leave empty if none.</div>
-                            </div>
-                        }
-                        else if (newFilterType == "Correlation")
-                        {
-                            <div class="row g-2 mb-3">
-                                <div class="col-sm-6">
-                                    <label class="form-label small mb-1">Correlation ID</label>
-                                    <input type="text" class="form-control form-control-sm" @bind="newCorrId" tabindex="3">
-                                </div>
-                                <div class="col-sm-6">
-                                    <label class="form-label small mb-1">Message ID</label>
-                                    <input type="text" class="form-control form-control-sm" @bind="newMsgId" tabindex="4">
-                                </div>
-                                <div class="col-sm-6">
-                                    <label class="form-label small mb-1">Label (Subject)</label>
-                                    <input type="text" class="form-control form-control-sm" @bind="newLabel" tabindex="5">
-                                </div>
-                                <div class="col-sm-6">
-                                    <label class="form-label small mb-1">Session ID</label>
-                                    <input type="text" class="form-control form-control-sm" @bind="newSessionId" tabindex="6">
-                                </div>
-                            </div>
-                        }
-
-                        <div class="d-flex justify-content-end gap-2 mt-3">
-                            <button type="button" class="btn btn-primary btn-sm px-4" @onclick="AddFilterRule" disabled="@(isLoading || string.IsNullOrWhiteSpace(newRuleName))" tabindex="7">
-                                @if (isLoading)
-                                {
-                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                                }
-                                Add Filter
-                            </button>
+                        <div class="text-danger mt-3 text-center small fw-semibold">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            WARNING: Subscription filters limit which messages are accepted by the subscriber; incorrect filters will cause messages to be lost. This affects the live subscription in Azure Service Bus.
                         </div>
-                    </div>
-
-                    <div class="text-danger mt-3 text-center small fw-semibold">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                        WARNING: Subscription filters limit which messages are accepted by the subscriber; incorrect filters will cause messages to be lost. This affects the live subscription in Azure Service Bus.
-                    </div>
+                    }
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="Close" tabindex="8">Close</button>
@@ -207,6 +210,7 @@
     [Parameter] public string TopicName { get; set; } = "";
     [Parameter] public string SubscriptionName { get; set; } = "";
     [Parameter] public string EntityPath { get; set; } = "";
+    [Parameter] public bool IsAutoForwardingEnabled { get; set; }
 
     private List<SubscriptionRule>? rulesList = null;
     private bool isLoading = false;
@@ -242,6 +246,15 @@
         errorMessage = null;
         StateHasChanged();
 
+        if (IsAutoForwardingEnabled)
+        {
+            errorMessage = "Listing and managing filters via AMQP data connections is not supported on subscriptions with auto-forwarding enabled. Please use the Azure Portal or ARM client to manage filters on this subscription.";
+            rulesList = new List<SubscriptionRule>();
+            isLoading = false;
+            StateHasChanged();
+            return;
+        }
+
         try
         {
             var token = await PeekService.GetTokenAsync(EntityPath);
@@ -249,7 +262,14 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to fetch rules: {ex.Message}";
+            if (ex.Message.Contains("Cannot create a message browser on an entity with auto-forwarding enabled", StringComparison.OrdinalIgnoreCase))
+            {
+                errorMessage = "Listing and managing filters via AMQP data connections is not supported on subscriptions with auto-forwarding enabled. Please use the Azure Portal or ARM client to manage filters on this subscription.";
+            }
+            else
+            {
+                errorMessage = $"Failed to fetch rules: {ex.Message}";
+            }
         }
         finally
         {
@@ -260,7 +280,7 @@
 
     private async Task AddFilterRule()
     {
-        if (string.IsNullOrWhiteSpace(newRuleName)) return;
+        if (string.IsNullOrWhiteSpace(newRuleName) || IsAutoForwardingEnabled) return;
 
         isLoading = true;
         errorMessage = null;
@@ -323,6 +343,7 @@
 
     private async Task ConfirmDeleteRule(string ruleName)
     {
+        if (IsAutoForwardingEnabled) return;
         isLoading = true;
         errorMessage = null;
         StateHasChanged();

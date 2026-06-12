@@ -66,11 +66,14 @@
         <!-- Filters Actions -->
         <div class="action-btn-group">
             <div class="action-btn-group-title">Filters</div>
-            <button class="btn btn-action btn-warning w-100 @(SelectedSubscriptionHasAutoforwarding ? "disabled-grey" : "")"
+            <button class="btn btn-action btn-warning w-100"
                     @onclick="OnManageFilters"
-                    disabled="@SelectedSubscriptionHasAutoforwarding"
-                    title="@(SelectedSubscriptionHasAutoforwarding ? "Filters cannot be managed on subscriptions with auto-forwarding enabled" : "Manage Filters")">
+                    title="@(SelectedSubscriptionHasAutoforwarding ? "Filters cannot be managed via AMQP on auto-forwarded subscriptions" : "Manage Filters")">
                 <i class="bi bi-funnel"></i> Manage Filters
+                @if (SelectedSubscriptionHasAutoforwarding)
+                {
+                    <i class="bi bi-exclamation-triangle-fill ms-1" style="font-size: 0.85rem;" title="Auto-forwarding enabled"></i>
+                }
             </button>
         </div>
     }

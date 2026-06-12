@@ -179,7 +179,7 @@
                                     CurrentResubmitOperation="@PeekService.CurrentResubmitOperation"
                                     SelectedEntityRequiresSession="@SelectionState.SelectedEntityRequiresSession"
                                     IsSubscriptionSelected="@SelectionState.State.IsSubscriptionSelected"
-                                    SelectedSubscriptionHasAutoforwarding="@SelectedSubscriptionHasAutoforwarding"
+                                    SelectedSubscriptionHasAutoforwarding="@(SelectionState.State.SelectedSubscriptionName != null && SelectionState.SubscriptionDict.TryGetValue(SelectionState.State.SelectedSubscriptionName, out var sidebarSub) && !string.IsNullOrEmpty(sidebarSub.ForwardTo))"
                                     OnShowSendMessage="@(() => DialogService.ShowSendMessageModal = true)"
                                     OnToggleDLQ="@SelectionState.ToggleDLQ"
                                     OnPeek="@(() => PeekService.PeekMessagesAsync())"
@@ -293,6 +293,7 @@
                   TopicName="@SelectionState.State.SelectedTopicName"
                   SubscriptionName="@SelectionState.State.SelectedSubscriptionName"
                   EntityPath="@SelectionState.State.GetEntityPath()"
+                  IsAutoForwardingEnabled="@(SelectionState.State.SelectedSubscriptionName != null && SelectionState.SubscriptionDict.TryGetValue(SelectionState.State.SelectedSubscriptionName, out var modalSub) && !string.IsNullOrEmpty(modalSub.ForwardTo))"
                   OnClose="@(() => DialogService.ShowManageRulesModal = false)" />
 
 <ExportOptionsModal IsVisible="@DialogService.ShowExportOptionsModal"
@@ -567,18 +568,7 @@
         SearchStateService.OnChange -= StateHasChanged;
     }
 
-    private bool SelectedSubscriptionHasAutoforwarding
-    {
-        get
-        {
-            if (SelectionState.State.SelectedSubscriptionName != null &&
-                SelectionState.SubscriptionDict.TryGetValue(SelectionState.State.SelectedSubscriptionName, out var sub))
-            {
-                return !string.IsNullOrEmpty(sub.ForwardTo);
-            }
-            return false;
-        }
-    }
+
 
     private void OnSelectionStateChange()
     {
@@ -598,9 +588,6 @@
             var subs = SelectionState.Subscriptions;
             foreach (var sub in subs)
             {
-                // Skip if subscription has auto-forwarding enabled, as ASB throws an error trying to read/peek rules on autoforwarded entities
-                if (!string.IsNullOrEmpty(sub.ForwardTo)) continue;
-
                 string ruleKey = $"{currentTopic}/{sub.Name}";
                 bool alreadyLoaded;
                 lock (_loadedSubscriptionRules)
@@ -631,6 +618,21 @@
         try
         {
             if (SelectionState.State.SelectedTopicName != topicName) return;
+
+            // Check if subscription has auto-forwarding enabled
+            if (SelectionState.SubscriptionDict.TryGetValue(subscriptionName, out var sub) && !string.IsNullOrEmpty(sub.ForwardTo))
+            {
+                if (SelectionState.State.SelectedTopicName == topicName)
+                {
+                    SelectionState.SubscriptionDict[subscriptionName] = sub with
+                    {
+                        HasCustomFilter = false,
+                        CustomFilterTooltip = "Filters cannot be loaded via AMQP on auto-forwarded subscriptions"
+                    };
+                    await InvokeAsync(StateHasChanged);
+                }
+                return;
+            }
 
             // Get token for the subscription path
             string entityPath = $"{topicName}/subscriptions/{subscriptionName}";
