@@ -452,6 +452,7 @@
             SessionId = RequiresSession ? (sessionId?.Trim() ?? "") : ""
         };
         
+        await OnClose.InvokeAsync();
         await OnPeek.InvokeAsync(options);
     }
     
@@ -470,6 +471,7 @@
             SessionId = RequiresSession ? (sessionId?.Trim() ?? "") : ""
         };
         
+        await OnClose.InvokeAsync();
         await OnBackgroundSearch.InvokeAsync(options);
     }
 

@@ -15,22 +15,22 @@
 }
 
 .footer-icon-btn:hover .bi-brightness-high-fill {
-    color: #ffd700;
+    color: var(--warning-color, #ffd700);
     /* Yellow for Sun */
 }
 
 .footer-icon-btn:hover .bi-moon-fill {
-    color: #87ceeb;
+    color: var(--info-color, #87ceeb);
     /* Light Blue for Moon */
 }
 
-/* Hammer icon - turn brown on hover */
+/* Hammer icon - turn brown/accent on hover */
 .footer-icon-btn .bi-hammer {
     transition: color 0.3s ease;
 }
 
 .footer-icon-btn:hover .bi-hammer {
-    color: #8b4513;
+    color: var(--tasks-accent, #8b4513);
 }
 
 /* Heart stays as is, maybe slight scale */
@@ -39,7 +39,7 @@
 }
 
 .footer-icon-btn:hover .bi-heart-fill {
-    color: #dc3545;
+    color: var(--destructive-color, #dc3545);
     transform: scale(1.1);
 }
 
@@ -49,8 +49,8 @@
 }
 
 .user-section:hover i {
-    color: #0dcaf0 !important;
-    /* Cyan for user icon */
+    color: var(--primary-color, #0dcaf0) !important;
+    /* Cyan/teal for user icon */
 }
 
 /* Home favorite star hover */
@@ -59,6 +59,6 @@
 }
 
 .favorite-btn:hover {
-    color: #ffc107 !important;
+    color: var(--warning-color, #ffc107) !important;
     transform: scale(1.2);
 }

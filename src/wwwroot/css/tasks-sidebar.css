@@ -23,12 +23,12 @@
 .tasks-float-btn:hover {
     transform: scale(1.1);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-    color: #fd7e14;
+    color: var(--tasks-accent, #fd7e14);
 }
 
 /* Active State */
 .tasks-float-btn.active {
-    background: #fd7e14;
+    background: var(--tasks-accent, #fd7e14);
     color: white;
     box-shadow: 0 4px 15px rgba(253, 126, 20, 0.4);
 }
@@ -67,8 +67,8 @@
     top: -2px;
     right: -2px;
     background: white;
-    color: #fd7e14;
-    border: 2px solid #fd7e14;
+    color: var(--tasks-accent, #fd7e14);
+    border: 2px solid var(--tasks-accent, #fd7e14);
     border-radius: 50%;
     width: 24px;
     height: 24px;
@@ -102,17 +102,7 @@
     animation: slideUpFade 0.3s ease-out;
 }
 
-@keyframes slideUpFade {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
+/* slideUpFade animation is defined in notifications-sidebar.css */
 
 .tasks-header {
     padding: 16px 20px;

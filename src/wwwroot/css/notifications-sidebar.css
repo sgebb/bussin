@@ -50,20 +50,20 @@
 }
 
 .count-success {
-    background: #28a745;
+    background: var(--success-color, #28a745);
 }
 
 .count-info {
-    background: #17a2b8;
+    background: var(--primary-color, #17a2b8);
 }
 
 .count-warning {
-    background: #ffc107;
-    color: #000;
+    background: var(--warning-color, #ffc107);
+    color: var(--primary-fg, #000);
 }
 
 .count-error {
-    background: #dc3545;
+    background: var(--destructive-color, #dc3545);
 }
 
 /* Sidebar - Fixed Height Floating */
@@ -159,19 +159,19 @@
 }
 
 .notification-success {
-    border-left-color: #28a745;
+    border-left-color: var(--success-color, #28a745);
 }
 
 .notification-error {
-    border-left-color: #dc3545;
+    border-left-color: var(--destructive-color, #dc3545);
 }
 
 .notification-warning {
-    border-left-color: #ffc107;
+    border-left-color: var(--warning-color, #ffc107);
 }
 
 .notification-info {
-    border-left-color: #17a2b8;
+    border-left-color: var(--primary-color, #17a2b8);
 }
 
 .notification-content {
@@ -187,19 +187,19 @@
 }
 
 .notification-success .notification-icon {
-    color: #28a745;
+    color: var(--success-color, #28a745);
 }
 
 .notification-error .notification-icon {
-    color: #dc3545;
+    color: var(--destructive-color, #dc3545);
 }
 
 .notification-warning .notification-icon {
-    color: #ffc107;
+    color: var(--warning-color, #ffc107);
 }
 
 .notification-info .notification-icon {
-    color: #17a2b8;
+    color: var(--primary-color, #17a2b8);
 }
 
 .notification-text {

@@ -71,6 +71,9 @@
     --warning-color: var(--amber-500);
     --warning-hover: var(--amber-600);
 
+    --info-color: #0284C7;
+    --tasks-accent: #E05A00;
+
     --link-color: var(--teal-700);
     --link-hover: var(--teal-800);
 
@@ -87,6 +90,9 @@
     --input-bg: #FFFFFF;
     --input-border: var(--slate-300);
 
+    --content-bg: var(--bg-color);
+    --top-row-bg: var(--surface-color);
+
     --hover-bg: var(--slate-100);
 
     --header-text: var(--slate-900);
@@ -97,11 +103,14 @@
 
 /* Dark Mode Overrides - Matched directly with website */
 [data-theme='dark'] {
+    /* Subtle pride gradient opacity in dark mode */
+    --pride-opacity: 0.045;
+
     /* Brand Accent Colors */
     --primary-color: #22C2B7;
     --primary-hover: #1CB0A5;
-    --primary-light: rgba(34, 194, 183, 0.1);
-    --primary-fg: #03060D;
+    --primary-light: rgba(34, 194, 183, 0.12);
+    --primary-fg: #0B1120;
 
     --secondary-color: rgba(34, 194, 183, 0.12);
     --secondary-hover: rgba(34, 194, 183, 0.2);
@@ -118,25 +127,34 @@
     --warning-color: #F59E0B;
     --warning-hover: #D97706;
 
+    --info-color: #38BDF8;
+    --tasks-accent: #FD7E14;
+
     --link-color: #22C2B7;
     --link-hover: #7FF4E1;
 
-    /* Theme Layout Elements matching website styles.css */
-    --bg-color: #03060D;
-    --surface-color: #101C30;
+    /* Theme Layout Elements — lifted for surface differentiation */
+    --bg-color: #0B1120;
+    --surface-color: #152035;
     --surface-border: rgba(34, 194, 183, 0.22);
 
     --text-color: #E7F5FF;
     --header-text: #FFFFFF;
     --text-muted: #9CDBE8;
 
-    --sidebar-bg: #070D18;
-    --card-bg: #101C30;
-    --border-color: rgba(255, 255, 255, 0.12);
-    --input-bg: #080F1B;
+    --sidebar-bg: #0D1520;
+    --card-bg: #152035;
+    --border-color: rgba(255, 255, 255, 0.15);
+    --input-bg: #101824;
     --input-border: rgba(34, 194, 183, 0.3);
 
+    --content-bg: var(--bg-color);
+    --top-row-bg: var(--surface-color);
+
     --hover-bg: rgba(34, 194, 183, 0.14);
+
+    /* Card shadow for floating card styling */
+    --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 
     /* Invert black logo to white in dark mode for high contrast */
     --logo-filter: brightness(0) invert(1);
@@ -408,7 +426,7 @@ a:hover,
 .btn-warning {
     background-color: var(--warning-color) !important;
     border-color: var(--warning-color) !important;
-    color: #03060D !important;
+    color: var(--primary-fg) !important;
     font-weight: 600;
     border-radius: 8px;
     padding: 0.5rem 1.25rem;
@@ -817,7 +835,7 @@ textarea:focus {
 
 .toast.bg-success {
     background-color: var(--primary-color) !important;
-    color: #03060D !important;
+    color: var(--primary-fg) !important;
 }
 
 .toast.bg-danger {
@@ -826,7 +844,7 @@ textarea:focus {
 
 .toast.bg-warning {
     background-color: var(--warning-color) !important;
-    color: #03060D !important;
+    color: var(--primary-fg) !important;
 }
 
 .toast.bg-info {
@@ -1021,7 +1039,7 @@ mark {
 [data-theme='dark'] .dropdown-item.active,
 [data-theme='dark'] .dropdown-item:active {
     background-color: var(--primary-color);
-    color: #03060D;
+    color: var(--primary-fg);
 }
 
 /* Selectable Message Item Glow in explorer list */
