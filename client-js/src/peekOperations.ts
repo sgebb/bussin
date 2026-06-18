@@ -8,13 +8,18 @@ import type {
     DeadLetterOptions,
     BatchOperationResult
 } from './types.js';
+import { formatAmqpError } from './types.js';
 
 // Store active message handles by lock token (necessary for settlement)
 // This is minimal state - just the AMQP handles that can't serialize
 const messageHandles = new Map<string, {
-    delivery: any;
-    receiver: any;
-    connection: any;
+    delivery?: any;
+    receiver?: any;
+    connection?: any;
+    isManagementLock?: boolean;
+    namespace?: string;
+    entityPath?: string;
+    token?: string;
 }>();
 
 /**
@@ -132,6 +137,31 @@ async function receiveAndLockMessages(
     count: number = 1,
     sessionId?: string
 ): Promise<LockedMessage[]> {
+    // First attempt: try without session filter (works for standard entities).
+    // If the entity requires sessions, the broker will reject the link,
+    // and we retry with a "next available session" filter.
+    try {
+        return await _receiveAndLockMessagesInternal(namespace, entityPath, token, timeoutSeconds, count, undefined);
+    } catch (err) {
+        const errorMsg = (err as Error).message || '';
+        // If the entity requires sessions, retry with session filter
+        if (errorMsg.includes('session') || errorMsg.includes('Session')) {
+            console.log(`[ServiceBusAPI] Entity ${entityPath} requires sessions, retrying with session filter (sessionId: ${sessionId || 'next-available'})`);
+            return await _receiveAndLockMessagesInternal(namespace, entityPath, token, timeoutSeconds, count, sessionId || null);
+        }
+        throw err;
+    }
+}
+
+// Core receiver implementation
+async function _receiveAndLockMessagesInternal(
+    namespace: string,
+    entityPath: string,
+    token: string,
+    timeoutSeconds: number = 5,
+    count: number = 1,
+    sessionId?: string | null
+): Promise<LockedMessage[]> {
     const connection = new ServiceBusConnection(namespace, token);
 
     try {
@@ -145,11 +175,12 @@ async function receiveAndLockMessages(
             let timedOut = false;
             let noMoreMessagesTimer: NodeJS.Timeout | null = null;
 
-            console.log(`[ServiceBusAPI] Opening receiver for ${entityPath}`);
+            console.log(`[ServiceBusAPI] Opening receiver for ${entityPath} (sessionId: ${sessionId === undefined ? 'none' : sessionId === null ? 'next-available' : sessionId})`);
             const source: any = { address: entityPath };
-            if (sessionId) {
+            // Only apply session filter when explicitly requested (non-undefined)
+            if (sessionId !== undefined) {
                 const filterMap: Record<string, any> = {};
-                filterMap['com.microsoft:session-filter'] = rhea.types.wrap_described(sessionId, 0x1370000000c);
+                filterMap['com.microsoft:session-filter'] = sessionId;
                 source.filter = filterMap;
             }
 
@@ -175,10 +206,11 @@ async function receiveAndLockMessages(
                     // Parse the message
                     const parsedMessage = parseServiceBusMessage(context.message) as LockedMessage;
 
-                    // Generate lock token from delivery tag - use standard JS since Buffer may not exist in browser
+                    // Generate unique lock token using random prefix and delivery tag to prevent collisions
+                    const uniqueId = Math.random().toString(36).substring(2, 10);
                     const lockTokenArray = Array.from(context.delivery.tag as Iterable<number>);
-                    const lockToken = lockTokenArray.map(b => b.toString(16).padStart(2, '0')).join('');
-                    console.log(`[ServiceBusAPI] Lock token generated: ${lockToken}`);
+                    const lockToken = `${uniqueId}-${lockTokenArray.map(b => b.toString(16).padStart(2, '0')).join('')}`;
+                    console.log(`[ServiceBusAPI] Unique lock token generated: ${lockToken}`);
                     parsedMessage.lockToken = lockToken;
 
                     // Store handle in Map (can't serialize, so keep server-side)
@@ -214,7 +246,7 @@ async function receiveAndLockMessages(
                     if (noMoreMessagesTimer) clearTimeout(noMoreMessagesTimer);
                     receiver.close();
                     connection.close();
-                    reject(new Error(context.receiver.error ? context.receiver.error.toString() : 'Receiver error'));
+                    reject(new Error(context.receiver.error ? formatAmqpError(context.receiver.error) : 'Receiver error'));
                 }
             });
 
@@ -249,6 +281,9 @@ export async function complete(lockTokens: string[] | string): Promise<BatchOper
         errors: []
     };
 
+    const receiversToClose = new Set<any>();
+    const connectionsToClose = new Set<any>();
+
     for (const lockToken of tokens) {
         try {
             const handle = messageHandles.get(lockToken);
@@ -257,12 +292,28 @@ export async function complete(lockTokens: string[] | string): Promise<BatchOper
                 throw new Error('Message not found or lock expired');
             }
 
+            if (handle.isManagementLock) {
+                const connection = new ServiceBusConnection(handle.namespace, handle.token);
+                await connection.connect();
+                await connection.authenticateCBS(handle.entityPath);
+                const managementClient = new ManagementClient(connection, handle.entityPath);
+                await managementClient.open();
+                await managementClient.updateDisposition([lockToken], 'completed');
+                await managementClient.close();
+                await connection.close();
+                messageHandles.delete(lockToken);
+                result.successCount++;
+                continue;
+            }
+
             // Accept the delivery (complete/delete)
             handle.delivery.accept();
 
             // Cleanup
-            handle.receiver.close();
-            handle.connection.close();
+            if (!handle.isManagementLock) {
+                receiversToClose.add(handle.receiver);
+                connectionsToClose.add(handle.connection);
+            }
             messageHandles.delete(lockToken);
 
             result.successCount++;
@@ -273,6 +324,14 @@ export async function complete(lockTokens: string[] | string): Promise<BatchOper
                 error: (err as Error).message
             });
         }
+    }
+
+    // Close standard handles that were settled
+    for (const receiver of receiversToClose) {
+        try { receiver.close(); } catch {}
+    }
+    for (const connection of connectionsToClose) {
+        try { connection.close(); } catch {}
     }
 
     return result;
@@ -291,6 +350,9 @@ export async function abandon(lockTokens: string[] | string): Promise<BatchOpera
         errors: []
     };
 
+    const receiversToClose = new Set<any>();
+    const connectionsToClose = new Set<any>();
+
     for (const lockToken of tokens) {
         try {
             const handle = messageHandles.get(lockToken);
@@ -298,12 +360,28 @@ export async function abandon(lockTokens: string[] | string): Promise<BatchOpera
                 throw new Error('Message not found or lock expired');
             }
 
+            if (handle.isManagementLock) {
+                const connection = new ServiceBusConnection(handle.namespace, handle.token);
+                await connection.connect();
+                await connection.authenticateCBS(handle.entityPath);
+                const managementClient = new ManagementClient(connection, handle.entityPath);
+                await managementClient.open();
+                await managementClient.updateDisposition([lockToken], 'abandoned');
+                await managementClient.close();
+                await connection.close();
+                messageHandles.delete(lockToken);
+                result.successCount++;
+                continue;
+            }
+
             // Release the message (abandon)
             handle.delivery.release();
 
             // Cleanup
-            handle.receiver.close();
-            handle.connection.close();
+            if (!handle.isManagementLock) {
+                receiversToClose.add(handle.receiver);
+                connectionsToClose.add(handle.connection);
+            }
             messageHandles.delete(lockToken);
 
             result.successCount++;
@@ -314,6 +392,14 @@ export async function abandon(lockTokens: string[] | string): Promise<BatchOpera
                 error: (err as Error).message
             });
         }
+    }
+
+    // Close standard handles that were settled
+    for (const receiver of receiversToClose) {
+        try { receiver.close(); } catch {}
+    }
+    for (const connection of connectionsToClose) {
+        try { connection.close(); } catch {}
     }
 
     return result;
@@ -335,11 +421,28 @@ export async function deadLetter(
         errors: []
     };
 
+    const receiversToClose = new Set<any>();
+    const connectionsToClose = new Set<any>();
+
     for (const lockToken of tokens) {
         try {
             const handle = messageHandles.get(lockToken);
             if (!handle) {
                 throw new Error('Message not found or lock expired');
+            }
+
+            if (handle.isManagementLock) {
+                const connection = new ServiceBusConnection(handle.namespace!, handle.token!);
+                await connection.connect();
+                await connection.authenticateCBS(handle.entityPath!);
+                const managementClient = new ManagementClient(connection, handle.entityPath!);
+                await managementClient.open();
+                await managementClient.updateDisposition([lockToken], 'suspended', options.deadLetterReason, options.deadLetterErrorDescription);
+                await managementClient.close();
+                await connection.close();
+                messageHandles.delete(lockToken);
+                result.successCount++;
+                continue;
             }
 
             // Reject the delivery to move to DLQ with error info
@@ -348,13 +451,15 @@ export async function deadLetter(
                 description: options.deadLetterErrorDescription || 'Manual dead letter from browser',
                 info: {
                     'DeadLetterReason': options.deadLetterReason || 'Manual dead letter',
-                    'DeadLetterErrorDescription': options.deadLetterErrorDescription || ''
+                    'DeadLetterErrorDescription': options.deadLetterErrorDescription || 'Manual dead letter from browser'
                 }
             });
 
             // Cleanup
-            handle.receiver.close();
-            handle.connection.close();
+            if (!handle.isManagementLock) {
+                receiversToClose.add(handle.receiver);
+                connectionsToClose.add(handle.connection);
+            }
             messageHandles.delete(lockToken);
 
             result.successCount++;
@@ -365,6 +470,14 @@ export async function deadLetter(
                 error: (err as Error).message
             });
         }
+    }
+
+    // Close standard handles that were settled
+    for (const receiver of receiversToClose) {
+        try { receiver.close(); } catch {}
+    }
+    for (const connection of connectionsToClose) {
+        try { connection.close(); } catch {}
     }
 
     return result;
@@ -490,59 +603,4 @@ export async function getMessageSessions(
     }
 }
 
-/**
- * Get session state
- */
-export async function getSessionState(
-    namespace: string,
-    entityPath: string,
-    token: string,
-    sessionId: string
-): Promise<string> {
-    const connection = new ServiceBusConnection(namespace, token);
-    try {
-        await connection.connect();
-        await connection.authenticateCBS(entityPath);
 
-        const managementClient = new ManagementClient(connection, entityPath);
-        await managementClient.open();
-
-        const state = await managementClient.getSessionState(sessionId);
-
-        managementClient.close();
-        connection.close();
-
-        return state;
-    } catch (err) {
-        connection.close();
-        throw new Error(`Get session state failed: ${(err as Error).message}`);
-    }
-}
-
-/**
- * Set session state
- */
-export async function setSessionState(
-    namespace: string,
-    entityPath: string,
-    token: string,
-    sessionId: string,
-    state: string | null
-): Promise<void> {
-    const connection = new ServiceBusConnection(namespace, token);
-    try {
-        await connection.connect();
-        await connection.authenticateCBS(entityPath);
-
-        const managementClient = new ManagementClient(connection, entityPath);
-        await managementClient.open();
-
-        await managementClient.setSessionState(sessionId, state);
-
-        managementClient.close();
-        connection.close();
-    } catch (err) {
-        connection.close();
-        throw new Error(`Set session state failed: ${(err as Error).message}`);
-    }
-}

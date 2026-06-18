@@ -6,6 +6,9 @@
 import rhea from 'rhea';
 import type { ServiceBusConnection } from './connection.js';
 import type { Sender, Receiver } from 'rhea';
+import { parseServiceBusMessage } from './messageParser.js';
+import type { LockedMessage } from './types.js';
+import { formatAmqpError } from './types.js';
 
 /**
  * Management Client - for management operations like true peek
@@ -17,11 +20,13 @@ export class ManagementClient {
     private sender: Sender | null = null;
     private receiver: Receiver | null = null;
     private replyTo: string | null = null;
+    private readonly amqpSession?: any;
 
-    constructor(connection: ServiceBusConnection, entityPath: string) {
+    constructor(connection: ServiceBusConnection, entityPath: string, amqpSession?: any) {
         this.connection = connection;
         this.entityPath = entityPath;
         this.managementAddress = `${entityPath}/$management`;
+        this.amqpSession = amqpSession;
     }
 
     /**
@@ -36,11 +41,13 @@ export class ManagementClient {
             // Create unique reply-to address
             this.replyTo = `mgmt-reply-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-            this.sender = this.connection.connection!.open_sender({
+            const sessionOrConn = this.amqpSession || this.connection.connection!;
+
+            this.sender = sessionOrConn.open_sender({
                 target: { address: this.managementAddress }
             });
 
-            this.receiver = this.connection.connection!.open_receiver({
+            this.receiver = sessionOrConn.open_receiver({
                 source: { address: this.managementAddress },
                 target: { address: this.replyTo }
             });
@@ -65,11 +72,11 @@ export class ManagementClient {
             });
 
             this.sender.on('sender_error', (context: any) => {
-                reject(new Error(context.sender.error ? context.sender.error.toString() : 'Sender error'));
+                reject(new Error(context.sender.error ? formatAmqpError(context.sender.error) : 'Sender error'));
             });
 
             this.receiver.on('receiver_error', (context: any) => {
-                reject(new Error(context.receiver.error ? context.receiver.error.toString() : 'Receiver error'));
+                reject(new Error(context.receiver.error ? formatAmqpError(context.receiver.error) : 'Receiver error'));
             });
 
             setTimeout(() => reject(new Error('Management client open timeout')), 10000);
@@ -224,7 +231,7 @@ export class ManagementClient {
      * Lock messages by sequence numbers (peek-lock mode)
      * Returns lock tokens that can be used to complete/abandon/dead-letter
      */
-    async lockBySequenceNumbers(sequenceNumbers: number[]): Promise<{ sequenceNumber: number; lockToken: string }[]> {
+    async lockBySequenceNumbers(sequenceNumbers: number[]): Promise<LockedMessage[]> {
         if (!this.sender || !this.receiver || !this.replyTo) {
             throw new Error('Management client not opened');
         }
@@ -242,7 +249,7 @@ export class ManagementClient {
                 if (statusCode === 200) {
                     // Response body contains messages with lock tokens
                     const body = context.message.body;
-                    const results: { sequenceNumber: number; lockToken: string }[] = [];
+                    const results: LockedMessage[] = [];
 
                     if (body && body.messages) {
                         const msgArray = Array.isArray(body.messages) ? body.messages : [body.messages];
@@ -250,10 +257,15 @@ export class ManagementClient {
                             const item = msgArray[i];
                             // Lock token is in the 'lock-token' field as a UUID
                             if (item['lock-token']) {
-                                results.push({
-                                    sequenceNumber: sequenceNumbers[i],
-                                    lockToken: uuidFromBuffer(item['lock-token'])
-                                });
+                                const lockToken = uuidFromBuffer(item['lock-token']);
+                                const rawMessage = item['message'];
+                                let parsed: any = {};
+                                if (rawMessage) {
+                                    const decoded = rhea.message.decode(rawMessage);
+                                    parsed = parseServiceBusMessage(decoded);
+                                }
+                                parsed.lockToken = lockToken;
+                                results.push(parsed as LockedMessage);
                             }
                         }
                     }
@@ -294,7 +306,6 @@ export class ManagementClient {
             }, 10000);
         });
     }
-
     /**
      * Cancel scheduled messages by sequence numbers
      */
@@ -774,7 +785,7 @@ export class ManagementClient {
     /**
      * Get session state
      */
-    async getSessionState(sessionId: string): Promise<string> {
+    async getSessionState(sessionId: string, associatedLinkName?: string): Promise<string> {
         if (!this.sender || !this.receiver || !this.replyTo) {
             throw new Error('Management client not opened');
         }
@@ -825,7 +836,8 @@ export class ManagementClient {
                 body: messageBody,
                 reply_to: replyTo,
                 application_properties: {
-                    operation: 'com.microsoft:get-session-state'
+                    operation: 'com.microsoft:get-session-state',
+                    ...(associatedLinkName ? { 'associated-link-name': associatedLinkName } : {})
                 },
                 message_id: messageId
             };
@@ -839,10 +851,7 @@ export class ManagementClient {
         });
     }
 
-    /**
-     * Set session state
-     */
-    async setSessionState(sessionId: string, state: string | null): Promise<void> {
+    async setSessionState(sessionId: string, state: string | null, associatedLinkName?: string): Promise<void> {
         if (!this.sender || !this.receiver || !this.replyTo) {
             throw new Error('Management client not opened');
         }
@@ -881,7 +890,8 @@ export class ManagementClient {
                 body: messageBody,
                 reply_to: replyTo,
                 application_properties: {
-                    operation: 'com.microsoft:set-session-state'
+                    operation: 'com.microsoft:set-session-state',
+                    ...(associatedLinkName ? { 'associated-link-name': associatedLinkName } : {})
                 },
                 message_id: messageId
             };

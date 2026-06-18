@@ -24,19 +24,21 @@ window.createProgressCallback = function (dotnetRef) {
 // Queue signature: (namespace, queueName, token, callbackRef, fromDeadLetter, "queue")
 // Subscription signature: (namespace, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription")
 window.startPurgeWithProgress = async function (...args) {
-    const type = args[args.length - 1]; // Last argument is type
+    const hasSessionParam = typeof args[args.length - 1] === 'boolean';
+    const requiresSession = hasSessionParam ? args[args.length - 1] : false;
+    const type = hasSessionParam ? args[args.length - 2] : args[args.length - 1];
 
     try {
         if (type === 'queue') {
             const [namespace, queueName, token, callbackRef, fromDeadLetter] = args;
             const progressCallback = (count) => callbackRef.invokeMethodAsync('OnProgress', count);
-            console.log('[startPurgeWithProgress] Starting queue purge:', queueName);
-            return await ServiceBusAPI.purgeQueue(namespace, queueName, token, progressCallback, fromDeadLetter);
+            console.log('[startPurgeWithProgress] Starting queue purge:', queueName, 'requiresSession:', requiresSession);
+            return await ServiceBusAPI.purgeQueue(namespace, queueName, token, progressCallback, fromDeadLetter, requiresSession);
         } else {
             const [namespace, topicName, subscriptionName, token, callbackRef, fromDeadLetter] = args;
             const progressCallback = (count) => callbackRef.invokeMethodAsync('OnProgress', count);
-            console.log('[startPurgeWithProgress] Starting subscription purge:', topicName, subscriptionName);
-            return await ServiceBusAPI.purgeSubscription(namespace, topicName, subscriptionName, token, progressCallback, fromDeadLetter);
+            console.log('[startPurgeWithProgress] Starting subscription purge:', topicName, subscriptionName, 'requiresSession:', requiresSession);
+            return await ServiceBusAPI.purgeSubscription(namespace, topicName, subscriptionName, token, progressCallback, fromDeadLetter, requiresSession);
         }
     } catch (error) {
         console.error('[startPurgeWithProgress] Error:', error);
@@ -74,9 +76,9 @@ window.awaitControllerPromise = async function (controller) {
 };
 
 // Helper to start background search with progress callback
-// Queue signature: (namespace, queueName, null, null, token, callbackRef, fromDeadLetter, "queue", bodyFilter, messageIdFilter, subjectFilter, maxMessages)
-// Subscription signature: (namespace, null, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription", bodyFilter, messageIdFilter, subjectFilter, maxMessages)
-window.startSearchWithProgress = async function (namespace, queueName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, type, bodyFilter, messageIdFilter, subjectFilter, maxMessages) {
+// Queue signature: (namespace, queueName, null, null, token, callbackRef, fromDeadLetter, "queue", bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches)
+// Subscription signature: (namespace, null, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription", bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches)
+window.startSearchWithProgress = async function (namespace, queueName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, type, bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches) {
     try {
         const progressCallback = (scanned, matches, newMatches) => {
             callbackRef.invokeMethodAsync('OnProgress', scanned, matches, newMatches);
@@ -84,10 +86,10 @@ window.startSearchWithProgress = async function (namespace, queueName, topicName
 
         if (type === 'queue') {
             console.log('[startSearchWithProgress] Starting queue search:', queueName);
-            return await ServiceBusAPI.searchQueueMessages(namespace, queueName, token, fromDeadLetter, bodyFilter, messageIdFilter, subjectFilter, maxMessages, progressCallback);
+            return await ServiceBusAPI.searchQueueMessages(namespace, queueName, token, fromDeadLetter, bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches, progressCallback);
         } else {
             console.log('[startSearchWithProgress] Starting subscription search:', topicName, subscriptionName);
-            return await ServiceBusAPI.searchSubscriptionMessages(namespace, topicName, subscriptionName, token, fromDeadLetter, bodyFilter, messageIdFilter, subjectFilter, maxMessages, progressCallback);
+            return await ServiceBusAPI.searchSubscriptionMessages(namespace, topicName, subscriptionName, token, fromDeadLetter, bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches, progressCallback);
         }
     } catch (error) {
         console.error('[startSearchWithProgress] Error:', error);

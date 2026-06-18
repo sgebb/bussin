@@ -186,7 +186,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
 
     // Internal lock-based operations
     
-    private async Task<List<ServiceBusMessage>> LockQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false)
+    private async Task<List<ServiceBusMessage>> LockQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
     {
         try
         {
@@ -219,7 +219,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             
             if (itemsToLock <= 0) itemsToLock = sequenceNumbers.Length;
             
-            var lockedMessages = await _jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 10, fromDeadLetter, itemsToLock);
+            var lockedMessages = await _jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 10, fromDeadLetter, itemsToLock, fromDeadLetter ? null : sessionId);
             return lockedMessages;
         }
         catch (Exception ex)
@@ -229,7 +229,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    private async Task<List<ServiceBusMessage>> LockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false)
+    private async Task<List<ServiceBusMessage>> LockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
     {
         try
         {
@@ -263,7 +263,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             
             if (itemsToLock <= 0) itemsToLock = sequenceNumbers.Length;
             
-            var lockedMessages = await _jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 10, fromDeadLetter, itemsToLock);
+            var lockedMessages = await _jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 10, fromDeadLetter, itemsToLock, fromDeadLetter ? null : sessionId);
             return lockedMessages;
         }
         catch (Exception ex)
@@ -312,9 +312,10 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
+
     // High-level operations (lock + settle in one call)
     
-    public async Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false)
+    public async Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
     {
         // Note: In Azure Service Bus AMQP data-plane protocols, receiving/deleting directly by sequence number 
         // is only supported for DEFERRED messages. For active or standard dead-lettered messages, we must use 
@@ -322,7 +323,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         // their sequence numbers, completing those that match, and abandoning the rest).
         try
         {
-            var lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, fromDeadLetter);
+            var lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, fromDeadLetter, sessionId);
             
             var matchingTokens = lockedMessages
                 .Where(m => m.LockToken != null && sequenceNumbers.Contains(m.SequenceNumber ?? -1))
@@ -350,13 +351,13 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    public async Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false)
+    public async Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
     {
         // Note: receive-by-sequence-number only works for DEFERRED messages.
         // So we use lock-match-complete approach.
         try
         {
-            var lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, sequenceNumbers, fromDeadLetter);
+            var lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, sequenceNumbers, fromDeadLetter, sessionId);
             
             var matchingTokens = lockedMessages
                 .Where(m => m.LockToken != null && sequenceNumbers.Contains(m.SequenceNumber ?? -1))
@@ -384,7 +385,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    public Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true)
+    public Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true, string? sessionId = null)
     {
         return ResendMessagesInternalAsync(
             namespaceName,
@@ -392,11 +393,12 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             null, null,
             sequenceNumbers,
             fromDeadLetter,
-            deleteOriginal
+            deleteOriginal,
+            sessionId
         );
     }
 
-    public Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true)
+    public Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true, string? sessionId = null)
     {
         return ResendMessagesInternalAsync(
             namespaceName,
@@ -404,7 +406,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             topicName, subscriptionName,
             sequenceNumbers,
             fromDeadLetter,
-            deleteOriginal
+            deleteOriginal,
+            sessionId
         );
     }
 
@@ -414,7 +417,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         string? topicName, string? subscriptionName,
         long[] sequenceNumbers,
         bool fromDeadLetter,
-        bool deleteOriginal)
+        bool deleteOriginal,
+        string? sessionId = null)
     {
         try
         {
@@ -466,11 +470,11 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
                 List<ServiceBusMessage> lockedMessages;
                 if (queueName != null)
                 {
-                    lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, fromDeadLetter);
+                    lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, fromDeadLetter, sessionId);
                 }
                 else
                 {
-                    lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, sequenceNumbers, fromDeadLetter);
+                    lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, sequenceNumbers, fromDeadLetter, sessionId);
                 }
                 
                 // Match by sequence number and complete only those
@@ -537,14 +541,14 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         };
     }
 
-    public async Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers)
+    public async Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null)
     {
         // Note: receive-by-sequence-number only works for DEFERRED messages, not regular messages.
         // So we must use the lock-match-abandon approach for moving to DLQ.
         try
         {
             // Lock more messages than needed to ensure we get the ones we want
-            var lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, false);
+            var lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, false, sessionId);
             
             // Match by sequence number and dead letter only those
             var matchingTokens = lockedMessages
@@ -554,8 +558,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             
             var result = await DeadLetterMessagesAsync(matchingTokens, new DeadLetterOptions 
             { 
-                DeadLetterReason = "Manual move to DLQ", 
-                DeadLetterErrorDescription = "Moved by user" 
+                DeadLetterReason = reason ?? "Manual move to DLQ", 
+                DeadLetterErrorDescription = description ?? "Moved by user" 
             });
             
             // Abandon any locked messages we didn't use
@@ -577,14 +581,14 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    public async Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers)
+    public async Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null)
     {
         // Note: receive-by-sequence-number only works for DEFERRED messages, not regular messages.
         // So we must use the lock-match-abandon approach for moving to DLQ.
         try
         {
             // Lock more messages than needed to ensure we get the ones we want
-            var lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, sequenceNumbers, false);
+            var lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, sequenceNumbers, false, sessionId);
             
             // Match by sequence number and dead letter only those
             var matchingTokens = lockedMessages
@@ -594,8 +598,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             
             var result = await DeadLetterMessagesAsync(matchingTokens, new DeadLetterOptions 
             { 
-                DeadLetterReason = "Manual move to DLQ", 
-                DeadLetterErrorDescription = "Moved by user" 
+                DeadLetterReason = reason ?? "Manual move to DLQ", 
+                DeadLetterErrorDescription = description ?? "Moved by user" 
             });
             
             // Abandon any locked messages we didn't use
@@ -616,6 +620,8 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             throw;
         }
     }
+
+
 
     public async Task<BatchOperationResult> CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers)
     {

@@ -25,7 +25,7 @@ public sealed class BackgroundPurgeService : IDisposable
         _notificationService = notificationService;
     }
     
-    public async Task<string> StartPurgeAsync(string namespaceName, string entityType, string entityPath, bool isDeadLetter)
+    public async Task<string> StartPurgeAsync(string namespaceName, string entityType, string entityPath, bool isDeadLetter, bool requiresSession = false)
     {
         var operationId = Guid.NewGuid().ToString();
         var operation = new PurgeOperation
@@ -87,17 +87,18 @@ public sealed class BackgroundPurgeService : IDisposable
                 
                 if (entityType == "queue")
                 {
-                    Console.WriteLine($"[BackgroundPurge] Calling StartPurgeQueueAsync for {entityPath}");
+                    Console.WriteLine($"[BackgroundPurge] Calling StartPurgeQueueAsync for {entityPath} (requiresSession: {requiresSession})");
                     controller = await jsInterop.StartPurgeQueueAsync(
                         namespaceName,
                         entityPath,
                         token,
                         callbackRef,
-                        isDeadLetter);
+                        isDeadLetter,
+                        requiresSession);
                 }
                 else
                 {
-                    Console.WriteLine($"[BackgroundPurge] Calling StartPurgeSubscriptionAsync for {entityPath}");
+                    Console.WriteLine($"[BackgroundPurge] Calling StartPurgeSubscriptionAsync for {entityPath} (requiresSession: {requiresSession})");
                     var parts = entityPath.Split('/');
                     
                     // EntityPath can be "topic/subscription" or "topic/subscriptions/subscription"
@@ -126,7 +127,8 @@ public sealed class BackgroundPurgeService : IDisposable
                         subscriptionName,
                         token,
                         callbackRef,
-                        isDeadLetter);
+                        isDeadLetter,
+                        requiresSession);
                 }
                 
                 if (controller != null)

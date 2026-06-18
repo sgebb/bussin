@@ -112,6 +112,7 @@
                     }
                     else
                     {
+
                         <div class="row">
                             <!-- Message Info -->
                             <div class="col-md-6 mb-3">
@@ -313,7 +314,7 @@
                         }
                         else
                         {
-                            <button class="btn btn-danger me-2" @onclick="DeleteMessage" disabled="@(IsProcessing || RequiresSession)"
+                            <button class="btn btn-danger me-2" @onclick="DeleteMessage" disabled="@IsProcessing"
                                     title="@GetDeleteButtonTitle()">
                                 @if (IsProcessing)
                                 {
@@ -334,7 +335,7 @@
                         }
                         else
                         {
-                            <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || RequiresSession || IsScheduledMessage)"
+                            <button class="btn btn-warning" @onclick="MoveToDLQMessage" disabled="@(IsProcessing || IsScheduledMessage)"
                                     title="@GetMoveToDLQButtonTitle()">
                                 @if (IsProcessing)
                                 {
@@ -342,6 +343,7 @@
                                 }
                                 Move to DLQ
                             </button>
+
                         }
                     }
                 </div>
@@ -360,6 +362,7 @@
     [Parameter] public EventCallback<long> OnDelete { get; set; }
     [Parameter] public EventCallback<long> OnResubmit { get; set; }
     [Parameter] public EventCallback<long> OnMoveToDLQ { get; set; }
+
     [Parameter] public EventCallback<EditResubmitRequest> OnEditResubmit { get; set; }
 
     [Inject] private IJSRuntime JSRuntime { get; set; } = default!;
@@ -553,8 +556,6 @@
     {
         if (IsScheduledMessage)
             return "Cancel scheduled message";
-        if (RequiresSession)
-            return "Delete not supported for session-enabled entities";
         return "Delete message";
     }
 
@@ -562,8 +563,6 @@
     {
         if (IsScheduledMessage)
             return "Scheduled messages cannot be moved to DLQ";
-        if (RequiresSession)
-            return "Move to DLQ not supported for session-enabled entities";
         return "Move to DLQ";
     }
 
@@ -595,6 +594,8 @@
             await OnMoveToDLQ.InvokeAsync(Message.SequenceNumber.Value);
         }
     }
+
+
 
     private async Task CopyBody()
     {

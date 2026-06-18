@@ -6,6 +6,7 @@
 import rhea from 'rhea';
 import type { Connection } from 'rhea';
 import type { CBSAuthResult } from './types.js';
+import { formatAmqpError } from './types.js';
 
 import { GlobalMockBroker } from './mockBroker.js';
 
@@ -90,12 +91,12 @@ export class ServiceBusConnection {
 
             this.connection.on('connection_error', (context: any) => {
                 console.error(`[ServiceBusConnection] Connection ERROR:`, context.error);
-                reject(new Error(context.error ? context.error.toString() : 'Connection error'));
+                reject(new Error(context.error ? formatAmqpError(context.error) : 'Connection error'));
             });
 
             this.connection.on('disconnected', (context: any) => {
                 if (context.error && !this.cbsAuthenticated) {
-                    reject(new Error(context.error.toString()));
+                    reject(new Error(formatAmqpError(context.error)));
                 }
             });
         });

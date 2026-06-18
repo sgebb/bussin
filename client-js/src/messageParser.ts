@@ -43,22 +43,117 @@ export function parseServiceBusMessage(amqpMessage: any): ServiceBusMessage {
     }
 
     // Get message annotations
-    const annotations = amqpMessage.message_annotations || {};
+    const annotations = amqpMessage.message_annotations || amqpMessage.messageAnnotations || amqpMessage.delivery_annotations || amqpMessage.deliveryAnnotations || {};
 
-    // Extract enqueued time - could be Date or timestamp
-    let enqueuedTime = annotations['x-opt-enqueued-time'];
-    if (enqueuedTime && typeof enqueuedTime === 'number') {
-        enqueuedTime = new Date(enqueuedTime);
-    }
+    const getAnnotationValue = (key: string): any => {
+        if (!annotations) return undefined;
+        if (annotations[key] !== undefined) return annotations[key];
+        
+        // Handle Symbol keys
+        const symbols = Object.getOwnPropertySymbols(annotations);
+        for (const sym of symbols) {
+            const symStr = sym.toString();
+            if (symStr === `Symbol(${key})` || sym.description === key || symStr.includes(key)) {
+                return annotations[sym];
+            }
+        }
+        
+        // Check standard keys or Map keys as string
+        for (const k of Object.keys(annotations)) {
+            if (k === key || k.toString() === key) {
+                return annotations[k];
+            }
+        }
+        
+        // If annotations is a Map
+        try {
+            if (typeof annotations.get === 'function') {
+                const val = annotations.get(key);
+                if (val !== undefined) return val;
+                for (const [k, v] of annotations.entries()) {
+                    if (k === key || (k && k.toString() === key)) {
+                        return v;
+                    }
+                }
+            }
+        } catch {}
+
+        return undefined;
+    };
+
+    // Helper to robustly decode AMQP long types (number, bigint, high/low object, buffer)
+    const decodeAmqpLong = (val: any): number | undefined => {
+        if (val === undefined || val === null) return undefined;
+        if (typeof val === 'number') return val;
+        if (typeof val === 'bigint') return Number(val);
+        if (typeof val === 'object') {
+            if ('high' in val && 'low' in val) {
+                return val.high * 4294967296 + (val.low >>> 0);
+            }
+            if (val instanceof Uint8Array || val.type === 'Buffer' || Array.isArray(val.data)) {
+                const buf = val.data ? new Uint8Array(val.data) : val;
+                let num = BigInt(0);
+                for (let i = 0; i < buf.length; i++) {
+                    num = (num << BigInt(8)) + BigInt(buf[i]);
+                }
+                return Number(num);
+            }
+        }
+        const parsed = Number(val);
+        return isNaN(parsed) ? undefined : parsed;
+    };
+
+    // Helper to robustly decode AMQP timestamp/datetime types to ISO string
+    const parseAmqpDate = (val: any): string | undefined => {
+        if (val === undefined || val === null) return undefined;
+        
+        let d: Date | undefined;
+        if (val instanceof Date) {
+            d = val;
+        } else {
+            // If it's a number, bigint, or long object/buffer, decode to timestamp
+            const ms = decodeAmqpLong(val);
+            if (ms !== undefined && !isNaN(ms)) {
+                d = new Date(ms);
+            } else if (typeof val === 'string') {
+                d = new Date(val);
+            }
+        }
+        
+        if (d && !isNaN(d.getTime())) {
+            try {
+                const year = d.getUTCFullYear();
+                if (year > 9999) {
+                    return "9999-12-31T23:59:59.999Z";
+                }
+                if (year < 1) {
+                    return "0001-01-01T00:00:00.000Z";
+                }
+                return d.toISOString();
+            } catch {
+                return undefined;
+            }
+        }
+        
+        return undefined;
+    };
+
+    // Extract enqueued time
+    const enqueuedTime = parseAmqpDate(getAnnotationValue('x-opt-enqueued-time'));
 
     // Extract scheduled enqueue time
-    let scheduledEnqueueTime = annotations['x-opt-scheduled-enqueue-time'];
+    let scheduledEnqueueTime = getAnnotationValue('x-opt-scheduled-enqueue-time');
     if (scheduledEnqueueTime instanceof Date) {
         scheduledEnqueueTime = scheduledEnqueueTime.getTime();
+    } else {
+        scheduledEnqueueTime = decodeAmqpLong(scheduledEnqueueTime);
     }
 
+    // Extract sequence number
+    const sequenceNumber = decodeAmqpLong(getAnnotationValue('x-opt-sequence-number') ?? amqpMessage._sequenceNumber);
+
     // Extract partition key
-    const partitionKey = annotations['x-opt-partition-key'] ?? amqpMessage.group_id ?? props.group_id;
+    const partitionKey = getAnnotationValue('x-opt-partition-key') ?? amqpMessage.group_id ?? props.group_id;
 
     return {
         messageId: amqpMessage.message_id ?? props.message_id,
@@ -71,16 +166,17 @@ export function parseServiceBusMessage(amqpMessage: any): ServiceBusMessage {
         to: amqpMessage.to ?? props.to,
         deliveryCount: amqpMessage.delivery_count ?? amqpMessage.header?.delivery_count ?? 0,
         enqueuedTime: enqueuedTime,
-        sequenceNumber: (annotations && annotations['x-opt-sequence-number']) ?? amqpMessage._sequenceNumber,
-        lockedUntil: (annotations && annotations['x-opt-locked-until']),
+        sequenceNumber: sequenceNumber,
+        lockedUntil: parseAmqpDate(getAnnotationValue('x-opt-locked-until')),
         scheduledEnqueueTime: scheduledEnqueueTime,
         partitionKey: partitionKey,
+        state: getAnnotationValue('x-opt-state'),
         applicationProperties: amqpMessage.application_properties || {},
         messageAnnotations: annotations,
         properties: props,
         ttl: ttl,
-        expiryTime: amqpMessage.absolute_expiry_time ?? props.absolute_expiry_time,
-        creationTime: amqpMessage.creation_time ?? props.creation_time
+        expiryTime: parseAmqpDate(amqpMessage.absolute_expiry_time ?? props.absolute_expiry_time),
+        creationTime: parseAmqpDate(amqpMessage.creation_time ?? props.creation_time)
     };
 }
 

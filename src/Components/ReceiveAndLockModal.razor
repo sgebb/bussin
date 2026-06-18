@@ -12,24 +12,16 @@
                 </div>
                 <div class="modal-body">
                     <div class="row mb-3">
-                        <div class="col-md-@(RequiresSession ? "4" : "6")">
+                        <div class="col-md-6">
                             <label class="form-label">Number of Messages</label>
                             <input type="number" class="form-control" @bind="messageCount" min="1" max="100" />
                             <small class="text-muted">Lock up to 100 messages at once</small>
                         </div>
-                        <div class="col-md-@(RequiresSession ? "4" : "6")">
+                        <div class="col-md-6">
                             <label class="form-label">Timeout (seconds)</label>
                             <input type="number" class="form-control" @bind="timeoutSeconds" min="1" max="60" />
                             <small class="text-muted">How long to wait for messages</small>
                         </div>
-                        @if (RequiresSession)
-                        {
-                            <div class="col-md-4">
-                                <label class="form-label">Session ID</label>
-                                <input type="text" class="form-control" @bind="sessionId" placeholder="Enter session ID..." />
-                                <small class="text-muted">Session ID is required for this entity</small>
-                            </div>
-                        }
                     </div>
 
                     <div class="mb-3">
@@ -56,6 +48,35 @@
                             </p>
                         </div>
 
+                        @if (isDlqFormVisible)
+                        {
+                            <div class="card border-danger mb-3 shadow-sm" style="background: rgba(220, 53, 69, 0.03); backdrop-filter: blur(10px);">
+                                <div class="card-header bg-danger text-white py-2">
+                                    <h6 class="mb-0 small fw-bold"><i class="bi bi-exclamation-octagon-fill me-1"></i> Dead Letter Specifications</h6>
+                                </div>
+                                <div class="card-body py-2">
+                                    <div class="mb-2">
+                                        <label class="form-label text-secondary small fw-semibold mb-1">Dead Letter Reason</label>
+                                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" @bind="dlqReason" placeholder="Manual dead letter from UI" />
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label text-secondary small fw-semibold mb-1">Error Description</label>
+                                        <textarea class="form-control form-control-sm bg-dark text-white border-secondary" rows="2" @bind="dlqDescription" placeholder="User initiated dead letter operation"></textarea>
+                                    </div>
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <button class="btn btn-secondary btn-sm" @onclick="CancelDlqForm" disabled="@isProcessing">Cancel</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="ConfirmDeadLetter" disabled="@isProcessing">
+                                            @if (isProcessing)
+                                            {
+                                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                            }
+                                            Confirm Dead Letter
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
                         <!-- Batch Actions -->
                         <div class="mb-3">
                             <div class="btn-group" role="group">
@@ -68,6 +89,7 @@
                                 <button class="btn btn-danger" @onclick="DeadLetterAll" disabled="@isProcessing">
                                     Dead Letter All
                                 </button>
+
                             </div>
                         </div>
 
@@ -104,6 +126,7 @@
                                             <button class="btn btn-outline-danger" @onclick="() => DeadLetterSingle(msg.LockToken!)" disabled="@isProcessing">
                                                 DLQ
                                             </button>
+
                                         </div>
                                     </div>
                                 </div>
@@ -128,10 +151,16 @@
     private List<ServiceBusMessage> lockedMessages = new();
     private int messageCount = 10;
     private int timeoutSeconds = 5;
-    private string sessionId = "";
     private bool isLocking = false;
     private bool isProcessing = false;
     private string? errorMessage;
+
+    // Inline DLQ specs form state
+    private bool isDlqFormVisible = false;
+    private bool isBatchDlq = false;
+    private string dlqSingleToken = "";
+    private string dlqReason = "Manual dead letter from UI";
+    private string dlqDescription = "User initiated dead letter operation";
 
     private async Task LockMessages()
     {
@@ -141,16 +170,9 @@
         errorMessage = null;
         lockedMessages.Clear();
 
-        if (RequiresSession && string.IsNullOrWhiteSpace(sessionId))
-        {
-            errorMessage = "Session ID is required for session-enabled entities";
-            isLocking = false;
-            return;
-        }
-
         try
         {
-            var messages = await OnLockMessages(messageCount, timeoutSeconds, false, RequiresSession ? sessionId : null);
+            var messages = await OnLockMessages(messageCount, timeoutSeconds, false, null);
             lockedMessages = messages;
             
             if (!lockedMessages.Any())
@@ -210,29 +232,13 @@
         }
     }
 
-    private async Task DeadLetterAll()
+    private void DeadLetterAll()
     {
         if (!lockedMessages.Any()) return;
-
-        isProcessing = true;
-        try
-        {
-            var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
-            await OperationsService.DeadLetterMessagesAsync(lockTokens, new DeadLetterOptions
-            {
-                DeadLetterReason = "Manual dead letter from UI",
-                DeadLetterErrorDescription = "User initiated dead letter operation"
-            });
-            lockedMessages.Clear();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Failed to dead letter messages: {ex.Message}";
-        }
-        finally
-        {
-            isProcessing = false;
-        }
+        isDlqFormVisible = true;
+        isBatchDlq = true;
+        dlqReason = "Manual dead letter from UI";
+        dlqDescription = "User initiated dead letter operation";
     }
 
     private async Task CompleteSingle(string lockToken)
@@ -271,26 +277,53 @@
         }
     }
 
-    private async Task DeadLetterSingle(string lockToken)
+    private void DeadLetterSingle(string lockToken)
+    {
+        isDlqFormVisible = true;
+        isBatchDlq = false;
+        dlqSingleToken = lockToken;
+        dlqReason = "Manual dead letter from UI";
+        dlqDescription = "User initiated dead letter operation";
+    }
+
+    private async Task ConfirmDeadLetter()
     {
         isProcessing = true;
+        errorMessage = null;
         try
         {
-            await OperationsService.DeadLetterMessagesAsync(new[] { lockToken }, new DeadLetterOptions
+            var options = new DeadLetterOptions
             {
-                DeadLetterReason = "Manual dead letter from UI",
-                DeadLetterErrorDescription = "User initiated dead letter operation"
-            });
-            lockedMessages.RemoveAll(m => m.LockToken == lockToken);
+                DeadLetterReason = dlqReason,
+                DeadLetterErrorDescription = dlqDescription
+            };
+
+            if (isBatchDlq)
+            {
+                var lockTokens = lockedMessages.Where(m => m.LockToken != null).Select(m => m.LockToken!).ToArray();
+                await OperationsService.DeadLetterMessagesAsync(lockTokens, options);
+                lockedMessages.Clear();
+            }
+            else
+            {
+                await OperationsService.DeadLetterMessagesAsync(new[] { dlqSingleToken }, options);
+                lockedMessages.RemoveAll(m => m.LockToken == dlqSingleToken);
+            }
+            isDlqFormVisible = false;
         }
         catch (Exception ex)
         {
-            errorMessage = $"Failed to dead letter message: {ex.Message}";
+            errorMessage = $"Failed to dead letter: {ex.Message}";
         }
         finally
         {
             isProcessing = false;
         }
+    }
+
+    private void CancelDlqForm()
+    {
+        isDlqFormVisible = false;
     }
 
     private string GetMessagePreview(ServiceBusMessage message)

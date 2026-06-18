@@ -5,6 +5,7 @@
 
 import type { ServiceBusConnection } from './connection.js';
 import type { MessageProperties } from './types.js';
+import { formatAmqpError } from './types.js';
 import type { Sender } from 'rhea';
 import { message as rheaMessage } from 'rhea';
 
@@ -39,7 +40,7 @@ export class MessageSender {
             });
 
             this.sender.on('sender_error', (context: any) => {
-                reject(new Error(context.sender.error ? context.sender.error.toString() : 'Sender error'));
+                reject(new Error(context.sender.error ? formatAmqpError(context.sender.error) : 'Sender error'));
             });
 
             setTimeout(() => reject(new Error('Sender open timeout')), 5000);

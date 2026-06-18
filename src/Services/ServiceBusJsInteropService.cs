@@ -14,9 +14,10 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
     /// </summary>
     private static ServiceBusMessage? SafeDeserializeMessage(JsonElement elem)
     {
+        string? json = null;
         try
         {
-            var json = elem.GetRawText();
+            json = elem.GetRawText();
             var message = JsonSerializer.Deserialize<ServiceBusMessage>(json);
             return message;
         }
@@ -24,19 +25,43 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         {
             Console.WriteLine($"WARN: Failed to deserialize message: {ex.Message}");
             Console.WriteLine($"   Problem: {ex.Path} - {ex.InnerException?.Message}");
+            Console.WriteLine($"   Raw JSON: {json}");
             
             // Try to extract at least the body and messageId for display
             try
             {
-                var bodyProp = elem.TryGetProperty("body", out var body) ? body.GetString() : "[Unable to parse body]";
-                var msgIdProp = elem.TryGetProperty("messageId", out var msgId) ? msgId.GetString() : null;
+                string bodyProp;
+                if (elem.TryGetProperty("body", out var body))
+                {
+                    bodyProp = body.ValueKind == JsonValueKind.String ? (body.GetString() ?? "") : body.GetRawText();
+                }
+                else
+                {
+                    bodyProp = "[Unable to parse body]";
+                }
+
+                var msgIdProp = elem.TryGetProperty("messageId", out var msgId) && msgId.ValueKind == JsonValueKind.String ? msgId.GetString() : null;
+                
+                long? sequenceNumberProp = null;
+                if (elem.TryGetProperty("sequenceNumber", out var seqNumProp))
+                {
+                    if (seqNumProp.ValueKind == JsonValueKind.Number)
+                        sequenceNumberProp = seqNumProp.GetInt64();
+                    else if (seqNumProp.ValueKind == JsonValueKind.String && long.TryParse(seqNumProp.GetString(), out var parsedSeq))
+                        sequenceNumberProp = parsedSeq;
+                }
+                
+                var sessionIdProp = elem.TryGetProperty("sessionId", out var sessIdProp) && sessIdProp.ValueKind == JsonValueKind.String ? sessIdProp.GetString() : null;
+                var lockTokenProp = elem.TryGetProperty("lockToken", out var lockToken) && lockToken.ValueKind == JsonValueKind.String ? lockToken.GetString() : null;
                 
                 return new ServiceBusMessage
                 {
                     MessageId = msgIdProp,
-                    Body = bodyProp ?? "[Error parsing message]",
+                    Body = bodyProp,
                     ContentType = "text/plain",
-                    LockToken = elem.TryGetProperty("lockToken", out var lockToken) ? lockToken.GetString() : null
+                    LockToken = lockTokenProp,
+                    SequenceNumber = sequenceNumberProp,
+                    SessionId = sessionIdProp
                 };
             }
             catch
@@ -342,14 +367,14 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
 
     // Purge with progress
     
-    public async Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
+    public async Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false)
     {
         try
         {
             // Call JS function that wraps the purge with progress callback
             var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
                 "startPurgeWithProgress",
-                namespaceName, queueName, token, callbackRef, fromDeadLetter, "queue");
+                namespaceName, queueName, token, callbackRef, fromDeadLetter, "queue", requiresSession);
             
             return controller;
         }
@@ -360,14 +385,14 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
+    public async Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false)
     {
         try
         {
             // Call JS function that wraps the purge with progress callback
             var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
                 "startPurgeWithProgress",
-                namespaceName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription");
+                namespaceName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription", requiresSession);
             
             return controller;
         }
@@ -619,33 +644,5 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
         }
     }
 
-    public async Task<string> GetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId)
-    {
-        try
-        {
-            return await jsRuntime.InvokeAsync<string>(
-                "ServiceBusAPI.getSessionState",
-                namespaceName, entityPath, token, sessionId);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error getting session state: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task SetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId, string? state)
-    {
-        try
-        {
-            await jsRuntime.InvokeVoidAsync(
-                "ServiceBusAPI.setSessionState",
-                namespaceName, entityPath, token, sessionId, state);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error setting session state: {ex.Message}");
-            throw;
-        }
-    }
 }
+

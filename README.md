@@ -20,6 +20,16 @@ For visual walkthroughs, screenshots, and detailed guides of these features, vis
 
 ---
 
+## Current Limitations
+
+While Bussin supports most Azure Service Bus operations directly in the browser, there are a few limitations to keep in mind:
+
+* **Batch Send on Session-Enabled Entities**: Batch sending does not currently support session-enabled queues or topic subscriptions (which require a Session ID for each message).
+* **Partitioned & Session-Enabled Entities**: Certain administrative actions (such as the portal-based fast batch delete/purge API) are not supported by the Service Bus broker on partitioned or session-enabled entities. Bussin automatically falls back to compatible data-plane receiver flows (such as parallel receivers or sequential session loops) in these cases to complete the operation safely.
+
+---
+
+
 * **Direct Client-Side Architecture**: Your data never leaves your browser. Bussin communicates directly with Azure APIs.
 * **Zero Installation**: Access the tool online at [https://bussin.dev](https://bussin.dev/) or install it as a PWA.
 * **Entra ID Integration**: Authenticate securely using your existing Azure identity and Role-Based Access Control (RBAC) roles.

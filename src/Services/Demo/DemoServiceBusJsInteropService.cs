@@ -165,11 +165,11 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
         if (monitorController != null) await monitorController.InvokeVoidAsync("stop");
     }
 
-    public async Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
-        => await InvokeSimulatorAsync<IJSObjectReference>("purgeQueue", namespaceName, queueName, token, callbackRef, fromDeadLetter);
+    public async Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false)
+        => await InvokeSimulatorAsync<IJSObjectReference>("purgeQueue", namespaceName, queueName, token, callbackRef, fromDeadLetter, requiresSession);
 
-    public async Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false)
-        => await InvokeSimulatorAsync<IJSObjectReference>("purgeSubscription", namespaceName, topicName, subscriptionName, token, callbackRef, fromDeadLetter);
+    public async Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false)
+        => await InvokeSimulatorAsync<IJSObjectReference>("purgeSubscription", namespaceName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, requiresSession);
 
     public async Task DeleteQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
         => await InvokeSimulatorVoidAsync("deleteQueueMessagesBySequence", namespaceName, queueName, token, sequenceNumbers, fromDeadLetter);
@@ -218,9 +218,5 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
         return result ?? new List<string>();
     }
 
-    public async Task<string> GetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId)
-        => await InvokeSimulatorAsync<string>("getSessionState", namespaceName, entityPath, token, sessionId);
-
-    public async Task SetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId, string? state)
-        => await InvokeSimulatorVoidAsync("setSessionState", namespaceName, entityPath, token, sessionId, state);
 }
+

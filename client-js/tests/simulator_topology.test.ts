@@ -24,7 +24,9 @@ vi.mock('rhea', () => {
             wrap_int: (v: any) => v,
             wrap_uint: (v: any) => v,
             wrap_array: (v: any) => v,
-            wrap_timestamp: (v: any) => v
+            wrap_timestamp: (v: any) => v,
+            wrap_described: (v: any, d: any) => v,
+            wrap_binary: (v: any) => v
         }
     };
 
@@ -162,4 +164,6 @@ describe('Simulator Topology & Fidelity Tests', () => {
         const messagesAfter = GlobalMockBroker.getMessages(queueName);
         expect(messagesAfter.length).toBe(0); // cancelled!
     });
+
+
 });

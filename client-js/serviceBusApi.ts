@@ -13,9 +13,7 @@ import {
     complete,
     abandon,
     deadLetter,
-    getMessageSessions,
-    getSessionState,
-    setSessionState
+    getMessageSessions
 } from './src/peekOperations.js';
 
 import {
@@ -76,8 +74,6 @@ if (typeof window !== 'undefined') {
         receiveAndLockQueueMessage,
         receiveAndLockSubscriptionMessage,
         getMessageSessions,
-        getSessionState,
-        setSessionState,
 
         // Settlement operations (stateless - take LockedMessage[])
         complete,
@@ -136,8 +132,6 @@ export {
     receiveAndLockQueueMessage,
     receiveAndLockSubscriptionMessage,
     getMessageSessions,
-    getSessionState,
-    setSessionState,
 
     // Settlement operations (stateless - take LockedMessage[])
     complete,

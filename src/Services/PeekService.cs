@@ -485,7 +485,7 @@ public sealed class PeekService : IDisposable
         {
             var entityType = _entitySelectionState.State.IsQueueSelected ? "queue" : "subscription";
             var entityPath = _entitySelectionState.State.GetEntityPath();
-            await _backgroundPurge.StartPurgeAsync(_entitySelectionState.State.FullyQualifiedNamespace, entityType, entityPath, _entitySelectionState.State.IsViewingDLQ);
+            await _backgroundPurge.StartPurgeAsync(_entitySelectionState.State.FullyQualifiedNamespace, entityType, entityPath, _entitySelectionState.State.IsViewingDLQ, _entitySelectionState.SelectedEntityRequiresSession);
             _messageListState.PeekedMessages.Clear();
             _messageListState.PeekFromSequence = 0;
             _messageListState.NotifyUpdate();
@@ -572,6 +572,18 @@ public sealed class PeekService : IDisposable
         MoveToDLQMessages(new List<long> { sequenceNumber });
     }
 
+
+    private string? GetSessionIdForSequences(List<long> sequenceNumbers)
+    {
+        if (!_entitySelectionState.SelectedEntityRequiresSession || _entitySelectionState.State.IsViewingDLQ)
+        {
+            return null;
+        }
+        var firstSeq = sequenceNumbers.FirstOrDefault();
+        var msg = _messageListState.PeekedMessages.FirstOrDefault(m => m.SequenceNumber == firstSeq);
+        return msg?.SessionId;
+    }
+
     public void DeleteMessages(List<long> sequenceNumbers)
     {
         var scheduledSeqNums = new List<long>();
@@ -630,10 +642,11 @@ public sealed class PeekService : IDisposable
 
             if (regularSeqNums.Any())
             {
+                var sessionId = GetSessionIdForSequences(regularSeqNums);
                 if (state.IsQueueSelected)
-                    await _operationsService.DeleteQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, regularSeqNums.ToArray(), state.IsViewingDLQ);
+                    await _operationsService.DeleteQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, regularSeqNums.ToArray(), state.IsViewingDLQ, sessionId);
                 else if (state.IsSubscriptionSelected)
-                    await _operationsService.DeleteSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, regularSeqNums.ToArray(), state.IsViewingDLQ);
+                    await _operationsService.DeleteSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, regularSeqNums.ToArray(), state.IsViewingDLQ, sessionId);
                 
                 _messageListState.PeekedMessages.RemoveAll(m => m.SequenceNumber.HasValue && regularSeqNums.Contains(m.SequenceNumber.Value));
             }
@@ -660,6 +673,7 @@ public sealed class PeekService : IDisposable
         finally
         {
             _confirmModal.IsProcessing = false;
+            _dialogService.IsMoveToDLQModal = false;
             NotifyStateChanged();
         }
     }
@@ -677,15 +691,16 @@ public sealed class PeekService : IDisposable
             onConfirm: async () =>
             {
                 var shouldRemove = _dialogService.ResubmitRemoveFromDLQ;
+                var sessionId = GetSessionIdForSequences(sequenceNumbers);
                 await ExecuteBatchOperationAsync(sequenceNumbers, "resubmit", async (seqNums) =>
                 {
                     var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
                     var state = _entitySelectionState.State;
 
                     if (state.IsQueueSelected)
-                        await _operationsService.ResendQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, seqNums.ToArray(), state.IsViewingDLQ, shouldRemove);
+                        await _operationsService.ResendQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, seqNums.ToArray(), state.IsViewingDLQ, shouldRemove, sessionId);
                     else if (state.IsSubscriptionSelected)
-                        await _operationsService.ResendSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, seqNums.ToArray(), state.IsViewingDLQ, shouldRemove);
+                        await _operationsService.ResendSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, seqNums.ToArray(), state.IsViewingDLQ, shouldRemove, sessionId);
                 }, removeFromView: shouldRemove);
             }
         );
@@ -693,6 +708,10 @@ public sealed class PeekService : IDisposable
 
     public void MoveToDLQMessages(List<long> sequenceNumbers)
     {
+        _dialogService.IsMoveToDLQModal = true;
+        _dialogService.MoveToDLQReason = "Manual move to DLQ";
+        _dialogService.MoveToDLQErrorDescription = "Moved by user";
+
         _confirmModal.Show(
             title: "Confirm Move to Dead Letter Queue",
             message: $"Move {sequenceNumbers.Count} message(s) to Dead Letter Queue?",
@@ -703,15 +722,19 @@ public sealed class PeekService : IDisposable
             {
                 var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
                 var state = _entitySelectionState.State;
+                var reason = _dialogService.MoveToDLQReason;
+                var desc = _dialogService.MoveToDLQErrorDescription;
+                var sessionId = GetSessionIdForSequences(seqNums);
 
                 if (state.IsQueueSelected)
-                    await _operationsService.MoveToDLQQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, seqNums.ToArray());
+                    await _operationsService.MoveToDLQQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, seqNums.ToArray(), reason, desc, sessionId);
                 else if (state.IsSubscriptionSelected)
-                    await _operationsService.MoveToDLQSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, seqNums.ToArray());
+                    await _operationsService.MoveToDLQSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, seqNums.ToArray(), reason, desc, sessionId);
             })
         );
         _dialogService.IsResubmitModal = false;
     }
+
 
     private async Task ExecuteBatchOperationAsync(List<long> sequenceNumbers, string operationName, Func<List<long>, Task> operation, bool removeFromView = true)
     {
@@ -737,6 +760,7 @@ public sealed class PeekService : IDisposable
         finally
         {
             _confirmModal.IsProcessing = false;
+            _dialogService.IsMoveToDLQModal = false;
             NotifyStateChanged();
         }
     }

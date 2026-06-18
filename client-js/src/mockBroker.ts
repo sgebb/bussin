@@ -9,12 +9,14 @@ if (!(globalThis as any).__BUSSIN_AUDIT_LOG__) {
     (globalThis as any).__BUSSIN_QUEUES__ = new Map<string, any[]>();
     (globalThis as any).__BUSSIN_TOPOLOGY__ = new Map<string, any>();
     (globalThis as any).__BUSSIN_SEQ_COUNTERS__ = new Map<string, number>();
+    (globalThis as any).__BUSSIN_SESSION_STATES__ = new Map<string, any>();
 }
 
 const _globalAuditLog: string[] = (globalThis as any).__BUSSIN_AUDIT_LOG__;
 const _globalQueues: Map<string, any[]> = (globalThis as any).__BUSSIN_QUEUES__;
 const _globalTopology: Map<string, { type: 'queue' | 'topic' | 'subscription', subscriptions?: string[] }> = (globalThis as any).__BUSSIN_TOPOLOGY__;
 const _globalSeqCounters: Map<string, number> = (globalThis as any).__BUSSIN_SEQ_COUNTERS__;
+const _globalSessionStates: Map<string, any> = (globalThis as any).__BUSSIN_SESSION_STATES__;
 
 /**
  * Build a full AMQP message object from a stored mock message.
@@ -152,11 +154,31 @@ export class MockBroker extends EventEmitter {
     public connect(options: any) { return new MockConnection(this, options); }
 }
 
+class MockSession extends EventEmitter {
+    constructor(public connection: MockConnection) {
+        super();
+    }
+    public begin() {}
+    public open() {}
+    public open_sender(opts: any) {
+        return this.connection.open_sender(opts);
+    }
+    public open_receiver(opts: any) {
+        return this.connection.open_receiver(opts);
+    }
+    public close() {}
+    public end() {}
+}
+
 class MockConnection extends EventEmitter {
     public id = _nextId++;
     public receivers = new Set<MockReceiver>();
     public session: any = { connection: this, isOpen: () => true, isClosed: () => false };
     private activityHandler: (addr: string) => void;
+
+    public create_session() {
+        return new MockSession(this);
+    }
 
     constructor(private broker: MockBroker, public options: any) {
         super();
@@ -369,6 +391,43 @@ class MockConnection extends EventEmitter {
                 response.application_properties.statusCode = 200;
                 response.application_properties['status-code'] = 200;
                 response.body = { 'message-count': deleted };
+
+            } else if (operation === 'com.microsoft:get-message-sessions') {
+                const queue = this.broker.getMessages(entityPath);
+                const sessionIdsSet = new Set<string>();
+                queue.forEach(m => {
+                    if (m.group_id) {
+                        sessionIdsSet.add(String(m.group_id));
+                    }
+                });
+                const sessionIds = Array.from(sessionIdsSet);
+                response.body = { 'sessions-ids': sessionIds };
+                response.application_properties.statusCode = 200;
+                response.application_properties['status-code'] = 200;
+
+            } else if (operation === 'com.microsoft:get-session-state') {
+                const sessionId = msg.body?.['session-id'];
+                const stateKey = `${entityPath}/${sessionId}`;
+                const rawState = _globalSessionStates.get(stateKey);
+                if (rawState !== undefined && rawState !== null) {
+                    response.body = { 'session-state': rawState };
+                } else {
+                    response.body = { 'session-state': null };
+                }
+                response.application_properties.statusCode = 200;
+                response.application_properties['status-code'] = 200;
+
+            } else if (operation === 'com.microsoft:set-session-state') {
+                const sessionId = msg.body?.['session-id'];
+                const stateVal = msg.body?.['session-state'];
+                const stateKey = `${entityPath}/${sessionId}`;
+                if (stateVal === null || stateVal === undefined) {
+                    _globalSessionStates.delete(stateKey);
+                } else {
+                    _globalSessionStates.set(stateKey, stateVal);
+                }
+                response.application_properties.statusCode = 200;
+                response.application_properties['status-code'] = 200;
 
             } else {
                 // Unknown operation: return 501

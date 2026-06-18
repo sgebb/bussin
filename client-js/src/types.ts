@@ -17,17 +17,17 @@ export interface ServiceBusMessage {
     replyTo: string | undefined;
     to: string | undefined;
     deliveryCount: number;
-    enqueuedTime: Date | undefined;
+    enqueuedTime: string | undefined;
     sequenceNumber: number | undefined;
-    lockedUntil: Date | undefined;
+    lockedUntil: string | undefined;
     scheduledEnqueueTime: Date | number | undefined;
     partitionKey: string | undefined;
     applicationProperties: Record<string, any>;
     messageAnnotations: Record<string, any>;
     properties: Record<string, any>;
     ttl: number | undefined;
-    expiryTime: Date | undefined;
-    creationTime: Date | undefined;
+    expiryTime: string | undefined;
+    creationTime: string | undefined;
 }
 
 /**
@@ -119,10 +119,26 @@ export interface LockedMessage extends ServiceBusMessage {
     lockToken: string;
 }
 
+
 /**
  * Dead letter options
  */
 export interface DeadLetterOptions {
     deadLetterReason?: string;
     deadLetterErrorDescription?: string;
+}
+
+/**
+ * Format AMQP error objects or strings into readable messages
+ */
+export function formatAmqpError(error: any): string {
+    if (!error) return 'Unknown error';
+    if (typeof error === 'string') return error;
+    if (error.description) {
+        return error.condition ? `${error.condition}: ${error.description}` : error.description;
+    }
+    if (error.message) return error.message;
+    if (error.condition) return error.condition;
+    const str = error.toString();
+    return str === '[object Object]' ? JSON.stringify(error) : str;
 }

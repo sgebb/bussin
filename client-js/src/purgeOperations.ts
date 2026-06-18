@@ -1,6 +1,7 @@
 import { ServiceBusConnection } from './connection.js';
 import { ManagementClient } from './managementClient.js';
 import { MessageReceiver } from './messageReceiver.js';
+import { formatAmqpError } from './types.js';
 import type { ProgressCallback, PurgeController } from './types.js';
 
 /**
@@ -12,10 +13,11 @@ export async function purgeQueue(
     queueName: string,
     token: string,
     onProgress: ProgressCallback | null = null,
-    fromDeadLetter: boolean = false
+    fromDeadLetter: boolean = false,
+    requiresSession: boolean = false
 ): Promise<PurgeController> {
     const entityPath = fromDeadLetter ? `${queueName}/$DeadLetterQueue` : queueName;
-    return await purgeEntity(namespace, entityPath, token, onProgress);
+    return await purgeEntity(namespace, entityPath, token, onProgress, requiresSession);
 }
 
 /**
@@ -28,11 +30,12 @@ export async function purgeSubscription(
     subscriptionName: string,
     token: string,
     onProgress: ProgressCallback | null = null,
-    fromDeadLetter: boolean = false
+    fromDeadLetter: boolean = false,
+    requiresSession: boolean = false
 ): Promise<PurgeController> {
     const subscriptionPath = `${topicName}/subscriptions/${subscriptionName}`;
     const entityPath = fromDeadLetter ? `${subscriptionPath}/$DeadLetterQueue` : subscriptionPath;
-    return await purgeEntity(namespace, entityPath, token, onProgress);
+    return await purgeEntity(namespace, entityPath, token, onProgress, requiresSession);
 }
 
 // Internal implementation - OPTIMIZED VERSION
@@ -40,7 +43,8 @@ async function purgeEntity(
     namespace: string,
     entityPath: string,
     token: string,
-    onProgress: ProgressCallback | null = null
+    onProgress: ProgressCallback | null = null,
+    requiresSession: boolean = false
 ): Promise<PurgeController> {
     const connection = new ServiceBusConnection(namespace, token);
     let isRunning = true;
@@ -103,6 +107,92 @@ async function purgeEntity(
                 } else {
                     throw err;
                 }
+            }
+
+            const isSessionEnabled = requiresSession;
+
+            if (isSessionEnabled) {
+                console.log('[Purge] Queue requires sessions, starting session-based purge loop...');
+                // Session-based purge: lock next-available session, receive & delete, repeat
+                let consecutiveEmptySessions = 0;
+                const maxEmptySessions = 3; // Stop after 3 consecutive attempts yielding 0 messages
+                
+                const sessionConn = new ServiceBusConnection(namespace, token);
+                try {
+                    await sessionConn.connect();
+                    await sessionConn.authenticateCBS(entityPath);
+                    
+                    while (isRunning && consecutiveEmptySessions < maxEmptySessions) {
+                        const sessionDeleted = await new Promise<number>((resolveSession, rejectSession) => {
+                            let messagesInSession = 0;
+                            let sessionTimeout: NodeJS.Timeout | null = null;
+                            let timedOut = false;
+                            
+                            const source = {
+                                address: entityPath,
+                                filter: {
+                                    'com.microsoft:session-filter': null // next available
+                                }
+                            };
+                            
+                            const rx = sessionConn.connection!.open_receiver({
+                                source: source,
+                                credit_window: 0,
+                                autoaccept: true,
+                                rcv_settle_mode: 0 // Receive and Delete
+                            });
+                            
+                            const closeAndResolve = () => {
+                                if (timedOut) return;
+                                timedOut = true;
+                                if (sessionTimeout) clearTimeout(sessionTimeout);
+                                rx.close();
+                                resolveSession(messagesInSession);
+                            };
+                            
+                            rx.on('message', () => {
+                                if (sessionTimeout) {
+                                    clearTimeout(sessionTimeout);
+                                    sessionTimeout = null;
+                                }
+                                messagesInSession++;
+                                deletedCount++;
+                                if (onProgress) {
+                                    onProgress(deletedCount);
+                                }
+                                
+                                rx.add_credit(1);
+                                sessionTimeout = setTimeout(closeAndResolve, 500);
+                            });
+                            
+                            rx.on('receiver_error', (context) => {
+                                if (sessionTimeout) clearTimeout(sessionTimeout);
+                                rx.close();
+                                const err = context.receiver.error ? formatAmqpError(context.receiver.error) : '';
+                                if (err.includes('timeout') || err.includes('Timeout') || err.includes('no-session') || err.includes('No session available')) {
+                                    resolveSession(0);
+                                } else {
+                                    rejectSession(new Error(`Session receiver error: ${err}`));
+                                }
+                            });
+                            
+                            rx.add_credit(1);
+                            sessionTimeout = setTimeout(closeAndResolve, 2000);
+                        });
+                        
+                        if (sessionDeleted > 0) {
+                            consecutiveEmptySessions = 0;
+                            console.log(`[Purge] Drained session: deleted ${sessionDeleted} messages (total: ${deletedCount})`);
+                        } else {
+                            consecutiveEmptySessions++;
+                        }
+                    }
+                } finally {
+                    sessionConn.close();
+                }
+                
+                resolve(deletedCount);
+                return;
             }
 
             // Strategy 2: Parallel Receivers (FAST - 4-5x faster than single receiver)

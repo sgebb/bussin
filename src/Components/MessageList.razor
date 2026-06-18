@@ -24,8 +24,8 @@
                     @if (SelectedMessages.Any())
                     {
                         <div class="btn-group btn-group-sm me-2">
-                            <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@(IsProcessing || RequiresSession)" 
-                                    title="@(RequiresSession ? "Delete not supported for session-enabled entities" : "Delete selected messages")">
+                            <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@IsProcessing" 
+                                    title="Delete selected messages">
                                 Delete
                             </button>
                             @if (IsDLQ)
@@ -36,8 +36,8 @@
                             }
                             else
                             {
-                                <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@(IsProcessing || RequiresSession)"
-                                        title="@(RequiresSession ? "Move to DLQ not supported for session-enabled entities" : "Move to DLQ")">
+                                <button class="btn btn-warning" @onclick="OnMoveToDLQSelected" disabled="@IsProcessing"
+                                        title="Move to DLQ">
                                     To DLQ
                                 </button>
                             }

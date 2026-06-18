@@ -33,8 +33,8 @@ public interface IServiceBusJsInteropService
     Task StopMonitoringAsync(IJSObjectReference monitorController);
     
     // Purge with progress (for future use if needed)
-    Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false);
-    Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false);
+    Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false);
+    Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false);
     
     // Delete by sequence number (direct, no lock needed)
     Task DeleteQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false);
@@ -63,6 +63,6 @@ public interface IServiceBusJsInteropService
 
     // Session Operations
     Task<List<string>> GetMessageSessionsAsync(string namespaceName, string entityPath, string token, DateTime? lastUpdatedTime = null, int skip = 0, int top = 100);
-    Task<string> GetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId);
-    Task SetSessionStateAsync(string namespaceName, string entityPath, string token, string sessionId, string? state);
+
 }
+

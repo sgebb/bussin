@@ -128,13 +128,7 @@
 
         <div class="explorer-messages-content">
             <div class="explorer-messages-main">
-                @if (SelectionState.SelectedEntityRequiresSession)
-                {
-                    <div class="session-warning-banner">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <span><strong>Session-enabled.</strong> Send requires Session ID. Delete/Purge not supported.</span>
-                    </div>
-                }
+
 
                 <div class="explorer-messages-list">
                     @if (MessageListState.PeekedMessages.Count > 0)
@@ -323,6 +317,23 @@
                     <strong>Delete from Dead Letter Queue after resubmit</strong>
                     <small class="d-block text-muted">This will permanently remove the message from the DLQ</small>
                 </label>
+            </div>
+        </div>
+    }
+    @if (DialogService.IsMoveToDLQModal)
+    {
+        <div class="dlq-customization mt-3 p-3 rounded border border-warning" style="background: rgba(255, 193, 7, 0.05); backdrop-filter: blur(10px);">
+            <div class="d-flex align-items-center mb-3">
+                <i class="bi bi-exclamation-triangle-fill text-warning me-2" style="font-size: 1.1rem;"></i>
+                <h6 class="mb-0 text-warning fw-semibold">Dead Letter Metadata</h6>
+            </div>
+            <div class="mb-3">
+                <label for="dlqReasonInput" class="form-label fw-medium text-secondary" style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">Dead Letter Reason</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="dlqReasonInput" @bind="DialogService.MoveToDLQReason" placeholder="Manual move to DLQ" />
+            </div>
+            <div class="mb-0">
+                <label for="dlqDescInput" class="form-label fw-medium text-secondary" style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">Error Description</label>
+                <textarea class="form-control form-control-sm bg-dark text-white border-secondary" id="dlqDescInput" rows="2" @bind="DialogService.MoveToDLQErrorDescription" placeholder="Moved by user"></textarea>
             </div>
         </div>
     }

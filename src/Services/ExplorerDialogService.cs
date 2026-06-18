@@ -103,6 +103,13 @@ public sealed class ExplorerDialogService : IDisposable
     public bool ResubmitRemoveFromDLQ { get; set; } = true;
     public bool IsResubmitModal { get; set; }
 
+    // Move to DLQ Modal state
+    public bool IsMoveToDLQModal { get; set; }
+    public string MoveToDLQReason { get; set; } = "Manual move to DLQ";
+    public string MoveToDLQErrorDescription { get; set; } = "Moved by user";
+
+
+
     // ConfirmModal Bridge
     public bool ConfirmModalVisible => _confirmModal.IsVisible;
     public string ConfirmModalTitle => _confirmModal.Title;

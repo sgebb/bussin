@@ -47,16 +47,16 @@
     <!-- Modify Actions -->
     <div class="action-btn-group">
         <div class="action-btn-group-title">Modify</div>
-        <button class="btn btn-action btn-warning w-100 @(!HasQueueOrSubscriptionSelected || !IsViewingDLQ || CurrentResubmitOperation != null || SelectedEntityRequiresSession ? "disabled-grey" : "")"
+        <button class="btn btn-action btn-warning w-100 @(!HasQueueOrSubscriptionSelected || !IsViewingDLQ || CurrentResubmitOperation != null ? "disabled-grey" : "")"
                 @onclick="OnResubmitAll"
-                disabled="@(!HasQueueOrSubscriptionSelected || !IsViewingDLQ || CurrentResubmitOperation != null || SelectedEntityRequiresSession)"
-                title="@(!IsViewingDLQ ? "Only available when viewing Dead Letter Queue" : SelectedEntityRequiresSession ? "Resubmit not supported for session-enabled entities" : CurrentResubmitOperation != null ? "Resubmit already in progress" : "Resubmit all messages from Dead Letter Queue")">
+                disabled="@(!HasQueueOrSubscriptionSelected || !IsViewingDLQ || CurrentResubmitOperation != null)"
+                title="@(!IsViewingDLQ ? "Only available when viewing Dead Letter Queue" : CurrentResubmitOperation != null ? "Resubmit already in progress" : "Resubmit all messages from Dead Letter Queue")">
             <i class="bi bi-arrow-repeat"></i> Resubmit All
         </button>
-        <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession ? "disabled-grey" : "")"
+        <button class="btn btn-action btn-danger w-100 @(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null ? "disabled-grey" : "")"
                 @onclick="OnPurge"
-                disabled="@(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null || SelectedEntityRequiresSession)"
-                title="@(SelectedEntityRequiresSession ? "Purge not supported for session-enabled entities" : CurrentPurgeOperation != null ? "Purge already in progress" : "Purge all messages")">
+                disabled="@(!HasQueueOrSubscriptionSelected || CurrentPurgeOperation != null)"
+                title="@(CurrentPurgeOperation != null ? "Purge already in progress" : "Purge all messages")">
             <i class="bi bi-trash"></i> Purge
         </button>
     </div>

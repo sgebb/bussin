@@ -135,47 +135,6 @@
             );
         };
 
-        // Helper to start purge with progress callback
-        // Queue signature: (namespace, queueName, token, callbackRef, fromDeadLetter, "queue")
-        // Subscription signature: (namespace, topicName, subscriptionName, token, callbackRef, fromDeadLetter, "subscription")
-        window.startPurgeWithProgress = async function (...args) {
-            const type = args[args.length - 1]; // Last argument is type
-
-            if (type === 'queue') {
-                const [namespace, queueName, token, callbackRef, fromDeadLetter] = args;
-                const progressCallback = (count) => callbackRef.invokeMethodAsync('OnProgress', count);
-                return await ServiceBusAPI.purgeQueue(namespace, queueName, token, progressCallback, fromDeadLetter);
-            } else {
-                const [namespace, topicName, subscriptionName, token, callbackRef, fromDeadLetter] = args;
-                const progressCallback = (count) => callbackRef.invokeMethodAsync('OnProgress', count);
-                return await ServiceBusAPI.purgeSubscription(namespace, topicName, subscriptionName, token, progressCallback, fromDeadLetter);
-            }
-        };
-
-        // Helper to start search with progress callback
-        window.startSearchWithProgress = async function (namespace, queueName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, type, bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches) {
-            const progressCallback = (scanned, matches, newMatches) =>
-                callbackRef.invokeMethodAsync('OnProgress', scanned, matches, newMatches);
-
-            if (type === 'queue') {
-                return await ServiceBusAPI.searchQueueMessages(
-                    namespace, queueName, token, fromDeadLetter,
-                    bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches,
-                    progressCallback
-                );
-            } else {
-                return await ServiceBusAPI.searchSubscriptionMessages(
-                    namespace, topicName, subscriptionName, token, fromDeadLetter,
-                    bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches,
-                    progressCallback
-                );
-            }
-        };
-
-        // Helper to await the promise property of a controller object
-        window.awaitControllerPromise = async function (controller) {
-            return await controller.promise;
-        };
 
         // Helper for Demo Mode to create a fake controller
         window.createMockController = function (value) {
