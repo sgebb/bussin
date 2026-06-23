@@ -174,10 +174,13 @@ public class SimulatorTopologyTests
         var doc = System.Text.Json.JsonDocument.Parse(json);
         var props = doc.RootElement.GetProperty("properties");
         
-        return props.GetProperty("message_id").GetString() == original.MessageId &&
+        var messageId = props.GetProperty("message_id").GetString();
+        return messageId != original.MessageId &&
+               !string.IsNullOrEmpty(messageId) &&
                props.GetProperty("subject").GetString() == original.Subject &&
                props.GetProperty("correlation_id").GetString() == original.CorrelationId &&
                props.GetProperty("application_properties").GetProperty("MyProp").GetString() == "Value" &&
-               props.GetProperty("application_properties").GetProperty("x-bussin-resubmitted").GetString() == "true";
+               props.GetProperty("application_properties").GetProperty("x-bussin-resubmitted").GetString() == "true" &&
+               props.GetProperty("application_properties").GetProperty("x-bussin-original-message-id").GetString() == original.MessageId;
     }
 }

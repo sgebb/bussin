@@ -414,7 +414,7 @@
     {
         isEditing = true;
         editBody = Message?.Body?.ToString() ?? "";
-        editMessageId = Message?.MessageId ?? "";
+        editMessageId = IsDLQ ? Guid.NewGuid().ToString() : (Message?.MessageId ?? "");
         editCorrelationId = Message?.CorrelationId ?? "";
         editSessionId = Message?.SessionId ?? "";
         editSubject = Message?.Subject ?? "";

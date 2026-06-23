@@ -451,7 +451,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             var batchMessages = messagesToResend.Select(msg => new
             {
                 body = msg.Body ?? "",
-                properties = CreateResendProperties(msg)
+                properties = CreateResendProperties(msg, fromDeadLetter)
             }).ToArray<object>();
             
             // Send all messages in one batch (single connection)
@@ -509,7 +509,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    private static MessageProperties CreateResendProperties(ServiceBusMessage msg)
+    private static MessageProperties CreateResendProperties(ServiceBusMessage msg, bool fromDeadLetter)
     {
         // Start with existing application properties or create new dictionary
         var appProps = msg.ApplicationProperties != null 
@@ -519,10 +519,14 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         // Add resubmit marker
         appProps["x-bussin-resubmitted"] = "true";
         appProps["x-bussin-resubmitted-at"] = DateTime.UtcNow.ToString("o");
+        if (fromDeadLetter && !string.IsNullOrEmpty(msg.MessageId))
+        {
+            appProps["x-bussin-original-message-id"] = msg.MessageId;
+        }
         
         return new MessageProperties
         {
-            MessageId = msg.MessageId,
+            MessageId = fromDeadLetter ? Guid.NewGuid().ToString() : msg.MessageId,
             ContentType = msg.ContentType,
             CorrelationId = msg.CorrelationId,
             Subject = msg.Subject,
