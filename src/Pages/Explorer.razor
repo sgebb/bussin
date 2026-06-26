@@ -138,6 +138,7 @@
                                      IsDLQ="@SelectionState.State.IsViewingDLQ"
                                      IsProcessing="@PeekService.IsProcessingBatch"
                                      RequiresSession="@SelectionState.SelectedEntityRequiresSession"
+                                     ColumnPreferenceKey="@GetColumnPreferenceKey()"
                                      OnMessageSelected="@ShowMessageDetail"
                                      OnDeleteMessages="@PeekService.DeleteMessages"
                                      OnResubmitMessages="@PeekService.ResubmitMessages"
@@ -379,6 +380,18 @@
 
     private ElementReference renameInputRef;
     private MessageList? _messageListRef;
+
+    private string? GetColumnPreferenceKey()
+    {
+        var ns = SelectionState.State.FullyQualifiedNamespace;
+        if (string.IsNullOrEmpty(ns)) return null;
+        var entity = SelectionState.State.SelectedQueueName
+            ?? (SelectionState.State.SelectedTopicName != null && SelectionState.State.SelectedSubscriptionName != null
+                ? $"{SelectionState.State.SelectedTopicName}/{SelectionState.State.SelectedSubscriptionName}"
+                : null);
+        if (entity == null) return null;
+        return $"{ns}|{entity}";
+    }
 
     private bool showAddEntityModal = false;
     private string addEntityTitle = "";
