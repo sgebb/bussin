@@ -195,6 +195,42 @@
         }
     </script>
     <script>
+        // Message preview tooltip: delayed show, frozen position, grace period to enter the box
+        window.previewTooltip = (() => {
+            const showTimers = new WeakMap();
+            const hideTimers = new WeakMap();
+            return {
+                show(container, x, y) {
+                    const ht = hideTimers.get(container);
+                    if (ht) { clearTimeout(ht); hideTimers.delete(container); }
+                    if (container.classList.contains('preview-active')) return;
+                    if (showTimers.has(container)) return;
+                    const t = setTimeout(() => {
+                        showTimers.delete(container);
+                        container.style.setProperty('--ttx', (x + 6) + 'px');
+                        container.style.setProperty('--tty', (y - 40) + 'px');
+                        container.classList.add('preview-active');
+                    }, 500);
+                    showTimers.set(container, t);
+                },
+                hide(container) {
+                    const st = showTimers.get(container);
+                    if (st) { clearTimeout(st); showTimers.delete(container); return; }
+                    const t = setTimeout(() => {
+                        hideTimers.delete(container);
+                        container.classList.remove('preview-active');
+                    }, 100);
+                    hideTimers.set(container, t);
+                },
+                enter(tooltip) {
+                    const container = tooltip.closest('.message-preview-container');
+                    if (!container) return;
+                    const ht = hideTimers.get(container);
+                    if (ht) { clearTimeout(ht); hideTimers.delete(container); }
+                }
+            };
+        })();
+
         // Global listener to map vertical mouse wheel to horizontal scroll for entity lists
         document.addEventListener('wheel', (evt) => {
             const target = evt.target.closest('.entity-list-scroll');

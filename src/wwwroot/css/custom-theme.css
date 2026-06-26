@@ -859,16 +859,18 @@ textarea:focus {
 }
 
 .message-preview-line {
-    cursor: text;
+    cursor: pointer;
     display: block;
     width: 100%;
 }
 
+/* Tooltip appears after a 500ms hover delay at the frozen cursor position (via JS previewTooltip).
+   position: fixed so it escapes any overflow clipping; --ttx/--tty set by JS at show time. */
 .message-preview-tooltip {
     display: none;
     position: fixed;
-    top: calc(var(--mouse-y, 0px) + 15px);
-    left: calc(var(--mouse-x, 0px) + 15px);
+    top: var(--tty, 0px);
+    left: var(--ttx, 0px);
     z-index: 1050;
     background-color: var(--surface-color);
     border: 1px solid var(--surface-border);
@@ -886,19 +888,134 @@ textarea:focus {
     cursor: text;
 }
 
-.message-preview-line {
-    cursor: pointer;
-    display: block;
-    width: 100%;
-}
-
 .message-item {
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
-.message-preview-container:hover .message-preview-tooltip {
+.preview-active .message-preview-tooltip {
     display: block;
+}
+
+/* Message property tags (column values inline in message row) */
+.message-property-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.message-property-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    font-size: 0.72rem;
+    max-width: 260px;
+    border: 1px solid var(--surface-border);
+}
+
+.property-tag-key {
+    background-color: var(--surface-alt-color, rgba(128,128,128,0.15));
+    color: var(--text-muted);
+    padding: 1px 5px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+}
+
+.property-tag-value {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    padding: 1px 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.property-tag-missing .property-tag-key {
+    opacity: 0.5;
+}
+
+.message-property-tag-dlq .property-tag-key {
+    background-color: rgba(220, 53, 69, 0.15);
+    color: var(--destructive-color, #dc3545);
+}
+
+/* Column configuration dropdown */
+.column-dropdown {
+    background-color: var(--surface-color);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    min-width: 240px;
+    max-width: 320px;
+    padding: 8px 0;
+    color: var(--text-color);
+}
+
+.column-dropdown-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px 8px;
+    border-bottom: 1px solid var(--surface-border);
+    margin-bottom: 4px;
+}
+
+.column-dropdown-tip {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 4px 12px 6px;
+    border-bottom: 1px solid var(--surface-border);
+    margin-bottom: 4px;
+}
+
+.column-dropdown-list {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 0 4px;
+}
+
+.column-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    width: 100%;
+    user-select: none;
+}
+
+.column-dropdown-item:hover {
+    background-color: var(--surface-alt-color, rgba(128,128,128,0.1));
+}
+
+.column-dropdown-item input[type="checkbox"] {
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.column-dropdown-empty {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.column-dropdown-item-locked {
+    opacity: 0.7;
+    cursor: default;
+}
+
+.column-dropdown-divider {
+    height: 1px;
+    background-color: var(--surface-border);
+    margin: 4px 8px;
 }
 
 /* Search Input in Message List Header */

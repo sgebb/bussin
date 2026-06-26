@@ -125,7 +125,7 @@ public sealed class EntitySelectionState : IDisposable
         {
             var connection = _navState.GetNamespaceConnection(namespaceParam);
             IsConnectionStringMode = connection != null && !string.IsNullOrEmpty(connection.ConnectionString);
-            
+
             State.SetNamespace(new ServiceBusNamespaceInfo
             {
                 Name = namespaceParam.Split('.').FirstOrDefault() ?? "",
@@ -141,18 +141,14 @@ public sealed class EntitySelectionState : IDisposable
 
             DisplayName = connection?.DisplayName ?? nameParam ?? "";
 
+            // Fire entity loading in the background so it doesn't block selection logic below.
+            // If we await here, entity loading completes AFTER InitializeAsync returns, but the
+            // selection code below would overwrite any queue the user clicked during loading.
             if (IsConnectionStringMode)
-            {
-                await LoadConnectionStringEntitiesAsync(connection!);
-            }
-            else
-            {
-                if (!string.IsNullOrEmpty(State.CurrentNamespace?.SubscriptionId) && 
-                    !string.IsNullOrEmpty(State.CurrentNamespace?.ResourceGroup))
-                {
-                    await LoadEntitiesAsync();
-                }
-            }
+                _ = LoadConnectionStringEntitiesAsync(connection!);
+            else if (!string.IsNullOrEmpty(State.CurrentNamespace?.SubscriptionId) &&
+                     !string.IsNullOrEmpty(State.CurrentNamespace?.ResourceGroup))
+                _ = LoadEntitiesAsync();
         }
 
         bool selectionChanged = false;
@@ -183,8 +179,10 @@ public sealed class EntitySelectionState : IDisposable
             }
         }
 
-        if (queueParam == null && topicParam == null)
+        if (queueParam == null && topicParam == null && isNewNamespace)
         {
+            // Only clear selection when actually switching namespaces, not on every re-initialization.
+            // Clearing unconditionally would wipe a queue the user clicked during entity loading.
             if (State.SelectedQueueName != null || State.SelectedTopicName != null)
             {
                 State.ClearSelection();
@@ -304,6 +302,7 @@ public sealed class EntitySelectionState : IDisposable
     {
         try
         {
+            int count = 0;
             await foreach (var queue in _resourceService.ListQueuesAsync(credential, namespaceInfo, ct))
             {
                 if (ct.IsCancellationRequested) break;
@@ -311,7 +310,8 @@ public sealed class EntitySelectionState : IDisposable
                 {
                     QueueDict[queue.Name] = queue;
                     seenQueues.Add(queue.Name);
-                    NotifyStateChanged();
+                    // Batch UI updates to avoid mid-click DOM churn that would lose entity selection clicks
+                    if (++count % 10 == 0) NotifyStateChanged();
                 }
             }
         }
@@ -322,6 +322,7 @@ public sealed class EntitySelectionState : IDisposable
     {
         try
         {
+            int count = 0;
             await foreach (var topic in _resourceService.ListTopicsAsync(credential, namespaceInfo, ct))
             {
                 if (ct.IsCancellationRequested) break;
@@ -329,7 +330,7 @@ public sealed class EntitySelectionState : IDisposable
                 {
                     TopicDict[topic.Name] = topic;
                     seenTopics.Add(topic.Name);
-                    NotifyStateChanged();
+                    if (++count % 10 == 0) NotifyStateChanged();
                 }
             }
         }

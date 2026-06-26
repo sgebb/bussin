@@ -50,7 +50,7 @@
             <div class="entity-list-scroll entity-list-grid @(_zoomedColumn == ZoomedColumn.Queues ? "zoomed" : "")">
                 @foreach (var queue in Queues)
                 {
-                    <div class="entity-item @(SelectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")" 
+                    <div @key="queue.Name" class="entity-item @(SelectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")"
                          @onclick="() => OnQueueSelected.InvokeAsync(queue.Name)" title="@queue.Name">
                         <div class="d-flex justify-content-between align-items-center w-100">
                             <span class="entity-name-with-icons text-truncate me-2">
@@ -143,7 +143,7 @@
             <div class="entity-list-scroll entity-list-grid @(_zoomedColumn == ZoomedColumn.Topics ? "zoomed" : "")">
                 @foreach (var topic in Topics)
                 {
-                    <div class="entity-item @(SelectedTopicName == topic.Name ? "active" : "")" 
+                    <div @key="topic.Name" class="entity-item @(SelectedTopicName == topic.Name ? "active" : "")"
                          @onclick="() => SelectTopic(topic)" title="@topic.Name">
                         <div class="d-flex justify-content-between align-items-center w-100">
                             <span class="entity-name-with-icons text-truncate me-2">
@@ -225,7 +225,7 @@
                 {
                     @foreach (var sub in Subscriptions)
                     {
-                        <div class="entity-item @(SelectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")" 
+                        <div @key="sub.Name" class="entity-item @(SelectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")"
                              @onclick="() => OnSubscriptionSelected.InvokeAsync(sub.Name)" title="@sub.Name">
                              <div class="d-flex justify-content-between align-items-center w-100">
                                  <span class="entity-name-with-icons text-truncate me-2">

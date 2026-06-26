@@ -2,6 +2,7 @@
 @using System.Text.RegularExpressions
 @inject MessageListState MessageListState
 @inject IJSRuntime JSRuntime
+@inject IPreferencesService PreferencesService
 
 
 <div class="message-list">
@@ -66,7 +67,8 @@
                             </button>
                             @if (showDownloadDropdown)
                             {
-                                <ul class="dropdown-menu show" style="display: block; position: absolute; right: 0; left: auto; top: 100%; z-index: 1050; min-width: 210px; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);">
+                                <div style="position: fixed; inset: 0; z-index: 1040;" @onclick="() => showDownloadDropdown = false"></div>
+                                <ul class="dropdown-menu show" style="display: block; position: absolute; right: 0; left: auto; top: 100%; z-index: 1050; min-width: 210px; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);" @onclick:stopPropagation="true">
                                     <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" @onclick="DownloadLoaded">Download Loaded (@Messages.Count)</button></li>
                                     <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" @onclick="DownloadEntireEntity">Download Queue/Sub (Max 10k)</button></li>
                                 </ul>
@@ -77,6 +79,49 @@
                     <button class="btn btn-sm btn-outline-secondary" @onclick="OnClearMessagesClick" title="Clear all peeked messages">
                         <i class="bi bi-trash"></i> Clear
                     </button>
+
+                    <div class="dropdown ms-2" style="position: relative;">
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleColumnDropdown" type="button" title="Configure visible properties">
+                            <i class="bi bi-tags"></i> Properties
+                        </button>
+                        @if (_showColumnDropdown)
+                        {
+                            <div style="position: fixed; inset: 0; z-index: 1040;" @onclick="() => _showColumnDropdown = false"></div>
+                            <div class="column-dropdown" style="position: absolute; right: 0; top: 100%; z-index: 1050;" @onclick:stopPropagation="true">
+                                <div class="column-dropdown-header">
+                                    <strong>Visible properties</strong>
+                                    <button class="btn-close" @onclick="() => _showColumnDropdown = false"></button>
+                                </div>
+                                <div class="column-dropdown-list">
+                                    @foreach (var key in AlwaysOnProperties)
+                                    {
+                                        <label class="column-dropdown-item column-dropdown-item-locked" title="Always visible">
+                                            <input type="checkbox" checked disabled />
+                                            <span>@key</span>
+                                            <i class="bi bi-lock ms-auto" style="font-size: 0.7rem; opacity: 0.45;"></i>
+                                        </label>
+                                    }
+                                    @if (_discoveredAppProperties.Any(k => !AlwaysShownDlqProps.Contains(k)))
+                                    {
+                                        <div class="column-dropdown-divider"></div>
+                                        @foreach (var key in _discoveredAppProperties.Where(k => !AlwaysShownDlqProps.Contains(k)).OrderBy(k => k))
+                                        {
+                                            var isChecked = _activeColumns.Contains(key);
+                                            <label class="column-dropdown-item">
+                                                <input type="checkbox" checked="@isChecked"
+                                                       @onchange="() => ToggleColumn(key)" />
+                                                <span>@key</span>
+                                            </label>
+                                        }
+                                    }
+                                    else if (!_discoveredAppProperties.Any())
+                                    {
+                                        <div class="column-dropdown-empty">No custom properties in loaded messages.</div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
                 </div>
             </div>
         </div>
@@ -102,20 +147,23 @@
                                    @onchange="() => ToggleMessage(message.SequenceNumber)">
                         </div>
                         <div class="flex-grow-1" style="min-width: 0;">
-                            <div class="d-flex justify-content-between align-items-baseline mb-1">
-                                <h6 class="text-truncate pe-2 m-0 flex-grow-1" style="min-width: 0;">
-                                    <span class="badge bg-secondary me-2">Seq: @message.SequenceNumber</span>
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div class="message-property-tags flex-grow-1" style="min-width: 0;">
+                                    @foreach (var col in AlwaysOnProperties.Concat(_activeColumns).Distinct())
+                                    {
+                                        var val = GetPropertyValue(message, col);
+                                        <span class="message-property-tag" title="@col: @(val ?? "(not set)")">
+                                            <span class="property-tag-key">@col</span>
+                                            <span class="property-tag-value @(val == null ? "text-muted" : "")">@(val ?? "—")</span>
+                                        </span>
+                                    }
                                     @if (IsScheduledMessage(message))
                                     {
-                                        <span class="badge bg-info me-2" title="Scheduled for @FormatScheduledTime(message.ScheduledEnqueueTime!.Value)">
+                                        <span class="badge bg-info align-self-center" title="Scheduled for @FormatScheduledTime(message.ScheduledEnqueueTime!.Value)">
                                             <i class="bi bi-clock"></i> Scheduled
                                         </span>
                                     }
-                                    @if (!string.IsNullOrEmpty(message.MessageId))
-                                    {
-                                        <small class="text-muted">ID: @message.MessageId</small>
-                                    }
-                                </h6>
+                                </div>
                                 <small class="text-muted flex-shrink-0 ms-2" style="white-space: nowrap;">
                                     @if (IsScheduledMessage(message))
                                     {
@@ -129,15 +177,17 @@
                                     }
                                 </small>
                             </div>
-                            <div class="message-preview-container" style="overflow: visible; width: 100%; max-width: 0; min-width: 100%;" 
-                                 onmouseenter="this.style.setProperty('--mouse-x', event.clientX + 'px'); this.style.setProperty('--mouse-y', event.clientY + 'px');">
+                            <div class="message-preview-container"
+                                 onmouseenter="previewTooltip.show(this, event.clientX, event.clientY)"
+                                 onmouseleave="previewTooltip.hide(this)">
                                 <p class="mb-1 text-truncate message-preview-line">
                                     <small>@GetMessagePreview(message)</small>
                                 </p>
-                                <div class="message-preview-tooltip" 
-                                     @onclick:stopPropagation="true" 
-                                     @onmousedown:stopPropagation="true"
-                                     style="cursor: text;">@GetFullMessageBody(message)</div>
+                                <div class="message-preview-tooltip"
+                                     onmouseenter="previewTooltip.enter(this)"
+                                     onmouseleave="previewTooltip.hide(this.closest('.message-preview-container'))"
+                                     @onclick:stopPropagation="true"
+                                     @onmousedown:stopPropagation="true">@GetFullMessageBody(message)</div>
                             </div>
                             @if (message.DeliveryCount > 0)
                             {
@@ -162,6 +212,7 @@
     [Parameter] public bool IsDLQ { get; set; }
     [Parameter] public bool IsProcessing { get; set; }
     [Parameter] public bool RequiresSession { get; set; }
+    [Parameter] public string? ColumnPreferenceKey { get; set; }
     [Parameter] public EventCallback<ServiceBusMessage> OnMessageSelected { get; set; }
     [Parameter] public EventCallback<List<long>> OnDeleteMessages { get; set; }
     [Parameter] public EventCallback<List<long>> OnResubmitMessages { get; set; }
@@ -171,6 +222,20 @@
     [Parameter] public EventCallback<List<long>> OnDownloadSelected { get; set; }
     [Parameter] public EventCallback OnDownloadLoaded { get; set; }
     [Parameter] public EventCallback OnDownloadEntireEntity { get; set; }
+
+    // Always shown, locked in the dropdown (can't be unchecked)
+    private static readonly IReadOnlyList<string> AlwaysOnBase = new[] { "SequenceNumber" };
+    private static readonly HashSet<string> AlwaysShownDlqProps = new() { "DeadLetterReason" };
+
+    // AlwaysOnProperties includes DLQ props when on a DLQ
+    private IEnumerable<string> AlwaysOnProperties =>
+        IsDLQ ? AlwaysOnBase.Concat(AlwaysShownDlqProps) : AlwaysOnBase;
+
+    // _activeColumns = user-chosen custom app properties (stored in prefs)
+    private List<string> _activeColumns = new();
+    private HashSet<string> _discoveredAppProperties = new();
+    private bool _showColumnDropdown = false;
+    private string? _lastColumnPreferenceKey;
 
     private string SearchTerm
     {
@@ -187,6 +252,41 @@
     }
 
     private List<ServiceBusMessage> DisplayedMessages => MessageListState.FilteredMessages;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reset active columns when entity changes
+        if (ColumnPreferenceKey != _lastColumnPreferenceKey)
+        {
+            _lastColumnPreferenceKey = ColumnPreferenceKey;
+            _discoveredAppProperties = new();
+            _showColumnDropdown = false;
+
+            _activeColumns = new List<string>();
+            if (!string.IsNullOrEmpty(ColumnPreferenceKey))
+            {
+                var prefs = await PreferencesService.LoadPreferencesAsync();
+                if (prefs.EntityColumnPreferences.TryGetValue(ColumnPreferenceKey, out var saved))
+                    _activeColumns = saved
+                        .Where(k => !AlwaysOnBase.Contains(k) && !AlwaysShownDlqProps.Contains(k))
+                        .ToList();
+            }
+        }
+
+        // Discover application property keys from loaded messages.
+        // MessageId and DeadLetterErrorDescription are direct message fields, not in ApplicationProperties,
+        // so inject them explicitly so they appear as selectable options.
+        var props = new HashSet<string> { "MessageId" };
+        if (IsDLQ) props.Add("DeadLetterErrorDescription");
+        foreach (var msg in Messages)
+        {
+            if (msg.ApplicationProperties != null)
+                foreach (var k in msg.ApplicationProperties.Keys) props.Add(k);
+            if (msg.Properties != null)
+                foreach (var k in msg.Properties.Keys) props.Add(k);
+        }
+        _discoveredAppProperties = props;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -287,6 +387,44 @@
         }
         
         return (regularMessages, scheduledCount);
+    }
+
+    private void ToggleColumnDropdown()
+    {
+        _showColumnDropdown = !_showColumnDropdown;
+    }
+
+    private async Task ToggleColumn(string key)
+    {
+        if (_activeColumns.Contains(key))
+            _activeColumns.Remove(key);
+        else
+            _activeColumns.Add(key);
+
+        if (!string.IsNullOrEmpty(ColumnPreferenceKey))
+        {
+            var prefs = await PreferencesService.LoadPreferencesAsync();
+            prefs.EntityColumnPreferences[ColumnPreferenceKey] = new List<string>(_activeColumns);
+            await PreferencesService.SavePreferencesAsync(prefs);
+        }
+    }
+
+    private static string? GetPropertyValue(ServiceBusMessage message, string key) => key switch
+    {
+        "SequenceNumber" => message.SequenceNumber?.ToString(),
+        "MessageId" => message.MessageId,
+        "DeadLetterReason" => GetAppProperty(message, key),
+        "DeadLetterErrorDescription" => GetAppProperty(message, key),
+        _ => GetAppProperty(message, key),
+    };
+
+    private static string? GetAppProperty(ServiceBusMessage message, string key)
+    {
+        if (message.ApplicationProperties != null && message.ApplicationProperties.TryGetValue(key, out var v1))
+            return v1?.ToString();
+        if (message.Properties != null && message.Properties.TryGetValue(key, out var v2))
+            return v2?.ToString();
+        return null;
     }
 
     private MarkupString GetMessagePreview(ServiceBusMessage message)
