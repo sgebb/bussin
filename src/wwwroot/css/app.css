@@ -921,6 +921,7 @@ code {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
 }
 
 .explorer-messages-main>.explorer-messages-list {
@@ -947,6 +948,7 @@ code {
 .explorer-messages-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid var(--border-color);
     border-radius: 4px;
     background-color: var(--card-bg);
