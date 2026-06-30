@@ -8,6 +8,8 @@ public sealed class AppPreferences
     public bool RunWithoutLogin { get; set; } = false;
     // Key: "{namespace}|{entityPath}", Value: list of ApplicationProperty keys to show as columns
     public Dictionary<string, List<string>> EntityColumnPreferences { get; set; } = new();
+
+    public static string BuildColumnPreferenceKey(string @namespace, string entityPath) => $"{@namespace}|{entityPath}";
 }
 
 public sealed class Folder

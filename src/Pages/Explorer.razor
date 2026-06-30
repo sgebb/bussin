@@ -390,7 +390,7 @@
                 ? $"{SelectionState.State.SelectedTopicName}/{SelectionState.State.SelectedSubscriptionName}"
                 : null);
         if (entity == null) return null;
-        return $"{ns}|{entity}";
+        return AppPreferences.BuildColumnPreferenceKey(ns, entity);
     }
 
     private bool showAddEntityModal = false;

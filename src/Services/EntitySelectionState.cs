@@ -298,38 +298,32 @@ public sealed class EntitySelectionState : IDisposable
         }
     }
 
-    private async Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenQueues, CancellationToken ct)
-    {
-        try
-        {
-            int count = 0;
-            await foreach (var queue in _resourceService.ListQueuesAsync(credential, namespaceInfo, ct))
-            {
-                if (ct.IsCancellationRequested) break;
-                if (State.CurrentNamespace?.FullyQualifiedNamespace == namespaceInfo.FullyQualifiedNamespace)
-                {
-                    QueueDict[queue.Name] = queue;
-                    seenQueues.Add(queue.Name);
-                    // Batch UI updates to avoid mid-click DOM churn that would lose entity selection clicks
-                    if (++count % 10 == 0) NotifyStateChanged();
-                }
-            }
-        }
-        catch (OperationCanceledException) { }
-    }
+    private Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenQueues, CancellationToken ct)
+        => StreamEntitiesAsync(_resourceService.ListQueuesAsync(credential, namespaceInfo, ct), QueueDict, seenQueues, namespaceInfo, q => q.Name, ct);
 
-    private async Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenTopics, CancellationToken ct)
+    private Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenTopics, CancellationToken ct)
+        => StreamEntitiesAsync(_resourceService.ListTopicsAsync(credential, namespaceInfo, ct), TopicDict, seenTopics, namespaceInfo, t => t.Name, ct);
+
+    private async Task StreamEntitiesAsync<T>(
+        IAsyncEnumerable<T> stream,
+        Dictionary<string, T> dict,
+        HashSet<string> seen,
+        ServiceBusNamespaceInfo namespaceInfo,
+        Func<T, string> getName,
+        CancellationToken ct)
     {
+        // Batch UI updates to avoid mid-click DOM churn that would lose entity selection clicks
         try
         {
             int count = 0;
-            await foreach (var topic in _resourceService.ListTopicsAsync(credential, namespaceInfo, ct))
+            await foreach (var item in stream)
             {
                 if (ct.IsCancellationRequested) break;
                 if (State.CurrentNamespace?.FullyQualifiedNamespace == namespaceInfo.FullyQualifiedNamespace)
                 {
-                    TopicDict[topic.Name] = topic;
-                    seenTopics.Add(topic.Name);
+                    var name = getName(item);
+                    dict[name] = item;
+                    seen.Add(name);
                     if (++count % 10 == 0) NotifyStateChanged();
                 }
             }

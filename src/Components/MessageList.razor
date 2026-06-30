@@ -470,15 +470,7 @@
         StateHasChanged();
     }
 
-    private static bool IsScheduledMessage(ServiceBusMessage message)
-    {
-        if (!message.ScheduledEnqueueTime.HasValue || message.ScheduledEnqueueTime.Value == 0)
-            return false;
-        
-        // ScheduledEnqueueTime is in unix milliseconds
-        var scheduledTime = DateTimeOffset.FromUnixTimeMilliseconds(message.ScheduledEnqueueTime.Value);
-        return scheduledTime > DateTimeOffset.UtcNow;
-    }
+    private static bool IsScheduledMessage(ServiceBusMessage message) => MessageHelpers.IsScheduledMessage(message);
 
     private static string FormatScheduledTime(long unixMs)
     {

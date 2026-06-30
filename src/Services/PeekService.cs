@@ -328,31 +328,30 @@ public sealed class PeekService : IDisposable
         }
     }
 
+    private Task<List<ServiceBusMessage>> PeekBatchAsync(string token, int count, long startSequence, string? sessionId = null)
+    {
+        var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
+        var state = _entitySelectionState.State;
+        if (state.SelectedQueueName != null)
+            return _jsInterop.PeekQueueMessagesAsync(namespaceOnly, state.SelectedQueueName, token, count, (int)startSequence, state.IsViewingDLQ, sessionId);
+        if (state.IsSubscriptionSelected)
+            return _jsInterop.PeekSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, token, count, (int)startSequence, state.IsViewingDLQ, sessionId);
+        return Task.FromResult(new List<ServiceBusMessage>());
+    }
+
     private async Task<List<ServiceBusMessage>> PeekIterativeAsync(string token, int desiredCount, long startSequence, string? sessionId = null)
     {
         const int batchSize = 250;
         var allMessages = new List<ServiceBusMessage>();
         var currentSequence = startSequence;
-        var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
-        var state = _entitySelectionState.State;
-        
+
         while (allMessages.Count < desiredCount)
         {
-            var remaining = desiredCount - allMessages.Count;
-            var fetchCount = Math.Min(remaining, batchSize);
-            List<ServiceBusMessage> batch;
-            
-            if (state.SelectedQueueName != null)
-                batch = await _jsInterop.PeekQueueMessagesAsync(namespaceOnly, state.SelectedQueueName, token, fetchCount, (int)currentSequence, state.IsViewingDLQ, sessionId);
-            else if (state.IsSubscriptionSelected)
-                batch = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, token, fetchCount, (int)currentSequence, state.IsViewingDLQ, sessionId);
-            else
-                break;
-            
+            var fetchCount = Math.Min(desiredCount - allMessages.Count, batchSize);
+            var batch = await PeekBatchAsync(token, fetchCount, currentSequence, sessionId);
             if (batch.Count == 0) break;
             allMessages.AddRange(batch);
-            var maxSeq = batch.Max(m => m.SequenceNumber ?? 0);
-            currentSequence = maxSeq + 1;
+            currentSequence = batch.Max(m => m.SequenceNumber ?? 0) + 1;
             if (batch.Count < fetchCount) break;
         }
         return allMessages;
@@ -362,17 +361,7 @@ public sealed class PeekService : IDisposable
     {
         try
         {
-            var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
-            var state = _entitySelectionState.State;
-            List<ServiceBusMessage> firstMessage;
-            
-            if (state.SelectedQueueName != null)
-                firstMessage = await _jsInterop.PeekQueueMessagesAsync(namespaceOnly, state.SelectedQueueName, token, 1, 0, state.IsViewingDLQ);
-            else if (state.IsSubscriptionSelected)
-                firstMessage = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, token, 1, 0, state.IsViewingDLQ);
-            else
-                return 0;
-
+            var firstMessage = await PeekBatchAsync(token, 1, 0);
             if (!firstMessage.Any()) return 0;
             var firstSeq = firstMessage[0].SequenceNumber ?? 0;
             long totalMessages = _entitySelectionState.CurrentEntityMessageCount;
@@ -385,34 +374,23 @@ public sealed class PeekService : IDisposable
     private async Task<(List<ServiceBusMessage> messages, long nextSequence)> PeekWithFiltersAsync(string token, PeekOptions options, long startSequence)
     {
         var matchingMessages = new List<ServiceBusMessage>();
-        var currentSequence = (int)startSequence;
+        var currentSequence = startSequence;
         const int batchSize = 100;
         const int maxAttempts = 100;
         var attempts = 0;
-        var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
-        var state = _entitySelectionState.State;
 
         while (matchingMessages.Count < 50 && attempts < maxAttempts)
         {
-            List<ServiceBusMessage> batch;
-            if (state.SelectedQueueName != null)
-                batch = await _jsInterop.PeekQueueMessagesAsync(namespaceOnly, state.SelectedQueueName, token, batchSize, currentSequence, state.IsViewingDLQ, options.SessionId);
-            else if (state.IsSubscriptionSelected)
-                batch = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, token, batchSize, currentSequence, state.IsViewingDLQ, options.SessionId);
-            else
-                break;
-
+            var batch = await PeekBatchAsync(token, batchSize, currentSequence, options.SessionId);
             if (!batch.Any()) break;
-            var matches = batch.Where(m =>
+            matchingMessages.AddRange(batch.Where(m =>
             {
                 if (!string.IsNullOrWhiteSpace(options.BodyFilter) && m.Body?.Contains(options.BodyFilter, StringComparison.OrdinalIgnoreCase) != true) return false;
                 if (!string.IsNullOrWhiteSpace(options.MessageIdFilter) && m.MessageId?.Contains(options.MessageIdFilter, StringComparison.OrdinalIgnoreCase) != true) return false;
                 if (!string.IsNullOrWhiteSpace(options.SubjectFilter) && m.Subject?.Contains(options.SubjectFilter, StringComparison.OrdinalIgnoreCase) != true) return false;
                 return true;
-            }).ToList();
-
-            matchingMessages.AddRange(matches);
-            currentSequence = (int)(batch.Max(m => m.SequenceNumber ?? 0) + 1);
+            }));
+            currentSequence = batch.Max(m => m.SequenceNumber ?? 0) + 1;
             attempts++;
         }
         return (matchingMessages.Take(50).ToList(), currentSequence);
@@ -545,15 +523,6 @@ public sealed class PeekService : IDisposable
         }
     }
 
-    private bool IsScheduledMessage(ServiceBusMessage msg)
-    {
-        if (!msg.ScheduledEnqueueTime.HasValue || msg.ScheduledEnqueueTime.Value == 0)
-            return false;
-        
-        var scheduledTime = DateTimeOffset.FromUnixTimeMilliseconds(msg.ScheduledEnqueueTime.Value);
-        return scheduledTime > DateTimeOffset.UtcNow;
-    }
-
     public void DeleteSingleMessage(long sequenceNumber)
     {
         _dialogService.CloseMessageDetail();
@@ -592,7 +561,7 @@ public sealed class PeekService : IDisposable
         foreach (var seq in sequenceNumbers)
         {
             var msg = _messageListState.PeekedMessages.FirstOrDefault(m => m.SequenceNumber == seq);
-            if (msg != null && IsScheduledMessage(msg))
+            if (msg != null && MessageHelpers.IsScheduledMessage(msg))
             {
                 scheduledSeqNums.Add(seq);
             }
@@ -811,26 +780,14 @@ public sealed class PeekService : IDisposable
     private string _currentExportMode = "selected";
     private List<long> _currentExportSequenceNumbers = new();
 
-    public void DownloadSelectedMessagesAsync(List<long> sequenceNumbers)
-    {
-        _currentExportMode = "selected";
-        _currentExportSequenceNumbers = sequenceNumbers;
-        _dialogService.ShowExportOptionsModal = true;
-        NotifyStateChanged();
-    }
+    public void DownloadSelectedMessagesAsync(List<long> sequenceNumbers) => PrepareExport("selected", sequenceNumbers);
+    public void DownloadLoadedMessagesAsync() => PrepareExport("loaded");
+    public void DownloadEntireEntityMessagesAsync() => PrepareExport("all");
 
-    public void DownloadLoadedMessagesAsync()
+    private void PrepareExport(string mode, List<long>? sequenceNumbers = null)
     {
-        _currentExportMode = "loaded";
-        _currentExportSequenceNumbers.Clear();
-        _dialogService.ShowExportOptionsModal = true;
-        NotifyStateChanged();
-    }
-
-    public void DownloadEntireEntityMessagesAsync()
-    {
-        _currentExportMode = "all";
-        _currentExportSequenceNumbers.Clear();
+        _currentExportMode = mode;
+        _currentExportSequenceNumbers = sequenceNumbers ?? new();
         _dialogService.ShowExportOptionsModal = true;
         NotifyStateChanged();
     }
