@@ -83,7 +83,7 @@
                 }
                 else if (!SelectionState.IsConnectionStringMode)
                 {
-                    <button class="namespace-action-btn refresh-btn" @onclick="SelectionState.RefreshEntitiesAsync" title="Refresh queues and topics">
+                    <button class="namespace-action-btn refresh-btn" @onclick="() => SelectionState.RefreshEntitiesAsync()" title="Refresh queues and topics">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
                 }
@@ -250,7 +250,7 @@
                     OnDelete="@PeekService.DeleteSingleMessage"
                     OnResubmit="@PeekService.ResubmitSingleMessage"
                     OnMoveToDLQ="@PeekService.MoveToDLQSingleMessage"
-                    OnEditResubmit="@SendService.EditAndResubmitMessageAsync" />
+                    OnEditResubmit="@HandleEditResubmitAsync" />
 
 <PeekLockModal IsVisible="@DialogService.ShowPeekLockModal"
                IsProcessing="@PeekService.IsPeeking"
@@ -570,6 +570,15 @@
         if (SendService.ErrorMessage == null)
         {
             DialogService.ShowSendMessageModal = false;
+        }
+    }
+
+    private async Task HandleEditResubmitAsync(MessageDetailModal.EditResubmitRequest request)
+    {
+        await SendService.EditAndResubmitMessageAsync(request);
+        if (SendService.ErrorMessage == null)
+        {
+            DialogService.CloseMessageDetail();
         }
     }
 

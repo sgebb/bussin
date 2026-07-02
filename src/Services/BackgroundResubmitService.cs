@@ -15,7 +15,8 @@ public sealed class BackgroundResubmitService : IDisposable
     private readonly INotificationService _notificationService;
     
     public event Action? OnOperationsChanged;
-    
+    public event Action<ResubmitOperation>? OnResubmitCompleted;
+
     public IReadOnlyList<ResubmitOperation> ActiveOperations => _activeOperations.AsReadOnly();
     
     public BackgroundResubmitService(IServiceScopeFactory scopeFactory, INotificationService notificationService)
@@ -182,7 +183,8 @@ public sealed class BackgroundResubmitService : IDisposable
                 
                 operation.Status = ResubmitStatus.Completed;
                 operation.EndTime = DateTime.Now;
-                
+                OnResubmitCompleted?.Invoke(operation);
+
                 string typeLabel = entityType == "queue" ? "queue" : "subscription";
                 _notificationService.NotifySuccess($"Resubmit complete: {totalResubmitted:N0} messages resubmitted from {typeLabel} '{entityPath}' DLQ", notificationId);
             }

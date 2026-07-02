@@ -75,6 +75,7 @@ public sealed class SendService
                 await _operationsService.SendTopicMessageAsync(namespaceOnly, state.SelectedTopicName, request.Body, props);
 
             _notificationService.NotifySuccess("Message sent successfully");
+            _ = _entitySelectionState.RefreshEntitiesAsync(notify: false);
         }
         catch (Exception ex)
         {
@@ -135,6 +136,7 @@ public sealed class SendService
             }
 
             _notificationService.NotifySuccess("Message resubmitted successfully");
+            _ = _entitySelectionState.RefreshEntitiesAsync(notify: false);
         }
         catch (Exception ex)
         {
@@ -180,6 +182,7 @@ public sealed class SendService
                 await _operationsService.SendTopicMessagesBatchAsync(namespaceOnly, state.SelectedTopicName, batchObjects);
 
             _notificationService.NotifySuccess("Batch sent successfully");
+            _ = _entitySelectionState.RefreshEntitiesAsync(notify: false);
         }
         catch (Exception ex)
         {

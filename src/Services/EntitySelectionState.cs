@@ -331,7 +331,7 @@ public sealed class EntitySelectionState : IDisposable
         catch (OperationCanceledException) { }
     }
 
-    public async Task RefreshEntitiesAsync()
+    public async Task RefreshEntitiesAsync(bool notify = true)
     {
         await LoadEntitiesAsync();
 
@@ -340,7 +340,10 @@ public sealed class EntitySelectionState : IDisposable
             await LoadSubscriptionsAsync(State.SelectedTopicName);
         }
 
-        _notificationService.NotifySuccess("Refreshed queues and topics");
+        if (notify)
+        {
+            _notificationService.NotifySuccess("Refreshed queues and topics");
+        }
     }
 
     public void SelectQueue(string queueName)

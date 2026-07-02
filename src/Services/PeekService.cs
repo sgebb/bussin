@@ -90,6 +90,7 @@ public sealed class PeekService : IDisposable
         _backgroundPurge.OnOperationsChanged += NotifyStateChanged;
         _backgroundPurge.OnPurgeCompleted += HandlePurgeCompleted;
         _backgroundResubmit.OnOperationsChanged += NotifyStateChanged;
+        _backgroundResubmit.OnResubmitCompleted += HandleResubmitCompleted;
     }
 
     public void ClearError()
@@ -631,9 +632,10 @@ public sealed class PeekService : IDisposable
             }
 
             if (_messageListState.PeekedMessages.Count == 0) _messageListState.PeekFromSequence = 0;
-            
+
             _messageListState.NotifyUpdate();
             _confirmModal.Close();
+            _ = _entitySelectionState.RefreshEntitiesAsync(notify: false);
         }
         catch (Exception ex)
         {
@@ -721,6 +723,7 @@ public sealed class PeekService : IDisposable
             _messageListState.NotifyUpdate();
             _notificationService.NotifySuccess($"{char.ToUpper(operationName[0])}{operationName[1..]} {sequenceNumbers.Count} messages successfully.");
             _confirmModal.Close();
+            _ = _entitySelectionState.RefreshEntitiesAsync(notify: false);
         }
         catch (Exception ex)
         {
@@ -755,7 +758,7 @@ public sealed class PeekService : IDisposable
                 {
                     _entitySelectionState.QueueDict[op.EntityPath] = queue with { ActiveMessageCount = 0 };
                 }
-                _entitySelectionState.RefreshEntitiesAsync().ConfigureAwait(false);
+                _entitySelectionState.RefreshEntitiesAsync(notify: false).ConfigureAwait(false);
             }
         }
         else if (op.EntityType == "subscription")
@@ -771,10 +774,22 @@ public sealed class PeekService : IDisposable
                     else
                         _entitySelectionState.SubscriptionDict[subscriptionName] = sub with { ActiveMessageCount = 0 };
                     
-                    _entitySelectionState.RefreshEntitiesAsync().ConfigureAwait(false);
+                    _entitySelectionState.RefreshEntitiesAsync(notify: false).ConfigureAwait(false);
                 }
             }
         }
+    }
+
+    private void HandleResubmitCompleted(ResubmitOperation op)
+    {
+        var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
+        if (_entitySelectionState.State.CurrentNamespace == null ||
+            (op.NamespaceName != _entitySelectionState.State.FullyQualifiedNamespace && op.NamespaceName != namespaceOnly))
+        {
+            return;
+        }
+
+        _entitySelectionState.RefreshEntitiesAsync(notify: false).ConfigureAwait(false);
     }
 
     private string _currentExportMode = "selected";
@@ -938,5 +953,6 @@ public sealed class PeekService : IDisposable
         _backgroundPurge.OnOperationsChanged -= NotifyStateChanged;
         _backgroundPurge.OnPurgeCompleted -= HandlePurgeCompleted;
         _backgroundResubmit.OnOperationsChanged -= NotifyStateChanged;
+        _backgroundResubmit.OnResubmitCompleted -= HandleResubmitCompleted;
     }
 }
