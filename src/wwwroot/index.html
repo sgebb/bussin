@@ -67,21 +67,14 @@
     }
     </script>
 
-    <!-- Google Analytics 4 -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-46J4E5R4DN"></script>
+    <!-- GoatCounter analytics (cookie-free) -->
     <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag() { dataLayer.push(arguments); }
-        gtag('js', new Date());
-
-        // Configure GA4 with enhanced measurement
-        gtag('config', 'G-46J4E5R4DN', {
-            'send_page_view': true,
-            'cookie_flags': 'SameSite=None;Secure',
-            'allow_google_signals': true,
-            'allow_ad_personalization_signals': false
-        });
+        // no_onload: the Blazor app reports page views itself (see js/analytics.js),
+        // so SPA navigations are counted and the initial load isn't counted twice.
+        window.goatcounter = { no_onload: true };
     </script>
+    <script data-goatcounter="https://sgebb.goatcounter.com/count"
+            async src="//gc.zgo.at/count.js"></script>
 </head>
 
 <body>

@@ -35,27 +35,4 @@ public class AnalyticsService : IAnalyticsService
         }
     }
 
-    public async Task TrackExceptionAsync(string description, bool fatal = false)
-    {
-        try
-        {
-            await _jsRuntime.InvokeVoidAsync("Analytics.trackException", description, fatal);
-        }
-        catch
-        {
-            // Silently fail if analytics is not available
-        }
-    }
-
-    public async Task TrackTimingAsync(string category, string variable, int value, string? label = null)
-    {
-        try
-        {
-            await _jsRuntime.InvokeVoidAsync("Analytics.trackTiming", category, variable, value, label);
-        }
-        catch
-        {
-            // Silently fail if analytics is not available
-        }
-    }
 }
