@@ -22,6 +22,8 @@ export interface ServiceBusMessage {
     lockedUntil: string | undefined;
     scheduledEnqueueTime: Date | number | undefined;
     partitionKey: string | undefined;
+    /** Raw `x-opt-state` annotation: 0 = active, 1 = deferred, 2 = scheduled */
+    state: number | undefined;
     applicationProperties: Record<string, any>;
     messageAnnotations: Record<string, any>;
     properties: Record<string, any>;

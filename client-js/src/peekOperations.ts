@@ -12,15 +12,23 @@ import { formatAmqpError } from './types.js';
 
 // Store active message handles by lock token (necessary for settlement)
 // This is minimal state - just the AMQP handles that can't serialize
-const messageHandles = new Map<string, {
-    delivery?: any;
-    receiver?: any;
-    connection?: any;
-    isManagementLock?: boolean;
-    namespace?: string;
-    entityPath?: string;
-    token?: string;
-}>();
+// A handle is either a live AMQP delivery (settled directly on its receiver) or a
+// management lock (settled over a fresh $management link), never a mix of the two.
+type MessageHandle =
+    | {
+          isManagementLock?: false;
+          delivery: any;
+          receiver: any;
+          connection: any;
+      }
+    | {
+          isManagementLock: true;
+          namespace: string;
+          entityPath: string;
+          token: string;
+      };
+
+const messageHandles = new Map<string, MessageHandle>();
 
 /**
  * Peek messages from a queue (read-only, no side effects)
@@ -432,10 +440,10 @@ export async function deadLetter(
             }
 
             if (handle.isManagementLock) {
-                const connection = new ServiceBusConnection(handle.namespace!, handle.token!);
+                const connection = new ServiceBusConnection(handle.namespace, handle.token);
                 await connection.connect();
-                await connection.authenticateCBS(handle.entityPath!);
-                const managementClient = new ManagementClient(connection, handle.entityPath!);
+                await connection.authenticateCBS(handle.entityPath);
+                const managementClient = new ManagementClient(connection, handle.entityPath);
                 await managementClient.open();
                 await managementClient.updateDisposition([lockToken], 'suspended', options.deadLetterReason, options.deadLetterErrorDescription);
                 await managementClient.close();

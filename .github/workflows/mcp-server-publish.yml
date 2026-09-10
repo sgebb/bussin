@@ -1,0 +1,87 @@
+name: Publish bussin-mcp to npm
+
+# Publishing is driven by a tag so it is always deliberate:
+#
+#   1. bump "version" in mcp-server/package.json
+#   2. add the release to bussin-site/changelog/
+#   3. git tag mcp-v0.1.0 && git push origin mcp-v0.1.0
+#
+# The tag version and package.json version must match, or the job fails before publishing.
+
+on:
+  push:
+    tags:
+      - 'mcp-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Pack and validate without publishing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write   # required for npm provenance
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install client-js
+        run: npm ci --ignore-scripts
+        working-directory: client-js
+
+      - name: Install mcp-server
+        run: npm ci --ignore-scripts
+        working-directory: mcp-server
+
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "tag=$TAG_VERSION package.json=$PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION."
+            exit 1
+          fi
+        working-directory: mcp-server
+
+      - name: Build and test
+        run: npm test
+        working-directory: mcp-server
+
+      - name: Confirm this version is not already on npm
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "bussin-mcp@$PKG_VERSION" version >/dev/null 2>&1; then
+            echo "::error::bussin-mcp@$PKG_VERSION is already published. Bump the version."
+            exit 1
+          fi
+          echo "bussin-mcp@$PKG_VERSION is available."
+        working-directory: mcp-server
+
+      - name: Pack (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: npm pack --dry-run
+        working-directory: mcp-server
+
+      # --provenance publishes a signed attestation linking the tarball to this workflow
+      # run and commit. npm shows it as a verified badge on the package page.
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        run: npm publish --provenance --access public
+        working-directory: mcp-server
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

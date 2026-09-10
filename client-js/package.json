@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "npm run build && vitest run"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && npm run build && vitest run",
+    "build:node": "vite build --config vite.node.config.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -22,5 +24,13 @@
     "typescript": "^5.7.3",
     "vite": "^7.1.9",
     "vitest": "^4.1.5"
-  }
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/node/serviceBusApi.js"
+    }
+  },
+  "files": [
+    "dist/node"
+  ]
 }

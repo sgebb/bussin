@@ -1,0 +1,63 @@
+name: MCP Server CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'mcp-server/**'
+      - 'client-js/**'
+      - '.github/workflows/mcp-server-ci.yml'
+  pull_request:
+    paths:
+      - 'mcp-server/**'
+      - 'client-js/**'
+      - '.github/workflows/mcp-server-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test bussin-mcp
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # The MCP server bundles client-js at build time, so the client needs its own
+      # dependencies installed before mcp-server can build.
+      - name: Install client-js
+        run: npm ci --ignore-scripts
+        working-directory: client-js
+
+      - name: Install mcp-server
+        run: npm ci --ignore-scripts
+        working-directory: mcp-server
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: mcp-server
+
+      # `npm test` builds first, then drives the server over stdio against the
+      # in-process simulator -- no Azure namespace or credentials required.
+      - name: Build and test
+        run: npm test
+        working-directory: mcp-server
+
+      - name: Verify the package is publishable
+        run: |
+          npm pack --dry-run
+          # A file: dependency cannot be resolved by anyone installing from the registry.
+          if node -e "process.exit(JSON.stringify(require('./package.json').dependencies).includes('file:') ? 1 : 0)"; then
+            echo "No file: dependencies in the published dependency set."
+          else
+            echo "::error::package.json has a file: dependency in 'dependencies'; it must be bundled or devDependency-only."
+            exit 1
+          fi
+        working-directory: mcp-server

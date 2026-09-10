@@ -43,14 +43,16 @@ export class ManagementClient {
 
             const sessionOrConn = this.amqpSession || this.connection.connection!;
 
-            this.sender = sessionOrConn.open_sender({
+            const sender: Sender = sessionOrConn.open_sender({
                 target: { address: this.managementAddress }
             });
+            this.sender = sender;
 
-            this.receiver = sessionOrConn.open_receiver({
+            const receiver: Receiver = sessionOrConn.open_receiver({
                 source: { address: this.managementAddress },
                 target: { address: this.replyTo }
             });
+            this.receiver = receiver;
 
             let senderOpen = false;
             let receiverOpen = false;
@@ -61,21 +63,21 @@ export class ManagementClient {
                 }
             };
 
-            this.sender.on('sender_open', () => {
+            sender.on('sender_open', () => {
                 senderOpen = true;
                 checkBothOpen();
             });
 
-            this.receiver.on('receiver_open', () => {
+            receiver.on('receiver_open', () => {
                 receiverOpen = true;
                 checkBothOpen();
             });
 
-            this.sender.on('sender_error', (context: any) => {
+            sender.on('sender_error', (context: any) => {
                 reject(new Error(context.sender.error ? formatAmqpError(context.sender.error) : 'Sender error'));
             });
 
-            this.receiver.on('receiver_error', (context: any) => {
+            receiver.on('receiver_error', (context: any) => {
                 reject(new Error(context.receiver.error ? formatAmqpError(context.receiver.error) : 'Receiver error'));
             });
 

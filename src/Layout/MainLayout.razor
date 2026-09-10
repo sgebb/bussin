@@ -154,9 +154,20 @@
 
     private async void OnAuthStateChanged(Task<AuthenticationState> task)
     {
-        // Re-initialize when auth state changes (e.g., after login redirect)
-        await InitializeIfAuthenticatedAsync();
-        CloseMobileMenu();
+        // Re-initialize when auth state changes (e.g., after login redirect).
+        // This is an event handler, so it has to be async void: nothing awaits it, and an
+        // exception escaping here would be unobservable and take down the render loop
+        // during the login redirect. Handle it locally instead.
+        try
+        {
+            await InitializeIfAuthenticatedAsync();
+            CloseMobileMenu();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to initialize after auth state change: {ex.Message}");
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 

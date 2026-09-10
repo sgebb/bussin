@@ -1,0 +1,53 @@
+{
+  "name": "bussin-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Model Context Protocol server for Azure Service Bus — peek, search, and inspect queues, topics, and dead-letter queues from any MCP-aware AI client.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "azure",
+    "azure-service-bus",
+    "service-bus",
+    "service-bus-explorer",
+    "dead-letter-queue",
+    "amqp",
+    "claude",
+    "bussin"
+  ],
+  "homepage": "https://bussin.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sgebb/bussin.git",
+    "directory": "mcp-server"
+  },
+  "license": "MIT",
+  "bin": {
+    "bussin-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm --prefix ../client-js run build:node && tsc --noEmit && node build.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node test/smoke.mjs"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.13.2",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "rhea": "^3.0.5",
+    "zod": "^4.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "bussin-client-js": "file:../client-js",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -7,7 +7,9 @@ import type { ServiceBusConnection } from './connection.js';
 import type { MessageProperties } from './types.js';
 import { formatAmqpError } from './types.js';
 import type { Sender } from 'rhea';
-import { message as rheaMessage } from 'rhea';
+// rhea is CommonJS: Node's ESM loader cannot detect its named exports, so default-import.
+import rhea from 'rhea';
+const rheaMessage = rhea.message;
 
 /**
  * Message Sender - for sending messages

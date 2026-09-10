@@ -381,6 +381,11 @@
     private ElementReference renameInputRef;
     private MessageList? _messageListRef;
 
+    // Held in a field so Dispose can detach it. EntitySelectionState is registered scoped,
+    // which in WebAssembly means it lives for the whole app, so an anonymous handler here
+    // would survive every navigation away from the explorer and accumulate.
+    private Action? _onEntitySelectionChanged;
+
     private string? GetColumnPreferenceKey()
     {
         var ns = SelectionState.State.FullyQualifiedNamespace;
@@ -501,12 +506,13 @@
         MonitorService.OnChange += StateHasChanged;
         SearchStateService.OnChange += StateHasChanged;
 
-        SelectionState.OnEntitySelectionChanged += () =>
+        _onEntitySelectionChanged = () =>
         {
             MessageListState.Clear();
-            if (_messageListRef != null) 
+            if (_messageListRef != null)
                 _messageListRef.ClearSelection();
         };
+        SelectionState.OnEntitySelectionChanged += _onEntitySelectionChanged;
     }
 
     private void StartRename()
@@ -599,6 +605,12 @@
         DialogService.OnChange -= StateHasChanged;
         MonitorService.OnChange -= StateHasChanged;
         SearchStateService.OnChange -= StateHasChanged;
+
+        if (_onEntitySelectionChanged != null)
+        {
+            SelectionState.OnEntitySelectionChanged -= _onEntitySelectionChanged;
+            _onEntitySelectionChanged = null;
+        }
     }
 
 

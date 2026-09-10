@@ -129,15 +129,24 @@
         <div class="list-group">
             @{
                 var displayed = DisplayedMessages;
-            }
-            @for (int i = 0; i < displayed.Count; i++)
-            {
-                var index = i;
-                var message = displayed[index];
-                var isSelected = message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value);
-                var isNavigated = index == MessageListState.NavigatedIndex;
 
-                <div class="list-group-item message-item @(isSelected ? "selected" : "") @(isNavigated ? "navigated-active" : "")"
+                // Resolve the navigated row up front, by identity. Virtualize only materialises
+                // the visible window, so a positional loop index is not available inside it.
+                var navigatedMessage = MessageListState.NavigatedIndex >= 0 && MessageListState.NavigatedIndex < displayed.Count
+                    ? displayed[MessageListState.NavigatedIndex]
+                    : null;
+            }
+            @* ItemSize is an estimate used for spacer sizing. Rows are near-uniform: a tag line,
+               a single truncated preview line, and an optional delivery-count line. OverscanCount
+               keeps neighbouring rows rendered so arrow-key navigation always has a real element
+               for scrollNavigatedIntoView to find. *@
+            <Virtualize Items="@displayed" Context="message" ItemSize="62" OverscanCount="8">
+                @{
+                    var isSelected = message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value);
+                    var isNavigated = ReferenceEquals(message, navigatedMessage);
+                }
+                <div @key="message"
+                     class="list-group-item message-item @(isSelected ? "selected" : "") @(isNavigated ? "navigated-active" : "")"
                      id="@(isNavigated ? "navigated-msg" : null)"
                      @onclick="() => OnMessageClick(message)">
                     <div class="d-flex align-items-center">
@@ -196,7 +205,7 @@
                         </div>
                     </div>
                 </div>
-            }
+            </Virtualize>
         </div>
     }
     else
@@ -288,8 +297,16 @@
         _discoveredAppProperties = props;
     }
 
+    private int _lastScrolledNavigatedIndex = -1;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Scroll only when the navigated row actually changes. Virtualize re-renders on every
+        // scroll event, so re-issuing this on each render would snap the list back and fight
+        // the user's own scrolling once keyboard navigation has been used.
+        if (MessageListState.NavigatedIndex == _lastScrolledNavigatedIndex) return;
+
+        _lastScrolledNavigatedIndex = MessageListState.NavigatedIndex;
         if (MessageListState.NavigatedIndex != -1)
         {
             await JSRuntime.InvokeVoidAsync("scrollNavigatedIntoView");
