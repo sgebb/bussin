@@ -73,7 +73,10 @@ export function registerReadTools(server: McpServer, ctx: Ctx): void {
 
     server.registerTool('list_topics', {
         title: 'List topics',
-        description: 'List topics in a namespace with their message counts.',
+        description:
+            'List topics in a namespace with their message counts. Messages sit on a topic\'s ' +
+            'subscriptions rather than the topic itself, so follow up with list_subscriptions to find ' +
+            'where a backlog actually is.',
         inputSchema: { namespace: nsArg }
     }, guard(async ({ namespace }) => ctx.config.demo
         ? json(demoTopicList(resolveNamespace(ctx, namespace)))
@@ -81,7 +84,9 @@ export function registerReadTools(server: McpServer, ctx: Ctx): void {
 
     server.registerTool('list_subscriptions', {
         title: 'List topic subscriptions',
-        description: 'List the subscriptions under a topic, with active and dead-letter counts.',
+        description:
+            'List the subscriptions under a topic, with active and dead-letter counts. Use this to pick ' +
+            'the subscription to pass to peek_messages or search_messages.',
         inputSchema: { namespace: nsArg, topic: z.string().describe('Topic name.') }
     }, guard(async ({ namespace, topic }) => ctx.config.demo
         ? json(demoSubscriptionList(await simulator(), resolveNamespace(ctx, namespace), topic))
@@ -92,14 +97,18 @@ export function registerReadTools(server: McpServer, ctx: Ctx): void {
         description:
             'Peek messages from a queue, or from a topic subscription when topic and subscription are given. ' +
             'Peek is non-destructive: it does not lock, consume, or increment delivery count. ' +
-            'Set fromDeadLetter to read the dead-letter queue instead of the main entity.',
+            'Set fromDeadLetter to read the dead-letter queue instead of the main entity. ' +
+            'This reads from the head of the entity outwards, so it is the right tool for "what is in ' +
+            'this queue"; to find particular messages in a backlog, use search_messages instead of ' +
+            'paging through peek. Needs the Azure Service Bus Data Receiver role (or Data Owner).',
         inputSchema: {
             namespace: nsArg,
             queue: z.string().optional().describe('Queue name. Omit when using topic + subscription.'),
             topic: z.string().optional().describe('Topic name, when reading a subscription.'),
             subscription: z.string().optional().describe('Subscription name, requires topic.'),
             count: z.number().int().min(1).max(200).default(10).describe('How many messages to return.'),
-            fromSequence: z.number().int().min(0).default(0).describe('Start at this sequence number.'),
+            fromSequence: z.number().int().min(0).default(0)
+                .describe('Start at this sequence number. 0 starts from the oldest available message.'),
             fromDeadLetter: z.boolean().default(false).describe('Read the dead-letter queue.')
         }
     }, guard(async ({ namespace, queue, topic, subscription, count, fromSequence, fromDeadLetter }) => {
@@ -132,7 +141,10 @@ export function registerReadTools(server: McpServer, ctx: Ctx): void {
         description:
             'Scan a queue or subscription for messages matching a body substring, message id, or subject. ' +
             'Non-destructive. Scanning is bounded by maxMessages and by a server-side timeout, so on a deep ' +
-            'backlog prefer a narrow filter. Returns matching messages with their sequence numbers.',
+            'backlog prefer a narrow filter. Returns matching messages with their sequence numbers. ' +
+            'Prefer this over repeated peek_messages calls whenever you know something about the messages ' +
+            'you want. The sequence numbers it returns are what delete_messages, resubmit_dead_letter and ' +
+            'dead_letter_messages take as input. Needs the Data Receiver role (or Data Owner).',
         inputSchema: {
             namespace: nsArg,
             queue: z.string().optional().describe('Queue name. Omit when using topic + subscription.'),

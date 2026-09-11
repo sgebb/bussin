@@ -20,8 +20,11 @@ export function registerSendTools(server: McpServer, ctx: Ctx): void {
     server.registerTool('send_message', {
         title: 'Send a message',
         description:
-            'Send a message to a queue or topic. This is a real send: consumers will pick it up. ' +
-            'Requires the server to be started with --allow-send.',
+            'Send a message to a queue or topic. This is a real send against the live namespace: ' +
+            'consumers will pick it up. Sending to a topic delivers a copy to every subscription whose ' +
+            'filter matches, so one send can fan out to many consumers. ' +
+            'Needs the Azure Service Bus Data Sender role (or Data Owner), and the server must have been ' +
+            'started with --allow-send.',
         inputSchema: {
             namespace: nsArg,
             queue: z.string().optional().describe('Target queue. Omit when sending to a topic.'),
@@ -60,10 +63,13 @@ export function registerSendTools(server: McpServer, ctx: Ctx): void {
     server.registerTool('resubmit_dead_letter', {
         title: 'Resubmit dead-lettered messages',
         description:
-            'Copy messages out of a dead-letter queue and send them back to the originating queue or topic. ' +
+            'Copy messages out of a queue\'s dead-letter queue and send them back to that queue. ' +
             'By default this leaves the dead-lettered originals in place, so it is additive and safe to retry; ' +
             'set removeOriginals to also delete them, which additionally requires --allow-destructive. ' +
-            'Requires --allow-send.',
+            'Queues only: resubmitting from a topic subscription\'s dead-letter queue is not supported here, ' +
+            'because Service Bus does not allow publishing straight to a subscription and replaying via the ' +
+            'parent topic would copy the message to every other matching subscription. ' +
+            'Needs the Data Sender role (or Data Owner), and --allow-send.',
         inputSchema: {
             namespace: nsArg,
             queue: z.string().describe('Queue whose dead-letter queue should be drained back.'),
@@ -131,7 +137,7 @@ export function registerDestructiveTools(server: McpServer, ctx: Ctx): void {
             namespace: nsArg,
             queue: z.string().describe('Queue name.'),
             sequenceNumbers: z.array(z.number().int()).min(1).max(100)
-                .describe('Sequence numbers to delete.'),
+                .describe('Sequence numbers to delete, from peek_messages or search_messages.'),
             fromDeadLetter: z.boolean().default(false).describe('Delete from the dead-letter queue.')
         }
     }, guard(async (a) => {
@@ -158,11 +164,15 @@ export function registerDestructiveTools(server: McpServer, ctx: Ctx): void {
         title: 'Dead-letter messages',
         description:
             'Move active messages to the dead-letter queue by sequence number, with a reason. ' +
-            'Requires --allow-destructive.',
+            'The messages stop being delivered to consumers and will not be retried, but they are not ' +
+            'destroyed: they can be read with peek_messages using fromDeadLetter, and put back with ' +
+            'resubmit_dead_letter. Use this to quarantine a poison message rather than delete it. ' +
+            'Peek or search first to confirm the sequence numbers. Requires --allow-destructive.',
         inputSchema: {
             namespace: nsArg,
             queue: z.string().describe('Queue name.'),
-            sequenceNumbers: z.array(z.number().int()).min(1).max(100).describe('Sequence numbers to move.'),
+            sequenceNumbers: z.array(z.number().int()).min(1).max(100)
+                .describe('Sequence numbers to move, from peek_messages or search_messages.'),
             reason: z.string().default('Manual dead letter').describe('Dead-letter reason.'),
             description: z.string().default('Moved via bussin-mcp').describe('Dead-letter error description.')
         }
