@@ -1,6 +1,6 @@
 {
   "name": "bussin-mcp",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "mcpName": "io.github.sgebb/bussin-mcp",
   "type": "module",
   "description": "Model Context Protocol server for Azure Service Bus — peek, search, and inspect queues, topics, and dead-letter queues from any MCP-aware AI client.",
