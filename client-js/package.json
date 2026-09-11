@@ -11,7 +11,7 @@
     "test": "npm run typecheck && npm run build && vitest run",
     "build:node": "vite build --config vite.node.config.js"
   },
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "dependencies": {
     "buffer": "^6.0.3",
     "events": "^3.3.0",

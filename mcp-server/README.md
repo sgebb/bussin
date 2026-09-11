@@ -190,4 +190,8 @@ To validate without publishing, run the workflow manually with `dry_run` enabled
 
 ## License
 
-MIT
+Business Source License 1.1 (BUSL-1.1) — see [LICENSE](LICENSE).
+
+Free for personal, educational, and internal business use. Commercial
+redistribution, rebranding, or hosting this software as a service by third
+parties is prohibited. Converts to Apache 2.0 on 2029-01-01.
