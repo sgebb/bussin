@@ -1,18 +1,62 @@
 {
-  "name": "bussin",
-  "short_name": "bussin",
+  "name": "Bussin — Azure Service Bus Explorer",
+  "short_name": "Bussin",
+  "description": "Browse Azure Service Bus queues, topics, subscriptions, and dead-letter queues directly in your browser. No backend proxy, direct WebSockets connection via Entra ID or connection string.",
+  "id": "https://bussin.dev",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "en-US",
+  "dir": "ltr",
   "background_color": "#03060D",
   "theme_color": "#0C1422",
+  "categories": ["developer", "productivity", "utilities"],
   "prefer_related_applications": false,
-  "scope": "./",
   "icons": [
     {
       "src": "favicon.svg",
       "type": "image/svg+xml",
       "sizes": "any",
       "purpose": "any"
+    },
+    {
+      "src": "icons/bussin-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/bussin-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/bussin-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/bussin-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://bussin.dev/assets/media/deadLetterInspect.jpg",
+      "type": "image/jpeg",
+      "sizes": "1280x720",
+      "form_factor": "wide"
+    },
+    {
+      "src": "https://bussin.dev/assets/media/edit-and-resubmit.jpg",
+      "type": "image/jpeg",
+      "sizes": "1280x720",
+      "form_factor": "wide"
     }
   ]
 }
