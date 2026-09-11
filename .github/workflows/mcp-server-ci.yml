@@ -60,4 +60,54 @@ jobs:
             echo "::error::package.json has a file: dependency in 'dependencies'; it must be bundled or devDependency-only."
             exit 1
           fi
+
+          # 0.1.0 shipped dist/index.js.map, whose sourcesContent embedded the whole
+          # built client-js under an MIT declaration. The `files` array prevents a
+          # repeat; this asserts it, because that mistake is unpublishable after 72h.
+          if npm pack --dry-run --json | node -e "
+            let d='';
+            process.stdin.on('data', c => d += c).on('end', () => {
+              const files = JSON.parse(d)[0].files.map(f => f.path);
+              const maps = files.filter(f => f.endsWith('.map'));
+              if (maps.length) {
+                console.error('::error::Publishable tarball contains sourcemaps: ' + maps.join(', ') + '. Sourcemaps embed client-js sources; keep them out of the files array.');
+                process.exit(1);
+              }
+              console.log('No sourcemaps in the publishable tarball.');
+            });
+          "; then :; else exit 1; fi
+
+          # The license must stay BUSL-1.1. 0.1.0 went out as MIT.
+          if node -e "
+            const l = require('./package.json').license;
+            if (l !== 'BUSL-1.1') {
+              console.error('::error::package.json license is ' + JSON.stringify(l) + ', expected \"BUSL-1.1\".');
+              process.exit(1);
+            }
+            console.log('License is BUSL-1.1.');
+          "; then :; else exit 1; fi
+
+          # The registry verifies package ownership by matching this against
+          # server.json. Publishing without it silently breaks the listing.
+          if node -e "
+            const n = require('./package.json').mcpName;
+            if (n !== 'io.github.sgebb/bussin-mcp') {
+              console.error('::error::package.json mcpName is ' + JSON.stringify(n) + ', expected \"io.github.sgebb/bussin-mcp\" to match the MCP registry entry.');
+              process.exit(1);
+            }
+            console.log('mcpName matches the MCP registry entry.');
+          "; then :; else exit 1; fi
+
+          # LICENSE must be in the tarball; 0.1.0 shipped without one.
+          if npm pack --dry-run --json | node -e "
+            let d='';
+            process.stdin.on('data', c => d += c).on('end', () => {
+              const files = JSON.parse(d)[0].files.map(f => f.path);
+              if (!files.includes('LICENSE')) {
+                console.error('::error::Publishable tarball has no LICENSE file. Add it to the files array.');
+                process.exit(1);
+              }
+              console.log('LICENSE ships in the tarball.');
+            });
+          "; then :; else exit 1; fi
         working-directory: mcp-server
