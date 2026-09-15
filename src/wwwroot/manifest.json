@@ -11,7 +11,17 @@
   "dir": "ltr",
   "background_color": "#03060D",
   "theme_color": "#0C1422",
-  "categories": ["developer", "productivity", "utilities"],
+  "categories": [
+    "developer",
+    "productivity",
+    "utilities"
+  ],
+  "related_applications": [
+    {
+      "platform": "windows",
+      "url": "https://apps.microsoft.com/detail/9NTHT4MR25CG?hl=neutral&gl=NO&ocid=pdpshare"
+    }
+  ],
   "prefer_related_applications": false,
   "icons": [
     {
