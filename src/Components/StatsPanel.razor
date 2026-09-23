@@ -87,30 +87,34 @@
         <div class="row g-2">
             <div class="col-6 col-md-3">
                 <div class="stat-card bg-info bg-opacity-10 border-info">
-                    <div class="stat-value text-info">@FormatNumber(metrics.ActiveMessages)</div>
+                    <div class="stat-value text-info">@FormatNumber(CurrentState.ActiveMessages)</div>
                     <div class="stat-label">Active</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="stat-card bg-danger bg-opacity-10 border-danger">
-                    <div class="stat-value text-danger">@FormatNumber(metrics.DeadLetteredMessages)</div>
+                    <div class="stat-value text-danger">@FormatNumber(CurrentState.DeadLetteredMessages)</div>
                     <div class="stat-label">Dead-lettered</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="stat-card bg-warning bg-opacity-10 border-warning">
-                    <div class="stat-value text-warning">@FormatNumber(metrics.ScheduledMessages)</div>
+                    <div class="stat-value text-warning">@FormatNumber(CurrentState.ScheduledMessages)</div>
                     <div class="stat-label">Scheduled</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="stat-card bg-secondary bg-opacity-10 border-secondary">
-                    <div class="stat-value text-secondary">@FormatBytes(metrics.SizeInBytes)</div>
-                    <div class="stat-label">Size</div>
+                    <div class="stat-value text-secondary">@FormatBytes(CurrentState.SizeInBytes)</div>
+                    <div class="stat-label">Size @FormatCapacity()</div>
                 </div>
             </div>
         </div>
-        <div class="text-muted small mt-3 text-end">
+        @if (currentState != null)
+        {
+            <div class="text-muted small mt-3">Current state is from the Service Bus ARM resource.</div>
+        }
+        <div class="text-muted small mt-1 text-end">
             <i class="bi bi-clock"></i> @metrics.PeriodStart.ToLocalTime().ToString("g") - @metrics.PeriodEnd.ToLocalTime().ToString("g")
         </div>
     }
@@ -120,18 +124,22 @@
     [Parameter] public ServiceBusNamespaceInfo? NamespaceInfo { get; set; }
     [Parameter] public string? EntityName { get; set; }
     [Parameter] public string? EntityType { get; set; } // "queue" or "topic"
+    [Parameter] public ServiceBusQueueInfo? QueueInfo { get; set; }
+    [Parameter] public ServiceBusTopicInfo? TopicInfo { get; set; }
     [Parameter] public bool AutoLoad { get; set; } = false;
 
     [Inject] private IMetricsService MetricsService { get; set; } = default!;
     [Inject] private IAuthenticationService AuthService { get; set; } = default!;
 
     private EntityMetrics? metrics;
+    private EntityMetrics? currentState;
     private bool isLoading = false;
     private bool hasAttemptedLoad = false;
     private int selectedPeriod = 1; // hours
 
     protected override async Task OnInitializedAsync()
     {
+        currentState = CreateCurrentState();
         if (AutoLoad && NamespaceInfo != null)
         {
             await LoadMetrics();
@@ -211,6 +219,44 @@
         if (bytes >= 1_024) // 1 KB
             return $"{bytes / 1_024.0:F1} KB";
         return $"{bytes} B";
+    }
+
+    private EntityMetrics CurrentState => currentState ?? metrics!;
+
+    private EntityMetrics? CreateCurrentState()
+    {
+        if (QueueInfo != null)
+        {
+            return new EntityMetrics
+            {
+                ActiveMessages = QueueInfo.ActiveMessageCount,
+                DeadLetteredMessages = QueueInfo.DeadLetterMessageCount,
+                ScheduledMessages = QueueInfo.ScheduledMessageCount,
+                SizeInBytes = QueueInfo.SizeInBytes,
+                MaxSizeInBytes = QueueInfo.MaxSizeInMegabytes * 1_048_576L
+            };
+        }
+
+        if (TopicInfo != null)
+        {
+            return new EntityMetrics
+            {
+                ScheduledMessages = TopicInfo.ScheduledMessageCount,
+                SizeInBytes = TopicInfo.SizeInBytes,
+                MaxSizeInBytes = TopicInfo.MaxSizeInMegabytes * 1_048_576L
+            };
+        }
+
+        return null;
+    }
+
+    private string FormatCapacity()
+    {
+        if (CurrentState.MaxSizeInBytes is not long maxSize || maxSize <= 0)
+            return string.Empty;
+
+        var percentage = Math.Min(100, CurrentState.SizeInBytes * 100.0 / maxSize);
+        return $"({percentage:F0}% full)";
     }
 }
 

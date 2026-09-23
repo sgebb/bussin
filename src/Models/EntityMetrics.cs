@@ -19,6 +19,11 @@ public record EntityMetrics
     /// Current size of the entity in bytes.
     /// </summary>
     public long SizeInBytes { get; init; }
+
+    /// <summary>
+    /// Configured capacity of the entity in bytes, when the entity has one.
+    /// </summary>
+    public long? MaxSizeInBytes { get; init; }
     
     /// <summary>
     /// Number of active messages.

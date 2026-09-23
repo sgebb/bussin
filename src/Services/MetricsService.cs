@@ -98,7 +98,13 @@ public sealed class MetricsService : IMetricsService
 
             // Build the metrics query URL
             // Azure Monitor Metrics API: https://learn.microsoft.com/en-us/rest/api/monitor/metrics/list
-            var metricNames = "IncomingMessages,OutgoingMessages,Size,ActiveMessages,DeadletteredMessages,ScheduledMessages";
+            // Historical flow belongs to Azure Monitor. Current queue/topic state comes
+            // from the Service Bus ARM resource already loaded by the explorer. A
+            // namespace has no equivalent aggregate ARM count, so retain its monitor
+            // state metrics.
+            var metricNames = entityName is null
+                ? "IncomingMessages,OutgoingMessages,Size,ActiveMessages,DeadletteredMessages,ScheduledMessages"
+                : "IncomingMessages,OutgoingMessages";
             var timespan = $"{startTime:yyyy-MM-ddTHH:mm:ssZ}/{endTime:yyyy-MM-ddTHH:mm:ssZ}";
             
             var url = $"https://management.azure.com{resourceId}/providers/Microsoft.Insights/metrics" +

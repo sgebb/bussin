@@ -47,6 +47,8 @@
                                 NamespaceInfo="@NamespaceInfo"
                                 EntityName="@GetEntityName()"
                                 EntityType="@GetEntityType()"
+                                QueueInfo="@GetSelectedQueue()"
+                                TopicInfo="@GetSelectedTopic()"
                                 AutoLoad="true" />
                 </div>
                 <div class="modal-footer">
@@ -96,6 +98,12 @@
         }
         return null;
     }
+
+    private ServiceBusQueueInfo? GetSelectedQueue() =>
+        GetEntityType() == "queue" ? Queues.FirstOrDefault(q => q.Name == GetEntityName()) : null;
+
+    private ServiceBusTopicInfo? GetSelectedTopic() =>
+        GetEntityType() == "topic" ? Topics.FirstOrDefault(t => t.Name == GetEntityName()) : null;
 
     private async Task Close()
     {
