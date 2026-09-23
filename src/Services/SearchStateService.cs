@@ -48,7 +48,9 @@ public sealed class SearchStateService : IDisposable
         {
             NamespaceName = state.FullyQualifiedNamespace,
             EntityType = state.IsQueueSelected ? "queue" : "subscription",
-            EntityPath = state.IsQueueSelected ? state.SelectedQueueName : $"{state.SelectedTopicName}/Subscriptions/{state.SelectedSubscriptionName}",
+            EntityPath = state.IsQueueSelected
+                ? state.SelectedQueueName ?? string.Empty
+                : $"{state.SelectedTopicName}/Subscriptions/{state.SelectedSubscriptionName}",
             TopicName = state.SelectedTopicName,
             SubscriptionName = state.SelectedSubscriptionName,
             IsDeadLetter = state.IsViewingDLQ,

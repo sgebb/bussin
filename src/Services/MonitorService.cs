@@ -98,7 +98,8 @@ public sealed class MonitorService : IDisposable
                 getFreshToken: async () =>
                 {
                     // Refresh token callback
-                    return await _peekService.GetTokenAsync(entityPath);
+                    return await _peekService.GetTokenAsync(entityPath)
+                        ?? throw new InvalidOperationException("Service Bus authentication is required.");
                 }
             );
 

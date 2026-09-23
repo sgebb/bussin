@@ -80,7 +80,7 @@ public class SimulatorTopologyTests
         // Setup the JS mock to return our message on the first Peek, and empty on the second Peek (after DLQ)
         _jsRuntimeMock.SetupSequence(js => js.InvokeAsync<List<ServiceBusMessage>>(
             "ServiceBusAPI.peekQueueMessages",
-            It.Is<object?[]>(args => args.Contains(queue) && args.Length > 5 && args[5] is bool && !(bool)args[5]))) // not DLQ
+            It.Is<object?[]>(args => args.Contains(queue) && args.Length > 5 && args[5] is bool && Equals(args[5], false)))) // not DLQ
             .ReturnsAsync(returnedMessages)
             .ReturnsAsync(new List<ServiceBusMessage>());
 
@@ -134,7 +134,7 @@ public class SimulatorTopologyTests
         // Mock Peek to return the message in the DLQ
         _jsRuntimeMock.Setup(js => js.InvokeAsync<List<ServiceBusMessage>>(
             "ServiceBusAPI.peekQueueMessagesBySequence",
-            It.Is<object?[]>(args => args.Contains(queue) && args.Length > 4 && args[4] is bool && (bool)args[4]))) // is DLQ
+            It.Is<object?[]>(args => args.Contains(queue) && args.Length > 4 && args[4] is bool && Equals(args[4], true)))) // is DLQ
             .ReturnsAsync(new List<ServiceBusMessage> { originalMessage });
 
         // 2. Act: Run the resubmit operation
@@ -159,12 +159,17 @@ public class SimulatorTopologyTests
             "ServiceBusAPI.sendQueueMessageBatch",
             It.Is<object?[]>(args => 
                 args.Length > 3 && 
-                args[3] != null && 
-                args[3] is object[] && 
-                ((object[])args[3]).Length == 1 &&
-                CheckResentMessage(((object[])args[3])[0], originalMessage)
+                HasSingleResentMessage(args[3], originalMessage)
             )),
             Times.Once);
+    }
+
+    private bool HasSingleResentMessage(object? value, ServiceBusMessage original)
+    {
+        if (value is not object[] messages || messages.Length != 1 || messages[0] is null)
+            return false;
+
+        return CheckResentMessage(messages[0], original);
     }
 
     private bool CheckResentMessage(object wrappedMsg, ServiceBusMessage original)

@@ -1,0 +1,37 @@
+name: Validate Pull Request
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: client-js/package-lock.json
+
+      - name: Test client library
+        working-directory: client-js
+        run: |
+          npm ci --ignore-scripts
+          npm test
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test .NET application
+        run: dotnet test tests/Bussin.Tests/Bussin.Tests.csproj
+
+      - name: Verify publish output
+        run: dotnet publish src/Bussin.csproj -c Release --no-restore

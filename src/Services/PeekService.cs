@@ -100,7 +100,7 @@ public sealed class PeekService : IDisposable
         NotifyStateChanged();
     }
 
-    public async Task<string> GetTokenAsync(string entityPath)
+    public async Task<string?> GetTokenAsync(string entityPath)
     {
         var connection = _navState.GetNamespaceConnection(_entitySelectionState.State.FullyQualifiedNamespace);
         if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))

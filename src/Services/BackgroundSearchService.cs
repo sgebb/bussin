@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
+using System.Collections.Concurrent;
 using Bussin.Models;
 
 namespace Bussin.Services;
@@ -9,7 +10,7 @@ namespace Bussin.Services;
 /// </summary>
 public sealed class BackgroundSearchService : IDisposable
 {
-    private readonly List<SearchOperation> _activeOperations = new();
+    private readonly ConcurrentDictionary<string, SearchOperation> _activeOperations = new();
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INotificationService _notificationService;
     
@@ -21,7 +22,7 @@ public sealed class BackgroundSearchService : IDisposable
         OnViewResultsRequested?.Invoke(operation);
     }
     
-    public IReadOnlyList<SearchOperation> ActiveOperations => _activeOperations.AsReadOnly();
+    public IReadOnlyList<SearchOperation> ActiveOperations => _activeOperations.Values.OrderBy(o => o.StartTime).ToList();
     
     /// <summary>
     /// Time in seconds before completed/failed operations are auto-removed.
@@ -55,7 +56,7 @@ public sealed class BackgroundSearchService : IDisposable
             StartTime = DateTime.Now
         };
         
-        _activeOperations.Add(operation);
+        _activeOperations[operationId] = operation;
         NotifyChanged();
         
         // Start search in background using a new scope
@@ -68,8 +69,6 @@ public sealed class BackgroundSearchService : IDisposable
             
             try
             {
-                Console.WriteLine($"[BackgroundSearch] Starting search for {options.EntityPath} with filters: {options.GetFilterDescription()}");
-                
                 var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
                 await navState.InitializeAsync();
                 var connection = navState.GetNamespaceConnection(options.NamespaceName);
@@ -100,7 +99,6 @@ public sealed class BackgroundSearchService : IDisposable
                             operation.MatchingSequenceNumbers.Add(seq);
                         }
                     }
-                    Console.WriteLine($"[BackgroundSearch] Progress: {scanned:N0}/{options.TotalMessageCount:N0} scanned, {matches} matches found");
                     NotifyChanged();
                 });
                 
@@ -169,7 +167,6 @@ public sealed class BackgroundSearchService : IDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BackgroundSearch] ERROR: {ex.Message}");
                 operation.Status = SearchStatus.Failed;
                 operation.ErrorMessage = ex.Message;
                 operation.EndTime = DateTime.Now;
@@ -183,7 +180,7 @@ public sealed class BackgroundSearchService : IDisposable
                 if (AutoRemoveDelaySeconds >= 0)
                 {
                     await Task.Delay(AutoRemoveDelaySeconds * 1000);
-                    _activeOperations.Remove(operation);
+                    _activeOperations.TryRemove(operation.Id, out _);
                     NotifyChanged();
                 }
             }
@@ -194,7 +191,7 @@ public sealed class BackgroundSearchService : IDisposable
     
     public async Task CancelSearchAsync(string operationId)
     {
-        var operation = _activeOperations.FirstOrDefault(o => o.Id == operationId);
+        _activeOperations.TryGetValue(operationId, out var operation);
         if (operation?.Controller != null && operation.Status == SearchStatus.Running)
         {
             try
@@ -209,24 +206,24 @@ public sealed class BackgroundSearchService : IDisposable
     
     public void DismissOperation(string operationId)
     {
-        var operation = _activeOperations.FirstOrDefault(o => o.Id == operationId);
+        _activeOperations.TryGetValue(operationId, out var operation);
         if (operation != null && operation.Status != SearchStatus.Running)
         {
-            _activeOperations.Remove(operation);
+            _activeOperations.TryRemove(operation.Id, out _);
             NotifyChanged();
         }
     }
     
     public SearchOperation? GetOperation(string operationId)
     {
-        return _activeOperations.FirstOrDefault(o => o.Id == operationId);
+        return _activeOperations.TryGetValue(operationId, out var operation) ? operation : null;
     }
     
     private void NotifyChanged() => OnOperationsChanged?.Invoke();
     
     public void Dispose()
     {
-        foreach (var operation in _activeOperations)
+        foreach (var operation in _activeOperations.Values)
         {
             operation.Controller?.DisposeAsync();
         }

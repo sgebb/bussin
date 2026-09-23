@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
+using System.Collections.Concurrent;
 using Bussin.Models;
 
 namespace Bussin.Services;
@@ -10,14 +11,14 @@ namespace Bussin.Services;
 /// </summary>
 public sealed class BackgroundResubmitService : IDisposable
 {
-    private readonly List<ResubmitOperation> _activeOperations = new();
+    private readonly ConcurrentDictionary<string, ResubmitOperation> _activeOperations = new();
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INotificationService _notificationService;
     
     public event Action? OnOperationsChanged;
     public event Action<ResubmitOperation>? OnResubmitCompleted;
 
-    public IReadOnlyList<ResubmitOperation> ActiveOperations => _activeOperations.AsReadOnly();
+    public IReadOnlyList<ResubmitOperation> ActiveOperations => _activeOperations.Values.OrderBy(o => o.StartTime).ToList();
     
     public BackgroundResubmitService(IServiceScopeFactory scopeFactory, INotificationService notificationService)
     {
@@ -39,7 +40,7 @@ public sealed class BackgroundResubmitService : IDisposable
             StartTime = DateTime.Now
         };
         
-        _activeOperations.Add(operation);
+        _activeOperations[operationId] = operation;
         NotifyChanged();
         
         // Start resubmit in background using a new scope
@@ -53,8 +54,6 @@ public sealed class BackgroundResubmitService : IDisposable
             
             try
             {
-                Console.WriteLine($"[BackgroundResubmit] Starting resubmit for {entityType} {entityPath}");
-                
                 var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
                 await navState.InitializeAsync();
                 var connection = navState.GetNamespaceConnection(namespaceName);
@@ -140,8 +139,6 @@ public sealed class BackgroundResubmitService : IDisposable
                         break;
                     }
                     
-                    Console.WriteLine($"[BackgroundResubmit] Peeked {messages.Count} messages from DLQ");
-                    
                     // Get sequence numbers for this batch
                     var sequenceNumbers = messages
                         .Where(m => m.SequenceNumber.HasValue)
@@ -164,7 +161,6 @@ public sealed class BackgroundResubmitService : IDisposable
                         operation.MessagesResubmitted = totalResubmitted;
                         NotifyChanged();
                         
-                        Console.WriteLine($"[BackgroundResubmit] Resubmitted {sequenceNumbers.Length} messages (total: {totalResubmitted})");
                     }
                     
                     // Update sequence for next batch
@@ -181,7 +177,9 @@ public sealed class BackgroundResubmitService : IDisposable
                     await Task.Delay(100);
                 }
                 
-                operation.Status = ResubmitStatus.Completed;
+                operation.Status = operation.Status == ResubmitStatus.Running
+                    ? ResubmitStatus.Completed
+                    : ResubmitStatus.Cancelled;
                 operation.EndTime = DateTime.Now;
                 OnResubmitCompleted?.Invoke(operation);
 
@@ -190,8 +188,6 @@ public sealed class BackgroundResubmitService : IDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BackgroundResubmit] ERROR: {ex.Message}");
-                Console.WriteLine($"[BackgroundResubmit] Stack trace: {ex.StackTrace}");
                 operation.Status = ResubmitStatus.Failed;
                 operation.ErrorMessage = ex.Message;
                 operation.EndTime = DateTime.Now;
@@ -203,7 +199,7 @@ public sealed class BackgroundResubmitService : IDisposable
                 NotifyChanged();
                 // Remove completed operations after 10 seconds
                 await Task.Delay(10000);
-                _activeOperations.Remove(operation);
+                _activeOperations.TryRemove(operation.Id, out _);
                 NotifyChanged();
             }
         });
@@ -213,7 +209,7 @@ public sealed class BackgroundResubmitService : IDisposable
     
     public void CancelResubmit(string operationId)
     {
-        var operation = _activeOperations.FirstOrDefault(o => o.Id == operationId);
+        _activeOperations.TryGetValue(operationId, out var operation);
         if (operation != null)
         {
             operation.Status = ResubmitStatus.Cancelled;

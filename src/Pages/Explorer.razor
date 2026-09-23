@@ -681,7 +681,7 @@
 
             // Get token for the subscription path
             string entityPath = $"{topicName}/subscriptions/{subscriptionName}";
-            string token = await PeekService.GetTokenAsync(entityPath);
+            string? token = await PeekService.GetTokenAsync(entityPath);
             if (string.IsNullOrEmpty(token)) return;
 
             if (SelectionState.State.SelectedTopicName != topicName) return;

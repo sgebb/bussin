@@ -114,7 +114,7 @@ public sealed class ExplorerDialogService : IDisposable
     public bool ConfirmModalVisible => _confirmModal.IsVisible;
     public string ConfirmModalTitle => _confirmModal.Title;
     public string ConfirmModalMessage => _confirmModal.Message;
-    public string ConfirmModalDetailMessage => _confirmModal.DetailMessage;
+    public string ConfirmModalDetailMessage => _confirmModal.DetailMessage ?? string.Empty;
     public string ConfirmModalConfirmButtonText => _confirmModal.ConfirmButtonText;
     public string ConfirmModalConfirmButtonClass => _confirmModal.ConfirmButtonClass;
     public string ConfirmModalAlternativeButtonText => _confirmModal.AlternativeButtonText;

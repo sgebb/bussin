@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
+using System.Collections.Concurrent;
 using Bussin.Models;
 
 namespace Bussin.Services;
@@ -10,14 +11,14 @@ namespace Bussin.Services;
 /// </summary>
 public sealed class BackgroundPurgeService : IDisposable
 {
-    private readonly List<PurgeOperation> _activeOperations = new();
+    private readonly ConcurrentDictionary<string, PurgeOperation> _activeOperations = new();
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INotificationService _notificationService;
     
     public event Action? OnOperationsChanged;
     public event Action<PurgeOperation>? OnPurgeCompleted;
     
-    public IReadOnlyList<PurgeOperation> ActiveOperations => _activeOperations.AsReadOnly();
+    public IReadOnlyList<PurgeOperation> ActiveOperations => _activeOperations.Values.OrderBy(o => o.StartTime).ToList();
     
     public BackgroundPurgeService(IServiceScopeFactory scopeFactory, INotificationService notificationService)
     {
@@ -39,7 +40,7 @@ public sealed class BackgroundPurgeService : IDisposable
             StartTime = DateTime.Now
         };
         
-        _activeOperations.Add(operation);
+        _activeOperations[operationId] = operation;
         NotifyChanged();
         
         // Start purge in background using a new scope
@@ -52,8 +53,6 @@ public sealed class BackgroundPurgeService : IDisposable
             
             try
             {
-                Console.WriteLine($"[BackgroundPurge] Starting purge for {entityType} {entityPath}");
-                
                 var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
                 await navState.InitializeAsync();
                 var connection = navState.GetNamespaceConnection(namespaceName);
@@ -73,11 +72,9 @@ public sealed class BackgroundPurgeService : IDisposable
                     throw new Exception("Service Bus token not available");
                 }
                 
-                Console.WriteLine($"[BackgroundPurge] Got token, creating callback");
                 var callback = new PurgeProgressCallback(count =>
                 {
                     operation.MessagesDeleted = count;
-                    Console.WriteLine($"[BackgroundPurge] Progress: {count} messages deleted");
                     NotifyChanged();
                 });
                 
@@ -87,7 +84,6 @@ public sealed class BackgroundPurgeService : IDisposable
                 
                 if (entityType == "queue")
                 {
-                    Console.WriteLine($"[BackgroundPurge] Calling StartPurgeQueueAsync for {entityPath} (requiresSession: {requiresSession})");
                     controller = await jsInterop.StartPurgeQueueAsync(
                         namespaceName,
                         entityPath,
@@ -98,7 +94,6 @@ public sealed class BackgroundPurgeService : IDisposable
                 }
                 else
                 {
-                    Console.WriteLine($"[BackgroundPurge] Calling StartPurgeSubscriptionAsync for {entityPath} (requiresSession: {requiresSession})");
                     var parts = entityPath.Split('/');
                     
                     // EntityPath can be "topic/subscription" or "topic/subscriptions/subscription"
@@ -120,7 +115,6 @@ public sealed class BackgroundPurgeService : IDisposable
                         throw new Exception($"Invalid subscription path: {entityPath}. Expected 'topic/subscription' or 'topic/subscriptions/subscription'");
                     }
                     
-                    Console.WriteLine($"[BackgroundPurge] Topic: {topicName}, Subscription: {subscriptionName}");
                     controller = await jsInterop.StartPurgeSubscriptionAsync(
                         namespaceName,
                         topicName,
@@ -133,10 +127,8 @@ public sealed class BackgroundPurgeService : IDisposable
                 
                 if (controller != null)
                 {
-                    Console.WriteLine($"[BackgroundPurge] Got controller, waiting for completion");
                     operation.Controller = controller;
                     var finalCount = await jsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", controller);
-                    Console.WriteLine($"[BackgroundPurge] Purge complete: {finalCount} messages deleted");
                     operation.MessagesDeleted = finalCount;
                     operation.Status = PurgeStatus.Completed;
                     operation.EndTime = DateTime.Now;
@@ -148,14 +140,11 @@ public sealed class BackgroundPurgeService : IDisposable
                 }
                 else
                 {
-                    Console.WriteLine($"[BackgroundPurge] ERROR: Controller is null!");
                     throw new Exception("Failed to start purge - controller is null");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BackgroundPurge] ERROR: {ex.Message}");
-                Console.WriteLine($"[BackgroundPurge] Stack trace: {ex.StackTrace}");
                 operation.Status = PurgeStatus.Failed;
                 operation.ErrorMessage = ex.Message;
                 operation.EndTime = DateTime.Now;
@@ -168,7 +157,7 @@ public sealed class BackgroundPurgeService : IDisposable
                 NotifyChanged();
                 // Remove completed operations after 10 seconds
                 await Task.Delay(10000);
-                _activeOperations.Remove(operation);
+                _activeOperations.TryRemove(operation.Id, out _);
                 NotifyChanged();
             }
         });
@@ -178,7 +167,7 @@ public sealed class BackgroundPurgeService : IDisposable
     
     public async Task CancelPurgeAsync(string operationId)
     {
-        var operation = _activeOperations.FirstOrDefault(o => o.Id == operationId);
+        _activeOperations.TryGetValue(operationId, out var operation);
         if (operation?.Controller != null)
         {
             try
@@ -197,7 +186,7 @@ public sealed class BackgroundPurgeService : IDisposable
     
     public void Dispose()
     {
-        foreach (var operation in _activeOperations)
+        foreach (var operation in _activeOperations.Values)
         {
             operation.Controller?.DisposeAsync();
         }

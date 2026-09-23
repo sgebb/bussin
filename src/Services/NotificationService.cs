@@ -23,28 +23,24 @@ public sealed class NotificationService : INotificationService
     {
         AddNotification(message, NotificationType.Success, id);
         OnNotification?.Invoke(new NotificationEventArgs(message, NotificationType.Success, id));
-        Console.WriteLine($"OK: {message}");
     }
 
     public void NotifyError(string message, string? id = null)
     {
         AddNotification(message, NotificationType.Error, id);
         OnNotification?.Invoke(new NotificationEventArgs(message, NotificationType.Error, id));
-        Console.WriteLine($"ERROR: {message}");
     }
 
     public void NotifyInfo(string message, string? id = null)
     {
         AddNotification(message, NotificationType.Info, id);
         OnNotification?.Invoke(new NotificationEventArgs(message, NotificationType.Info, id));
-        Console.WriteLine($"INFO: {message}");
     }
 
     public void NotifyWarning(string message, string? id = null)
     {
         AddNotification(message, NotificationType.Warning, id);
         OnNotification?.Invoke(new NotificationEventArgs(message, NotificationType.Warning, id));
-        Console.WriteLine($"WARN: {message}");
     }
     
     public void MarkAllAsRead()

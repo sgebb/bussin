@@ -264,6 +264,16 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        // Batch actions remove rows through MessageListState. Keep this component's
+        // local selection in sync so toolbar actions never refer to messages that
+        // are no longer visible.
+        var visibleSequenceNumbers = Messages
+            .Where(message => message.SequenceNumber.HasValue)
+            .Select(message => message.SequenceNumber!.Value)
+            .ToHashSet();
+        SelectedMessages.IntersectWith(visibleSequenceNumbers);
+        allSelected = visibleSequenceNumbers.Count > 0 && SelectedMessages.SetEquals(visibleSequenceNumbers);
+
         // Reset active columns when entity changes
         if (ColumnPreferenceKey != _lastColumnPreferenceKey)
         {

@@ -30,7 +30,9 @@ public sealed class AzureResourceService : IAzureResourceService
         Action<List<T>> updateCache,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) where T : class
     {
-        // Yield cached items first for instant display
+        // Yield the cached snapshot for an immediate UI, then replace it with fresh
+        // resource data. EntitySelectionState keys these items by name, so the fresh
+        // values update rather than duplicate the visible entities.
         if (cached != null && cached.Count > 0)
         {
             foreach (var item in cached)
@@ -40,7 +42,8 @@ public sealed class AzureResourceService : IAzureResourceService
             }
         }
 
-        // Fetch fresh items - these will replace the cache
+        // Fetch a new snapshot even after a cache hit so the in-app refresh and
+        // namespace switching paths observe broker changes immediately.
         var freshItems = new List<T>();
         
         await foreach (var item in fetchFresh(cancellationToken))

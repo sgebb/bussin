@@ -257,7 +257,7 @@
 
         try
         {
-            var token = await PeekService.GetTokenAsync(EntityPath);
+            var token = await GetRequiredTokenAsync();
             rulesList = await JsInterop.EnumerateRulesAsync(NamespaceName, TopicName, SubscriptionName, token);
         }
         catch (Exception ex)
@@ -288,7 +288,7 @@
 
         try
         {
-            var token = await PeekService.GetTokenAsync(EntityPath);
+            var token = await GetRequiredTokenAsync();
             
             object filterExpression;
             if (newFilterType == "Sql")
@@ -350,7 +350,7 @@
 
         try
         {
-            var token = await PeekService.GetTokenAsync(EntityPath);
+            var token = await GetRequiredTokenAsync();
             await JsInterop.RemoveRuleAsync(NamespaceName, TopicName, SubscriptionName, token, ruleName);
             NotificationService.NotifySuccess($"Rule '{ruleName}' deleted successfully.");
             await RefreshRules();
@@ -365,6 +365,10 @@
             StateHasChanged();
         }
     }
+
+    private async Task<string> GetRequiredTokenAsync() =>
+        await PeekService.GetTokenAsync(EntityPath)
+            ?? throw new InvalidOperationException("Service Bus authentication is required.");
 
     private void HandleContentMouseDown()
     {
