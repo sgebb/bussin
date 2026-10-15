@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Bussin;
 using Bussin.Services;
 using Bussin.Services.Demo;
@@ -40,7 +39,6 @@ if (isDemoMode)
     builder.Services.AddAuthorizationCore();
     builder.Services.AddScoped<AuthenticationStateProvider, DemoAuthenticationStateProvider>();
     builder.Services.AddScoped<IAuthenticationService, DemoAuthenticationService>();
-    builder.Services.AddScoped<IAccessTokenProvider, DemoAccessTokenProvider>();
     
     // Demo implementations
     // Important: DemoServiceBusJsInteropService must be Singleton to share state with DemoAzureResourceService and persist data
@@ -52,20 +50,11 @@ if (isDemoMode)
 }
 else
 {
-    // Real Auth
-    builder.Services.AddMsalAuthentication(options =>
-    {
-        builder.Configuration.Bind("AzureAd", options.ProviderOptions.Authentication);
-        
-        // Request Service Bus data plane permission at login (required for send/receive/peek operations)
-        // Note: Management API (ARM) is a separate resource and will be silently swapped from the cache on load
-        options.ProviderOptions.DefaultAccessTokenScopes.Add("https://servicebus.azure.net/user_impersonation");
-        
-        options.ProviderOptions.LoginMode = "redirect";
-        options.ProviderOptions.Cache.CacheLocation = "localStorage";
-    });
-
-    builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+    // Real Auth: one service is both the auth state provider and the token source (see msal-helper.js)
+    builder.Services.AddAuthorizationCore();
+    builder.Services.AddScoped<AuthenticationService>();
+    builder.Services.AddScoped<IAuthenticationService>(sp => sp.GetRequiredService<AuthenticationService>());
+    builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<AuthenticationService>());
     builder.Services.AddSingleton<IAzureResourceService, AzureResourceService>();
     builder.Services.AddScoped<IServiceBusJsInteropService, ServiceBusJsInteropService>();
     builder.Services.AddScoped<IMetricsService, MetricsService>();

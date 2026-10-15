@@ -1,5 +1,4 @@
 @page "/"
-@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @using Microsoft.JSInterop
 @using System.Text.Json
 @inject IAuthenticationService AuthService
@@ -138,51 +137,83 @@
                     <p class="mt-2 text-muted">Checking permissions...</p>
                 </div>
             }
-            else if ((!hasArmPermission || !hasSbPermission) && !isGrantingConsent && !isCheckingPermissions)
+            else if (access is { IsComplete: false } && !isGrantingAccess)
             {
                 <div class="alert alert-warning border-warning shadow-sm">
-                    <h5 class="alert-heading d-flex align-items-center gap-2">
-                        <i class="bi bi-shield-lock-fill"></i> Permission Required
-                    </h5>
-                    
-                    <p class="mb-3">
-                        <strong>bussin</strong> needs your permission to discover and manage your resources. 
-                        This is a secure <strong>client-side only</strong> app: all tokens stay in your browser, 
-                        and it cannot perform any actions unless you instigate them yourself.
-                    </p>
-                    <p class="small text-muted mb-4">
-                        Azure separates resource discovery from data operations, so we need consent for both:
-                    </p>
-                    
-                        <div class="list-group list-group-flush bg-transparent mb-4">
-                        <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
-                            <i class="bi @(hasArmPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
-                            <div>
-                                <h6 class="mb-0 @(hasArmPermission ? "text-success" : "")">Azure Management API</h6>
-                                <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to list your Service Bus namespaces so you can select them.</small>
-                                <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Resource Discovery & Enumeration</div>
-                            </div>
-                        </div>
-                        <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
-                            <i class="bi @(hasSbPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
-                            <div>
-                                <h6 class="mb-0 @(hasSbPermission ? "text-success" : "")">Service Bus Data Plane</h6>
-                                <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to peek, send, and monitor messages within your queues and topics.</small>
-                                <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Message Operations & Monitoring</div>
-                            </div>
-                        </div>
-                    </div>
+                    @switch (access.Problem)
+                    {
+                        case AccessProblem.SignInRequired:
+                            <h5 class="alert-heading d-flex align-items-center gap-2">
+                                <i class="bi bi-person-lock"></i> Sign In Again
+                            </h5>
+                            <p class="mb-4">
+                                Your Microsoft sign-in@(InTenant(" to")) is no longer valid.
+                                This usually happens after a password change, or when your organization requires you to sign in again.
+                            </p>
+                            break;
 
-                    @if (!string.IsNullOrEmpty(consentErrorMessage))
+                        case AccessProblem.ConsentRequired:
+                            <h5 class="alert-heading d-flex align-items-center gap-2">
+                                <i class="bi bi-shield-lock-fill"></i> Permission Required
+                            </h5>
+                            <p class="mb-3">
+                                <strong>bussin</strong> needs your permission to discover and manage your resources@(InTenant(" in")).
+                                This is a secure <strong>client-side only</strong> app: all tokens stay in your browser,
+                                and it cannot perform any actions unless you instigate them yourself.
+                            </p>
+                            <p class="small text-muted mb-4">
+                                Azure separates resource discovery from data operations, so you'll be asked to consent to both:
+                            </p>
+                            <div class="list-group list-group-flush bg-transparent mb-4">
+                                <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
+                                    <i class="bi @(hasArmPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
+                                    <div>
+                                        <h6 class="mb-0 @(hasArmPermission ? "text-success" : "")">Azure Management API</h6>
+                                        <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to list your Service Bus namespaces so you can select them.</small>
+                                        <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Resource Discovery & Enumeration</div>
+                                    </div>
+                                </div>
+                                <div class="list-group-item bg-transparent border-0 d-flex gap-3 px-0">
+                                    <i class="bi @(hasSbPermission ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-5"></i>
+                                    <div>
+                                        <h6 class="mb-0 @(hasSbPermission ? "text-success" : "")">Service Bus Data Plane</h6>
+                                        <small class="text-muted d-block mb-1">Allows <strong>bussin</strong> to peek, send, and monitor messages within your queues and topics.</small>
+                                        <div class="x-small text-info"><i class="bi bi-info-circle me-1"></i> Purpose: Message Operations & Monitoring</div>
+                                    </div>
+                                </div>
+                            </div>
+                            break;
+
+                        default:
+                            <h5 class="alert-heading d-flex align-items-center gap-2">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Couldn't Access Azure
+                            </h5>
+                            <p class="mb-2">Microsoft Entra ID returned an error@(InTenant(" for")):</p>
+                            <pre class="small bg-body-tertiary p-2 rounded mb-4" style="white-space: pre-wrap;">@access.ErrorMessage</pre>
+                            break;
+                    }
+
+                    @if (!string.IsNullOrEmpty(grantErrorMessage))
                     {
                         <div class="alert alert-danger mb-3 py-2 small">
-                            <i class="bi bi-exclamation-octagon me-2"></i> @consentErrorMessage
+                            <i class="bi bi-exclamation-octagon me-2"></i> @grantErrorMessage
                         </div>
                     }
 
                     <div class="d-flex align-items-center gap-3">
-                        <button class="btn btn-warning px-4 fw-bold" @onclick="StartConsentFlow" disabled="@isGrantingConsent">
-                            <i class="bi bi-shield-shaded me-2"></i> Grant Required Permissions
+                        <button class="btn btn-warning px-4 fw-bold" @onclick="GrantAccess">
+                            @switch (access.Problem)
+                            {
+                                case AccessProblem.SignInRequired:
+                                    <i class="bi bi-box-arrow-in-right me-2"></i><span>Sign In Again</span>
+                                    break;
+                                case AccessProblem.ConsentRequired:
+                                    <i class="bi bi-shield-shaded me-2"></i><span>Grant Required Permissions</span>
+                                    break;
+                                default:
+                                    <i class="bi bi-arrow-clockwise me-2"></i><span>Try Again</span>
+                                    break;
+                            }
                         </button>
                         @if (!string.IsNullOrEmpty(currentTenantId))
                         {
@@ -191,15 +222,9 @@
                             </button>
                         }
                     </div>
-
-                    <div class="mt-4 pt-3 border-top border-warning-subtle text-muted small">
-                        <i class="bi bi-lightbulb text-warning me-1"></i>
-                        <strong>Stuck here after granting access?</strong> Sometimes the authentication cache gets out of sync (like after a password change). 
-                        Try <a href="user" class="text-decoration-none fw-bold text-primary">logging out and back in</a> to resolve it.
-                    </div>
                 </div>
             }
-            else if (isGrantingConsent)
+            else if (isGrantingAccess)
             {
                 <div class="alert alert-info border-info shadow-sm">
                     <div class="d-flex align-items-center gap-3">
@@ -208,10 +233,7 @@
                         </div>
                         <div>
                             <h6 class="mb-0 fw-bold">Authenticating...</h6>
-                            <span class="text-muted small">
-                                @if (!hasArmPermission) { <span>Step 1/2: Requesting Azure Management access. Please handle the popup window.</span> }
-                                else { <span>Step 2/2: Requesting Service Bus Data access. Second popup incoming...</span> }
-                            </span>
+                            <span class="text-muted small">Complete the sign-in in the popup window.</span>
                         </div>
                     </div>
                 </div>
@@ -254,7 +276,7 @@
                         }
                     </div>
                 }
-                else if (!isRefreshing)
+                else if (!isRefreshing && hasArmPermission)
                 {
                     <div class="row justify-content-center">
                         <div class="col-lg-8">
@@ -324,17 +346,20 @@ else
     private string? errorMessage;
     private string searchTerm = "";
     private CancellationTokenSource? _loadCts;
-    private bool hasArmPermission = false;
-    private bool hasSbPermission = false;
-    private bool isGrantingConsent = false;
-    private string? consentErrorMessage = null;
+    private AccessStatus? access;
+    private bool hasArmPermission => access?.Management == AccessProblem.None;
+    private bool hasSbPermission => access?.ServiceBus == AccessProblem.None;
+    private bool isGrantingAccess = false;
+    private string? grantErrorMessage = null;
     private bool isCheckingPermissions = false;
     private bool isAuthenticated = false;
 
     private string? currentTenantName;
     private string? currentTenantId;
-    private string? cachedTenantId;
-    private string? cachedLoginHint;
+
+    // " in Contoso" when a guest tenant is selected, otherwise nothing.
+    private string InTenant(string preposition) =>
+        string.IsNullOrEmpty(currentTenantId) ? "" : $"{preposition} {currentTenantName ?? currentTenantId}";
 
     private void OpenAddManualModal()
     {
@@ -362,7 +387,7 @@ else
     private async Task SwitchToEntraLogin()
     {
         await NavState.SetRunWithoutLoginAsync(false);
-        await AuthService.LoginWithRedirectAsync(new[] { "https://servicebus.azure.net/user_impersonation" });
+        await AuthService.SignInAsync();
     }
 
     private void LoadManualNamespaces()
@@ -418,8 +443,6 @@ else
         {
             // Try to find the tenant name for the UI
             currentTenantId = await AuthService.GetCurrentTenantIdAsync();
-            cachedTenantId = currentTenantId;
-            cachedLoginHint = await AuthService.GetUserNameAsync();
 
             if (!string.IsNullOrEmpty(currentTenantId))
             {
@@ -437,21 +460,12 @@ else
                 }
             }
 
-            // Check Management API permission
-            var armCredential = await AuthService.GetTokenCredentialAsync();
-            hasArmPermission = armCredential != null;
-
-            // Check Service Bus data plane permission
-            var sbToken = await AuthService.GetServiceBusTokenAsync();
-            hasSbPermission = !string.IsNullOrEmpty(sbToken);
-            
-            Console.WriteLine($"DEBUG: Permissions checked - ARM: {hasArmPermission}, ServiceBus: {hasSbPermission}");
+            access = await AuthService.CheckAccessAsync();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error checking permissions: {ex.Message}");
-            hasArmPermission = false;
-            hasSbPermission = false;
+            access = new AccessStatus(AccessProblem.Failed, AccessProblem.Failed, ex.Message);
         }
     }
 
@@ -461,82 +475,21 @@ else
         Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
     }
 
-    private async Task StartConsentFlow()
+    // The same popup fixes every problem the card can show: it signs in again if needed and consents to both
+    // resources at once. The reload then re-checks, so anything still wrong shows up on the card again.
+    private async Task GrantAccess()
     {
-        isGrantingConsent = true;
-        consentErrorMessage = null;
-        StateHasChanged();
+        isGrantingAccess = true;
+        grantErrorMessage = null;
 
-        try
+        grantErrorMessage = await AuthService.GrantAccessAsync();
+        if (grantErrorMessage is null)
         {
-            // Use cached details directly to prevent any asynchronous delay prior to popup creation,
-            // thereby preserving the browser user gesture context and avoiding popup blocking.
-            var tenantId = cachedTenantId;
-            var loginHint = cachedLoginHint;
-            
-            // 1. Management Consent (Azure Resource discovery)
-            if (!hasArmPermission)
-            {
-                Console.WriteLine("Requesting Azure Management API consent via popup...");
-                var success = await AuthService.AcquireTokenPopupAsync("https://management.azure.com/user_impersonation", tenantId, loginHint);
-
-                if (!success)
-                {
-                    consentErrorMessage = "Azure Management API consent was not granted. Please try again.";
-                    isGrantingConsent = false;
-                    StateHasChanged();
-                    return;
-                }
-                hasArmPermission = true;
-                StateHasChanged();
-            }
-
-            // Check silently if the Service Bus token can be acquired.
-            // If they statically configured permissions in the portal, consenting to the first popup
-            // will have already granted consent to Service Bus, making silent acquisition succeed instantly.
-            var sbToken = await AuthService.GetServiceBusTokenAsync();
-            hasSbPermission = !string.IsNullOrEmpty(sbToken);
-
-            // 2. Service Bus Consent
-            if (!hasSbPermission)
-            {
-                // If silent check failed, we prompt for Service Bus.
-                // Note: We don't trigger the second popup automatically in the same click handler 
-                // to avoid browser popup blockers (since the preceding Management popup was asynchronous).
-                // Instead, the UI updates, and the user can click "Grant Required Permissions" a second time 
-                // to trigger this block with a clean user gesture click.
-                Console.WriteLine("Management API granted, but Service Bus Data Plane is still missing.");
-                
-                // If they are clicking the button for the second time, this block will execute immediately with gesture context:
-                if (hasArmPermission)
-                {
-                    Console.WriteLine("Requesting Service Bus Data Plane consent via popup...");
-                    var success = await AuthService.AcquireTokenPopupAsync("https://servicebus.azure.net/user_impersonation", tenantId, loginHint);
-
-                    if (!success)
-                    {
-                        consentErrorMessage = "Service Bus API consent was not granted. Please try again.";
-                        isGrantingConsent = false;
-                        StateHasChanged();
-                        return;
-                    }
-                    hasSbPermission = true;
-                    StateHasChanged();
-                }
-            }
-
-            Console.WriteLine("✓ Required permissions active. Reloading dashboard...");
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+            return;
         }
-        catch (Exception ex)
-        {
-            consentErrorMessage = $"An unexpected error occurred: {ex.Message}";
-        }
-        finally
-        {
-            isGrantingConsent = false;
-            StateHasChanged();
-        }
+
+        isGrantingAccess = false;
     }
 
     private async Task LoadNamespacesAsync()
@@ -553,7 +506,7 @@ else
             var credential = await AuthService.GetTokenCredentialAsync();
             if (credential == null)
             {
-                errorMessage = "Failed to get authentication token";
+                // CheckPermissions explains why on the access card.
                 isRefreshing = false;
                 return;
             }

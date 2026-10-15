@@ -38,16 +38,6 @@ public class DemoAuthenticationService : IAuthenticationService
         return Task.CompletedTask;
     }
 
-    public Task<string?> GetUserNameAsync()
-    {
-        return Task.FromResult<string?>("Demo User");
-    }
-
-    public string? GetUserName()
-    {
-        return "Demo User";
-    }
-
     private string? _currentTenantId;
 
     public Task SetTenantAsync(string? tenantId)
@@ -61,18 +51,13 @@ public class DemoAuthenticationService : IAuthenticationService
         return Task.FromResult(_currentTenantId);
     }
 
-    public Task<bool> AcquireTokenPopupAsync(string scope, string? tenantId, string? loginHint = null)
+    public Task<AccessStatus> CheckAccessAsync()
     {
-        return Task.FromResult(true);
+        return Task.FromResult(new AccessStatus(AccessProblem.None, AccessProblem.None, null));
     }
 
-    public Task LoginWithRedirectAsync(string[] scopes)
+    public Task<string?> GrantAccessAsync()
     {
-        return Task.CompletedTask;
-    }
-
-    public Task ClearMsalCacheAsync()
-    {
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     }
 }

@@ -1,18 +1,20 @@
 @page "/authentication/{action}"
-@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
-
-<RemoteAuthenticatorView Action="@Action">
-    <LogOutSucceeded>
-        @{
-            Navigation.NavigateTo(Navigation.BaseUri, forceLoad: true);
-        }
-    </LogOutSucceeded>
-</RemoteAuthenticatorView>
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
 
 @code {
     [Parameter]
     public string? Action { get; set; }
-    
-    [Inject]
-    private NavigationManager Navigation { get; set; } = default!;
+
+    // Entra returns here after sign-in (login-callback) and sign-out (logout-callback). MSAL has already
+    // processed any response during start-up (msalHelper.init), so all that's left is to go back to where
+    // sign-in started.
+    protected override async Task OnInitializedAsync()
+    {
+        var returnUrl = await JSRuntime.InvokeAsync<string?>("msalHelper.takeReturnUrl");
+        if (returnUrl is not null)
+        {
+            Navigation.NavigateTo(returnUrl, replace: true);
+        }
+    }
 }

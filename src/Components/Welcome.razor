@@ -141,10 +141,7 @@
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 
 @code {
-    async Task NavigateToLogin()
-    {
-        await AuthService.LoginWithRedirectAsync(new[] { "https://servicebus.azure.net/user_impersonation" });
-    }
+    Task NavigateToLogin() => AuthService.SignInAsync();
 
     async Task EnterConnectionStringMode()
     {

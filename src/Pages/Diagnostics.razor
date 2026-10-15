@@ -36,7 +36,7 @@
                         <div class="alert alert-danger mt-3">
                             ✗ Service Bus token is NOT available
                             <p class="mt-2">You need to sign out and sign in again to consent to the Service Bus scope.</p>
-                            <a href="authentication/logout" class="btn btn-warning">Sign Out</a>
+                            <button class="btn btn-warning" @onclick="AuthService.SignOutAsync">Sign Out</button>
                         </div>
                     }
                 </div>

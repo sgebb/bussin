@@ -1,7 +1,6 @@
 @page "/user"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @attribute [Authorize]
 @inject IAuthenticationService AuthService
 @inject NavigationManager Navigation
@@ -68,9 +67,9 @@
                     {
                          <span class="badge bg-success">Demo Active</span>
                     }
-                    else if (!isCheckingConsent)
+                    else if (!isCheckingAccess)
                     {
-                        <button class="btn btn-outline-primary btn-sm" @onclick="CheckConsent">
+                        <button class="btn btn-outline-primary btn-sm" @onclick="CheckAccess">
                             <i class="bi bi-arrow-clockwise"></i> Refresh Status
                         </button>
                     }
@@ -84,7 +83,7 @@
                     {
                         <p class="text-success small mb-0"><i class="bi bi-check-circle-fill"></i> All permissions are simulated for the demonstration.</p>
                     }
-                    else if (consentStatus != null)
+                    else if (access != null)
                     {
                         <div class="list-group list-group-flush mb-3">
                             <div class="list-group-item d-flex justify-content-between align-items-center px-0">
@@ -92,21 +91,33 @@
                                     <h6 class="mb-0">Azure Management API</h6>
                                     <small class="text-muted">Required to list your Service Bus namespaces.</small>
                                 </div>
-                                <i class="bi @(consentStatus.HasArmManagement ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") fs-5"></i>
+                                <i class="bi @(access.Management == AccessProblem.None ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") fs-5"></i>
                             </div>
                             <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                                 <div>
                                     <h6 class="mb-0">Service Bus Data API</h6>
                                     <small class="text-muted">Required for sending/receiving messages.</small>
                                 </div>
-                                <i class="bi @(consentStatus.HasServiceBus ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") fs-5"></i>
+                                <i class="bi @(access.ServiceBus == AccessProblem.None ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") fs-5"></i>
                             </div>
                         </div>
 
-                        @if (!consentStatus.HasArmManagement || !consentStatus.HasServiceBus)
+                        @if (!access.IsComplete)
                         {
                             <div class="alert alert-info py-2 small">
-                                <i class="bi bi-info-circle me-1"></i> Missing permissions? You'll be prompted to grant them on the Home page.
+                                <i class="bi bi-info-circle me-1"></i>
+                                @switch (access.Problem)
+                                {
+                                    case AccessProblem.SignInRequired:
+                                        <span>Your sign-in has expired. You'll be asked to sign in again on the Home page.</span>
+                                        break;
+                                    case AccessProblem.ConsentRequired:
+                                        <span>Permissions are missing. You'll be prompted to grant them on the Home page.</span>
+                                        break;
+                                    default:
+                                        <span>@access.ErrorMessage</span>
+                                        break;
+                                }
                             </div>
                         }
                     }
@@ -141,8 +152,8 @@
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private AuthenticationState? authState;
-    private ConsentStatus? consentStatus;
-    private bool isCheckingConsent = false;
+    private AccessStatus? access;
+    private bool isCheckingAccess = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,54 +161,18 @@
         {
             authState = await AuthenticationStateTask;
         }
-        
+
         // Auto-check on load to show status
-        await CheckConsent();
+        await CheckAccess();
     }
 
-    private async Task CheckConsent()
+    private async Task CheckAccess()
     {
-        isCheckingConsent = true;
-        consentStatus = new ConsentStatus();
+        isCheckingAccess = true;
         StateHasChanged();
-
-        try
-        {
-            // Check Service Bus token
-            var sbToken = await AuthService.GetServiceBusTokenAsync();
-            consentStatus.HasServiceBus = !string.IsNullOrEmpty(sbToken);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Service Bus token check error: {ex.Message}");
-            consentStatus.HasServiceBus = false;
-        }
-
-        try
-        {
-            // Check ARM Management token
-            var mgmtCred = await AuthService.GetTokenCredentialAsync();
-            consentStatus.HasArmManagement = mgmtCred != null;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"ARM Management token check error: {ex.Message}");
-            consentStatus.HasArmManagement = false;
-        }
-
-        isCheckingConsent = false;
-        StateHasChanged();
+        access = await AuthService.CheckAccessAsync();
+        isCheckingAccess = false;
     }
 
-
-    private void BeginLogout()
-    {
-        Navigation.NavigateToLogout("authentication/logout");
-    }
-
-    private class ConsentStatus
-    {
-        public bool HasServiceBus { get; set; }
-        public bool HasArmManagement { get; set; }
-    }
+    private Task BeginLogout() => AuthService.SignOutAsync();
 }

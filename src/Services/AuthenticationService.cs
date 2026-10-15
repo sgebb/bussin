@@ -1,27 +1,77 @@
 using Azure.Core;
-using Microsoft.AspNetCore.Components;
+using Bussin.Models;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace Bussin.Services;
 
+/// <summary>
+/// Sign-in state and tokens, backed by the single MSAL instance in wwwroot/js/msal-helper.js.
+/// Also serves as the app's <see cref="AuthenticationStateProvider"/>: the user counts as signed in while an
+/// account is cached, even if its tokens have stopped working; <see cref="CheckAccessAsync"/> tells those apart.
+/// </summary>
 public sealed class AuthenticationService(
-    IAccessTokenProvider tokenProvider, 
-    AuthenticationStateProvider authStateProvider,
-    NavigationManager navigationManager,
     IPreferencesService preferencesService,
     IJSRuntime jsRuntime,
-    IConfiguration configuration) : IAuthenticationService
+    IConfiguration configuration) : AuthenticationStateProvider, IAuthenticationService
 {
+    private const string ArmScope = "https://management.azure.com/user_impersonation";
+    private const string ServiceBusScope = "https://servicebus.azure.net/user_impersonation";
+
+    private Task<AuthenticationState>? _authenticationState;
+
     public bool IsDemoMode => false;
+
+    // Every page load starts here, so this is also where a returning sign-in redirect is processed.
+    // Sign-in, sign-out and granting access all reload the page, so the state never changes within a load.
+    public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+        _authenticationState ??= InitializeAsync();
+
+    private async Task<AuthenticationState> InitializeAsync()
+    {
+        var claims = await jsRuntime.InvokeAsync<JsonElement?>("msalHelper.init", new
+        {
+            clientId = configuration["AzureAd:ClientId"],
+            authority = configuration["AzureAd:Authority"]
+        });
+        return new AuthenticationState(new ClaimsPrincipal(ToIdentity(claims)));
+    }
+
+    private static ClaimsIdentity ToIdentity(JsonElement? idTokenClaims)
+    {
+        if (idTokenClaims is not { ValueKind: JsonValueKind.Object } claims)
+        {
+            return new ClaimsIdentity();
+        }
+
+        var list = claims.EnumerateObject().SelectMany(claim => claim.Value.ValueKind == JsonValueKind.Array
+            ? claim.Value.EnumerateArray().Select(value => new Claim(claim.Name, value.ToString()))
+            : [new Claim(claim.Name, claim.Value.ToString())]);
+        return new ClaimsIdentity(list, authenticationType: "msal", nameType: "name", roleType: "roles");
+    }
 
     public async Task<bool> IsAuthenticatedAsync()
     {
-        var authState = await authStateProvider.GetAuthenticationStateAsync();
-        return authState.User.Identity?.IsAuthenticated ?? false;
+        var state = await GetAuthenticationStateAsync();
+        return state.User.Identity?.IsAuthenticated ?? false;
+    }
+
+    public async Task SignInAsync()
+    {
+        await GetAuthenticationStateAsync();
+        await jsRuntime.InvokeVoidAsync("msalHelper.loginRedirect", ArmScope, new[] { ServiceBusScope });
+    }
+
+    public async Task SignOutAsync()
+    {
+        // The selected guest tenant lives in preferences, not the MSAL cache, so it would otherwise
+        // survive sign-out and drop the next sign-in straight back into that tenant's consent flow.
+        await SetTenantAsync(null);
+        await GetAuthenticationStateAsync();
+        await jsRuntime.InvokeVoidAsync("msalHelper.logoutRedirect");
     }
 
     public async Task SetTenantAsync(string? tenantId)
@@ -37,189 +87,66 @@ public sealed class AuthenticationService(
         return prefs.SelectedTenantId;
     }
 
-    private bool _msalConfigured;
-    private async Task EnsureMsalConfigAsync()
-    {
-        if (_msalConfigured) return;
-        try 
-        {
-            var clientId = configuration["AzureAd:ClientId"];
-            var authority = configuration["AzureAd:Authority"];
-            await jsRuntime.InvokeVoidAsync("msalHelper.setConfig", new { clientId, authority });
-            _msalConfigured = true;
-        }
-        catch { }
-    }
+    public async Task<TokenCredential?> GetTokenCredentialAsync() =>
+        ToCredential(await AcquireTokenSilentAsync(ArmScope, await GetCurrentTenantIdAsync()));
 
-    private async Task<string?> TryGetTokenFromJsAsync(string scope, string tenantId)
-    {
-        try
-        {
-            await EnsureMsalConfigAsync();
-            var result = await jsRuntime.InvokeAsync<JsonElement>("msalHelper.acquireTokenSilent", scope, tenantId);
-            if (result.TryGetProperty("success", out var success) && success.GetBoolean())
-            {
-                if (result.TryGetProperty("token", out var tokenProp))
-                {
-                    return tokenProp.GetString();
-                }
-            }
-            else if (result.TryGetProperty("error", out var errorProp))
-            {
-                var error = errorProp.GetString();
-                // Quietly return null for these known cases to let the UI prompt for consent
-                if (error == "MSAL_INTERACTION_REQUIRED" || 
-                    error == "MSAL_NO_ACCOUNTS" || 
-                    error == "MSAL_WRONG_TENANT")
-                {
-                    return null;
-                }
-                Console.WriteLine($"DEBUG: Silent JS token acquisition failed: {error}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"DEBUG: JS interop error during silent acquisition: {ex.Message}");
-        }
-        return null;
-    }
+    public async Task<TokenCredential?> GetHomeTokenCredentialAsync() =>
+        ToCredential(await AcquireTokenSilentAsync(ArmScope, tenantId: null));
 
-    public async Task<TokenCredential?> GetTokenCredentialAsync()
+    public async Task<string?> GetServiceBusTokenAsync() =>
+        (await AcquireTokenSilentAsync(ServiceBusScope, await GetCurrentTenantIdAsync())).Token;
+
+    public async Task<AccessStatus> CheckAccessAsync()
     {
         var tenantId = await GetCurrentTenantIdAsync();
-        
-        // If specific tenant, try JS
-        if (!string.IsNullOrEmpty(tenantId))
-        {
-             var jsToken = await TryGetTokenFromJsAsync("https://management.azure.com/user_impersonation", tenantId);
-             if (!string.IsNullOrEmpty(jsToken))
-             {
-                 return new AccessTokenCredential(jsToken);
-             }
-             return null;
-        }
-
-        return await GetHomeTokenCredentialAsync();
+        var management = await AcquireTokenSilentAsync(ArmScope, tenantId);
+        var serviceBus = await AcquireTokenSilentAsync(ServiceBusScope, tenantId);
+        return new AccessStatus(management.AccessProblem, serviceBus.AccessProblem, management.Message ?? serviceBus.Message);
     }
 
-    public async Task<TokenCredential?> GetHomeTokenCredentialAsync()
+    public async Task<string?> GrantAccessAsync()
     {
-        // First try silent JS acquisition for home tenant to ensure maximum reliability and sync with the JS MSAL cache
-        var jsToken = await TryGetTokenFromJsAsync("https://management.azure.com/user_impersonation", "");
-        if (!string.IsNullOrEmpty(jsToken))
-        {
-            return new AccessTokenCredential(jsToken);
-        }
-
-        try
-        {
-            var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
-            {
-                Scopes = ["https://management.azure.com/user_impersonation"]
-            });
-
-            if (result.TryGetToken(out var token))
-            {
-                return new AccessTokenCredential(token.Value, token.Expires);
-            }
-
-            if (result.Status == AccessTokenResultStatus.RequiresRedirect)
-            {
-                // If the default provider fails, we might need a refresh. 
-                // We don't auto-redirect here to avoid loops, let the UI handle it.
-                Console.WriteLine("DEBUG: Home token requires redirect.");
-            }
-            return null;
-        }
-        catch { return null; }
-    }
-
-    public async Task<string?> GetServiceBusTokenAsync()
-    {
+        // Nothing slow may happen before the popup opens, or the browser no longer sees it as a response
+        // to the click and blocks it. Both awaits here complete from memory.
+        await GetAuthenticationStateAsync();
         var tenantId = await GetCurrentTenantIdAsync();
-
-        // If in a guest tenant context, strictly use the JS helper to prevent home-tenant token leakage
-        if (!string.IsNullOrEmpty(tenantId))
-        {
-             return await TryGetTokenFromJsAsync("https://servicebus.azure.net/user_impersonation", tenantId);
-        }
-
-        // Home tenant flow: Try silent JS acquisition first, then fall back to the Blazor tokenProvider
-        var jsToken = await TryGetTokenFromJsAsync("https://servicebus.azure.net/user_impersonation", "");
-        if (!string.IsNullOrEmpty(jsToken))
-        {
-            return jsToken;
-        }
-
         try
         {
-            var result = await tokenProvider.RequestAccessToken(new AccessTokenRequestOptions
-            {
-                Scopes = ["https://servicebus.azure.net/user_impersonation"]
-            });
+            return await jsRuntime.InvokeAsync<string?>("msalHelper.acquireTokenPopup", ArmScope, new[] { ServiceBusScope }, tenantId);
+        }
+        catch (JSException ex)
+        {
+            return ex.Message;
+        }
+    }
 
-            if (result.TryGetToken(out var token))
+    private async Task<SilentTokenResult> AcquireTokenSilentAsync(string scope, string? tenantId)
+    {
+        await GetAuthenticationStateAsync();
+        try
+        {
+            var result = await jsRuntime.InvokeAsync<SilentTokenResult>("msalHelper.acquireTokenSilent", scope, tenantId);
+            if (result.Token is null)
             {
-                return token.Value;
+                Console.WriteLine($"Silent token for {scope} failed ({result.Problem}): {result.Message}");
             }
-            return null;
+            return result;
         }
-        catch { return null; }
-    }
-
-    public async Task<bool> AcquireTokenPopupAsync(string scope, string? tenantId, string? loginHint = null)
-    {
-        try
+        catch (JSException ex)
         {
-            await EnsureMsalConfigAsync();
-            var result = await jsRuntime.InvokeAsync<JsonElement>("msalHelper.acquireTokenPopup", scope, tenantId, loginHint);
-            return result.TryGetProperty("success", out var success) && success.GetBoolean();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"ERROR: Popup failed: {ex.Message}");
-            return false;
+            return new SilentTokenResult(null, null, nameof(AccessProblem.Failed), ex.Message);
         }
     }
 
-    public async Task LoginWithRedirectAsync(string[] scopes)
-    {
-        try
-        {
-            await EnsureMsalConfigAsync();
-            await jsRuntime.InvokeVoidAsync("msalHelper.loginRedirect", (object)scopes);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"ERROR: Redirect login failed: {ex.Message}");
-            // Fallback to standard Blazor login if JS fails
-            await SignInAsync();
-        }
-    }
+    private static TokenCredential? ToCredential(SilentTokenResult result) =>
+        result.Token is null ? null : new AccessTokenCredential(result.Token, result.ExpiresOn);
 
-    public Task SignInAsync()
+    // Shape returned by msalHelper.acquireTokenSilent: either Token, or Problem (an AccessProblem name) and Message.
+    private sealed record SilentTokenResult(string? Token, DateTimeOffset? ExpiresOn, string? Problem, string? Message)
     {
-        navigationManager.NavigateTo("authentication/login");
-        return Task.CompletedTask;
-    }
-
-    public Task SignOutAsync()
-    {
-        navigationManager.NavigateToLogout("authentication/logout");
-        return Task.CompletedTask;
-    }
-
-    public async Task<string?> GetUserNameAsync()
-    {
-        var authState = await authStateProvider.GetAuthenticationStateAsync();
-        return authState.User.Identity?.Name;
-    }
-    
-    public string? GetUserName() => null;
-
-    public async Task ClearMsalCacheAsync()
-    {
-        try { await jsRuntime.InvokeVoidAsync("msalHelper.clearCache"); } catch { }
+        public AccessProblem AccessProblem => Token is not null ? AccessProblem.None
+            : Enum.TryParse<AccessProblem>(Problem, out var problem) ? problem
+            : AccessProblem.Failed;
     }
 }
 
