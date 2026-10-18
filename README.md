@@ -92,7 +92,7 @@ Bussin serves as a cross-platform, web-native alternative to traditional desktop
 
 ## Permissions and Security
 
-Bussin respects your Azure RBAC configuration. It uses two-step delegated consent:
+Bussin respects your Azure RBAC configuration. It uses single-step delegated consent: one sign-in prompt covers both resources it needs.
 1. **Azure Management API**: To list namespaces and entities.
 2. **Azure Service Bus**: For data-plane operations (Peek, Send, etc.).
 
