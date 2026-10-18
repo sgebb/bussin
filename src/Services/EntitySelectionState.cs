@@ -52,7 +52,11 @@ public sealed class EntitySelectionState : IDisposable
     public Dictionary<string, ServiceBusTopicInfo> TopicDict { get; } = new();
     public Dictionary<string, ServiceBusSubscriptionInfo> SubscriptionDict { get; } = new();
 
-    public string DisplayName { get; set; } = "";
+    private string _openedWithName = "";
+
+    /// <summary>The favorite's custom name when this namespace is a favorite, otherwise the name it was opened with.</summary>
+    public string DisplayName =>
+        (State.FullyQualifiedNamespace is { } fqn ? _navState.GetNamespaceConnection(fqn)?.DisplayName : null) ?? _openedWithName;
     public string? ErrorMessage { get; set; }
     public string? RawErrorMessage { get; set; }
     public bool IsConnectionStringMode { get; set; }
@@ -60,6 +64,7 @@ public sealed class EntitySelectionState : IDisposable
     // UI Visibility State
     public bool IsLoadingEntities { get; set; }
     public bool IsLoadingSubscriptions { get; set; }
+    public DateTime? EntitiesLoadedAt { get; private set; }
 
     private CancellationTokenSource? _entitiesLoadCts;
     private CancellationTokenSource? _subscriptionsLoadCts;
@@ -139,7 +144,7 @@ public sealed class EntitySelectionState : IDisposable
             SubscriptionDict.Clear();
             _loadedSubscriptionsForTopic = null;
 
-            DisplayName = connection?.DisplayName ?? nameParam ?? "";
+            _openedWithName = nameParam ?? State.CurrentNamespace?.Name ?? "";
 
             // Fire entity loading in the background so it doesn't block selection logic below.
             // If we await here, entity loading completes AFTER InitializeAsync returns, but the
@@ -279,6 +284,7 @@ public sealed class EntitySelectionState : IDisposable
                 {
                     TopicDict.Remove(key);
                 }
+                EntitiesLoadedAt = DateTime.Now;
             }
         }
         catch (Exception ex)

@@ -166,7 +166,7 @@ body, button, input, select, textarea, .nav-brand {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
 
-pre, code, .namespace-fqdn-below, .message-preview-tooltip {
+pre, code, .message-preview-tooltip {
     font-family: 'JetBrains Mono', SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
 }
 
@@ -485,65 +485,6 @@ a:hover,
     color: var(--primary-color) !important;
 }
 
-.recent-namespace-tile .ns-actions-wrapper {
-    opacity: 0.6;
-    transition: opacity 0.15s ease-in-out;
-    flex-shrink: 0;
-    margin-left: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.min-width-0 {
-    min-width: 0 !important;
-}
-
-.recent-namespace-tile:hover .ns-actions-wrapper {
-    opacity: 1;
-}
-
-.recent-namespace-tile .ns-actions-wrapper .btn-link.text-danger {
-    color: #ef4444 !important;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 !important;
-    border: none;
-    background: transparent;
-    text-decoration: none;
-    border-radius: 4px;
-    transition: background-color 0.15s ease;
-}
-
-.recent-namespace-tile .ns-actions-wrapper .btn-link.text-danger:hover {
-    color: #f87171 !important;
-    background-color: rgba(239, 68, 68, 0.1) !important;
-}
-
-.folder-delete-btn {
-    color: #ef4444 !important;
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 !important;
-    border: none;
-    background: transparent;
-    text-decoration: none;
-    border-radius: 4px;
-    transition: background-color 0.15s ease, opacity 0.2s ease;
-    opacity: 0.6;
-    font-size: 0.85rem;
-}
-
-.folder-delete-btn:hover {
-    color: #f87171 !important;
-    background-color: rgba(239, 68, 68, 0.1) !important;
-}
 
 
 .user-section {
@@ -638,56 +579,6 @@ textarea:focus {
     border-color: var(--surface-border) !important;
     border-left: 3px solid var(--primary-color) !important;
     font-weight: 600;
-}
-
-/* Custom Favorites Toggle Button (Explorer) */
-.favorite-toggle-btn {
-    background: none;
-    border: none;
-    color: #F59E0B;
-    font-size: 1.75rem;
-    line-height: 1;
-    padding: 0.25rem 0.5rem;
-    cursor: pointer;
-    transition: transform 0.2s ease;
-}
-
-.favorite-toggle-btn:hover {
-    transform: scale(1.2);
-    color: #D97706;
-}
-
-.favorite-toggle-btn.not-favorited {
-    color: var(--text-muted);
-    opacity: 0.5;
-}
-
-.favorite-toggle-btn.not-favorited:hover {
-    color: #F59E0B;
-    opacity: 1;
-}
-
-/* Rename Button (Explorer) */
-.rename-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 1rem;
-    padding: 0.25rem 0.5rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    opacity: 0.6;
-}
-
-.rename-btn:hover {
-    color: var(--primary-color);
-    opacity: 1;
-}
-
-.namespace-rename-input {
-    font-size: 1.5rem;
-    font-weight: 600;
-    max-width: 400px;
 }
 
 /* Namespace Cards (Home) */
@@ -1385,6 +1276,7 @@ mark {
         padding: 0.6rem 0.75rem !important;
         width: 100% !important;
         white-space: normal !important;
+        flex-shrink: 0 !important; /* scroll the list instead of squashing items over each other */
     }
     
     .entity-name-with-icons {

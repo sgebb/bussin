@@ -89,16 +89,6 @@ public sealed class ExplorerDialogService : IDisposable
     // Export Options state
     public Bussin.Components.ExportOptionsModal.ExportOptions MessageExportOptions { get; set; } = new();
 
-    // Rename state
-    private bool _isEditingDisplayName;
-    public bool IsEditingDisplayName
-    {
-        get => _isEditingDisplayName;
-        set { _isEditingDisplayName = value; NotifyStateChanged(); }
-    }
-
-    public string EditDisplayName { get; set; } = "";
-
     // Resubmit Modal state
     public bool ResubmitRemoveFromDLQ { get; set; } = true;
     public bool IsResubmitModal { get; set; }

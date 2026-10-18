@@ -33,14 +33,13 @@
 
         @if (NavState.RunWithoutLogin)
         {
-            <!-- Manual Connections Section -->
             <div class="d-flex align-items-center justify-content-between mb-3 mt-2">
                 <h3 class="h5 mb-0 text-secondary"><i class="bi bi-link-45deg"></i> Manual Connections & Emulators</h3>
                 <button class="btn btn-sm btn-primary" @onclick="OpenAddManualModal">
-                    <i class="bi bi-plus-circle me-1"></i> Add Connection String
+                    <i class="bi bi-plus-circle me-1"></i> Add namespace
                 </button>
             </div>
-            
+
             @if (manualNamespaces.Count == 0)
             {
                 <div class="card border-0 shadow-sm mb-4">
@@ -49,55 +48,14 @@
                         <h6>No manual connections configured</h6>
                         <p class="text-muted small mb-3">Add a connection string to a Service Bus namespace or local emulator to start browsing.</p>
                         <button class="btn btn-sm btn-primary px-3 fw-semibold" @onclick="OpenAddManualModal">
-                            <i class="bi bi-plus-circle me-1"></i> Add Connection String
+                            <i class="bi bi-plus-circle me-1"></i> Add namespace
                         </button>
                     </div>
                 </div>
             }
             else
             {
-                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3 mb-5">
-                    @foreach (var ns in manualNamespaces)
-                    {
-                        <div class="col">
-                            <div class="card h-100 namespace-card position-relative" style="cursor: pointer;" @onclick="() => NavigateToManualExplorer(ns)">
-                                <div class="card-body pb-5">
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <h5 class="card-title text-truncate pe-5 mb-0 fw-bold" title="@ns.DisplayName">@ns.DisplayName</h5>
-                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2">SAS</span>
-                                    </div>
-                                    <p class="card-text text-muted mb-0 small text-truncate" title="@ns.FullyQualifiedNamespace">
-                                        <strong>Endpoint:</strong> @ns.FullyQualifiedNamespace
-                                    </p>
-                                    @if (!string.IsNullOrEmpty(ns.WebSocketUrl))
-                                    {
-                                        <p class="card-text text-muted small text-truncate" title="@ns.WebSocketUrl">
-                                            <strong>WebSocket:</strong> @ns.WebSocketUrl
-                                        </p>
-                                    }
-                                    else
-                                    {
-                                        <p class="card-text text-muted small">
-                                            <strong>WebSocket:</strong> Default (Secure)
-                                        </p>
-                                    }
-                                    <div class="card-text mt-2 d-flex gap-2">
-                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Queues: @ns.ConfiguredQueues.Count</span>
-                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Topics: @ns.ConfiguredTopics.Count</span>
-                                    </div>
-                                </div>
-                                <div class="position-absolute bottom-0 end-0 p-2 d-flex gap-1" @onclick:stopPropagation="true">
-                                    <button class="btn btn-xs btn-outline-secondary" @onclick="() => OpenEditManualModal(ns)" title="Edit connection settings">
-                                        <i class="bi bi-gear"></i>
-                                    </button>
-                                    <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteManualNamespace(ns)" title="Delete connection">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
+                @ManualNamespaceCards
             }
         }
 
@@ -252,6 +210,15 @@
                 else if (namespaces.Count > 0)
                 {
                     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
+                        <div class="col-md-4 mb-3">
+                            <button class="card h-100 w-100 namespace-card add-namespace-card" @onclick="OpenAddManualModal">
+                                <span class="card-body d-flex flex-column align-items-center justify-content-center text-center">
+                                    <i class="bi bi-plus-circle fs-3 mb-2"></i>
+                                    <span class="fw-bold">Add namespace</span>
+                                    <small class="text-muted">Not listed here? Connect with a connection string.</small>
+                                </span>
+                            </button>
+                        </div>
                         @foreach (var ns in FilteredNamespaces)
                         {
                             <div class="col-md-4 mb-3">
@@ -303,6 +270,9 @@
                                         <a href="https://portal.azure.com/#create/Microsoft.ServiceBus" target="_blank" class="btn btn-primary">
                                             <i class="bi bi-plus-lg me-2"></i>Create Namespace
                                         </a>
+                                        <button class="btn btn-outline-secondary" @onclick="OpenAddManualModal">
+                                            <i class="bi bi-link-45deg me-2"></i>Add with connection string
+                                        </button>
                                         <a href="user" class="btn btn-outline-secondary">
                                             <i class="bi bi-person-gear me-2"></i>Check Tenant
                                         </a>
@@ -312,6 +282,12 @@
                         </div>
                     </div>
                 }
+            }
+
+            @if (manualNamespaces.Count > 0)
+            {
+                <h3 class="h6 text-secondary mt-4 mb-3"><i class="bi bi-link-45deg"></i> Connection string namespaces</h3>
+                @ManualNamespaceCards
             }
         }
 
@@ -335,6 +311,18 @@ else
         padding: 0.15rem 0.35rem;
         font-size: 0.75rem;
         border-radius: 4px;
+    }
+
+    .add-namespace-card {
+        border-style: dashed !important;
+        background: transparent !important;
+        color: var(--text-color);
+        min-height: 140px;
+    }
+
+    .add-namespace-card:hover {
+        border-color: var(--link-color) !important;
+        color: var(--link-color);
     }
 </style>
 
@@ -360,6 +348,49 @@ else
     // " in Contoso" when a guest tenant is selected, otherwise nothing.
     private string InTenant(string preposition) =>
         string.IsNullOrEmpty(currentTenantId) ? "" : $"{preposition} {currentTenantName ?? currentTenantId}";
+
+    private RenderFragment ManualNamespaceCards => @<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3 mb-5">
+        @foreach (var ns in manualNamespaces)
+        {
+            <div class="col">
+                <div class="card h-100 namespace-card position-relative" style="cursor: pointer;" @onclick="() => NavigateToManualExplorer(ns)">
+                    <div class="card-body pb-5">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h5 class="card-title text-truncate pe-5 mb-0 fw-bold" title="@ns.DisplayName">@ns.DisplayName</h5>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2">SAS</span>
+                        </div>
+                        <p class="card-text text-muted mb-0 small text-truncate" title="@ns.FullyQualifiedNamespace">
+                            <strong>Endpoint:</strong> @ns.FullyQualifiedNamespace
+                        </p>
+                        @if (!string.IsNullOrEmpty(ns.WebSocketUrl))
+                        {
+                            <p class="card-text text-muted small text-truncate" title="@ns.WebSocketUrl">
+                                <strong>WebSocket:</strong> @ns.WebSocketUrl
+                            </p>
+                        }
+                        else
+                        {
+                            <p class="card-text text-muted small">
+                                <strong>WebSocket:</strong> Default (Secure)
+                            </p>
+                        }
+                        <div class="card-text mt-2 d-flex gap-2">
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Queues: @ns.ConfiguredQueues.Count</span>
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Topics: @ns.ConfiguredTopics.Count</span>
+                        </div>
+                    </div>
+                    <div class="position-absolute bottom-0 end-0 p-2 d-flex gap-1" @onclick:stopPropagation="true">
+                        <button class="btn btn-xs btn-outline-secondary" @onclick="() => OpenEditManualModal(ns)" title="Edit connection settings">
+                            <i class="bi bi-gear"></i>
+                        </button>
+                        <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteManualNamespace(ns)" title="Delete connection">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>;
 
     private void OpenAddManualModal()
     {

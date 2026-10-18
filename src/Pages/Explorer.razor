@@ -5,7 +5,6 @@
 @inject MessageListState MessageListState
 @inject PeekService PeekService
 @inject SendService SendService
-@inject MonitorService MonitorService
 @inject SearchStateService SearchStateService
 @inject ExplorerDialogService DialogService
 @inject IAuthenticationService AuthService
@@ -20,77 +19,70 @@
 <div class="explorer-layout">
     <!-- Section 1: Restructured Header -->
     <div class="explorer-header">
+        <a href="/" class="explorer-breadcrumb-home desktop-only" @onclick:preventDefault @onclick="@(() => Navigation.NavigateTo("/"))">
+            <i class="bi bi-chevron-left"></i> Namespaces
+        </a>
+        @* Desktop: one row. Phones: name + actions on the first line, the entity path (with the DLQ toggle) on the second. *@
         <div class="explorer-header-left">
-            @if (DialogService.IsEditingDisplayName)
+            <h1 class="explorer-namespace-title" title="@NamespaceParam">@SelectionState.DisplayName</h1>
+            @{ var crumbs = SelectedEntityCrumbs; }
+            @if (crumbs.Count > 0)
             {
-                <div class="namespace-edit-section">
-                    <div class="namespace-edit-wrapper" data-value="@DialogService.EditDisplayName">
-                        <input type="text" class="form-control namespace-rename-input"
-                               @bind="DialogService.EditDisplayName"
-                               @bind:event="oninput"
-                               @onkeydown="HandleRenameKeyDown"
-                               @onblur="CancelRename"
-                               @ref="renameInputRef" />
-                    </div>
-                    <button class="btn btn-sm btn-success" @onmousedown="SaveDisplayNameAsync" @onmousedown:preventDefault="true" disabled="@string.IsNullOrWhiteSpace(DialogService.EditDisplayName)">
-                        <i class="bi bi-check-lg"></i>
-                    </button>
-                    <button class="btn btn-sm btn-secondary" @onmousedown="CancelRename" @onmousedown:preventDefault="true">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                </div>
-            }
-            else
-            {
-                <div class="namespace-title-section">
-                    <div class="namespace-title-row">
-                        <h1 class="explorer-namespace-title @(SelectionState.IsFavorite ? "editable" : "")" 
-                            @onclick="@(SelectionState.IsFavorite ? StartRename : (Action)(() => {}))"
-                            title="@(SelectionState.IsFavorite ? "Click to rename" : SelectionState.DisplayName)">
-                            @SelectionState.DisplayName
-                        </h1>
-                        <button class="namespace-action-btn favorite-toggle-btn @(SelectionState.IsFavorite ? "favorited" : "not-favorited")"
-                                @onclick="SelectionState.ToggleFavoriteAsync"
-                                title="@(SelectionState.IsFavorite ? "Remove from favorites" : "Add to favorites")">
-                            <i class="bi @(SelectionState.IsFavorite ? "bi-star-fill" : "bi-star")"></i>
-                        </button>
-                        @if (SelectionState.IsConnectionStringMode)
+                <div class="explorer-entity-path">
+                    @for (var i = 0; i < crumbs.Count; i++)
+                    {
+                        <i class="bi bi-chevron-right explorer-crumb-sep"></i>
+                        <span class="explorer-crumb @(i == crumbs.Count - 1 ? "leaf" : "")" title="@crumbs[i]">@crumbs[i]</span>
+                    }
+                    @if (SelectionState.HasQueueOrSubscriptionSelected)
+                    {
+                        @if (SelectionState.State.IsViewingDLQ)
                         {
-                            var currentConn = NavState.GetNamespaceConnection(SelectionState.State.FullyQualifiedNamespace ?? NamespaceParam ?? "");
-                            if (currentConn != null)
-                            {
-                                <button class="namespace-action-btn edit-connection-btn ms-2"
-                                        @onclick="@(() => NavState.ShowAddConnectionStringModalDialog(currentConn))"
-                                        title="Edit connection settings">
-                                    <i class="bi bi-gear-fill"></i>
-                                </button>
-                            }
+                            <span class="badge explorer-crumb-dlq desktop-only">DLQ</span>
                         }
-                    </div>
+                        <button class="btn btn-sm explorer-dlq-toggle mobile-only @(SelectionState.State.IsViewingDLQ ? "active" : "")"
+                                @onclick="SelectionState.ToggleDLQ" title="Switch between the active messages and the dead-letter queue">
+                            <i class="bi @(SelectionState.State.IsViewingDLQ ? "bi-check-square-fill" : "bi-square")"></i> DLQ
+                        </button>
+                    }
                 </div>
             }
-            <div class="namespace-fqdn-below">
-                @NamespaceParam
-            </div>
         </div>
         <div class="explorer-header-right">
-            <div class="header-action-buttons">
-                @if (SelectionState.IsLoadingEntities)
+            <div class="namespace-summary-actions">
+                <button class="btn btn-sm btn-outline-secondary namespace-favorite-btn @(SelectionState.IsFavorite ? "favorited" : "")"
+                        @onclick="SelectionState.ToggleFavoriteAsync"
+                        title="@(SelectionState.IsFavorite ? "Remove namespace from favorites" : "Add namespace to favorites")">
+                    <i class="bi @(SelectionState.IsFavorite ? "bi-star-fill" : "bi-star")"></i> <span class="btn-label">@(SelectionState.IsFavorite ? "Favorited" : "Favorite")</span>
+                </button>
+                @if (SelectionState.IsConnectionStringMode)
                 {
-                    <div class="spinner-border spinner-border-sm text-muted" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
+                    var currentConn = NavState.GetNamespaceConnection(SelectionState.State.FullyQualifiedNamespace ?? NamespaceParam ?? "");
+                    if (currentConn != null)
+                    {
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => NavState.ShowAddConnectionStringModalDialog(currentConn))"
+                                title="Edit connection settings">
+                            <i class="bi bi-gear"></i> <span class="btn-label">Connection</span>
+                        </button>
+                    }
                 }
-                else if (!SelectionState.IsConnectionStringMode)
+                else
                 {
-                    <button class="namespace-action-btn refresh-btn" @onclick="() => SelectionState.RefreshEntitiesAsync()" title="Refresh queues and topics">
-                        <i class="bi bi-arrow-clockwise"></i>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => SelectionState.RefreshEntitiesAsync()"
+                            disabled="@SelectionState.IsLoadingEntities"
+                            title="Reload queues, topics and message counts@(SelectionState.EntitiesLoadedAt is { } at ? $" (counts as of {at:HH:mm:ss})" : "")">
+                        @if (SelectionState.IsLoadingEntities)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-arrow-clockwise"></i>
+                        }
+                        <span class="btn-label">Refresh</span>
                     </button>
-                }
-                @if (!SelectionState.IsConnectionStringMode)
-                {
-                    <button class="namespace-action-btn stats-btn" @onclick="() => DialogService.ShowStatsModal = true" title="Statistics">
-                        <i class="bi bi-bar-chart-line"></i>
+                    <button class="btn btn-sm btn-outline-secondary desktop-only" @onclick="() => DialogService.ShowStatsModal = true" title="Message flow and state over time">
+                        <i class="bi bi-bar-chart-line"></i> <span class="btn-label">Statistics</span>
                     </button>
                 }
             </div>
@@ -170,6 +162,7 @@
                                     IsPeeking="@PeekService.IsPeeking"
                                     PeekedMessagesCount="@MessageListState.PeekedMessages.Count"
                                     ArePeekOptionsModified="@MessageListState.ArePeekOptionsModified"
+                                    ActivePeekOptions="@MessageListState.LastPeekOptions"
                                     CurrentPurgeOperation="@PeekService.CurrentPurgeOperation"
                                     CurrentResubmitOperation="@PeekService.CurrentResubmitOperation"
                                     SelectedEntityRequiresSession="@SelectionState.SelectedEntityRequiresSession"
@@ -183,7 +176,8 @@
                                     OnResubmitAll="@PeekService.ResubmitAllMessages"
                                     OnPurge="@(() => PeekService.PurgeMessages())"
                                     OnManageFilters="@(() => DialogService.ShowManageRulesModal = true)"
-                                    OnStartLiveMonitor="@(() => DialogService.ShowMonitorModal = true)" />
+                                    OnWatch="@(() => DialogService.ShowMonitorModal = true)"
+                                    OnPeekNewest="@(() => PeekService.PeekWithOptionsAsync(new PeekOptions { PeekFromNewest = true }, append: false))" />
 
         </div>
         
@@ -268,14 +262,14 @@
                   NamespaceName="@SelectionState.NamespaceNameOnly"
                   EntityPath="@SelectionState.State.GetEntityPath()"
                   OnPeek="@(async (options) => await PeekService.PeekWithOptionsAsync(options, append: false))"
-                  OnBackgroundSearch="@SearchStateService.StartBackgroundSearchAsync"
-                  OnStartLiveMonitor="@(() => DialogService.ShowMonitorModal = true)" />
+                  OnBackgroundSearch="@SearchStateService.StartBackgroundSearchAsync" />
 
 <MessageMonitorModal IsVisible="@DialogService.ShowMonitorModal"
                      NamespaceName="@SelectionState.NamespaceNameOnly"
                      QueueName="@SelectionState.State.SelectedQueueName"
                      TopicName="@SelectionState.State.SelectedTopicName"
                      SubscriptionName="@SelectionState.State.SelectedSubscriptionName"
+                     IsDLQ="@SelectionState.State.IsViewingDLQ"
                      OnClose="@(() => DialogService.ShowMonitorModal = false)" />
 
 <ReceiveAndLockModal IsVisible="@DialogService.ShowReceiveAndLockModal"
@@ -378,13 +372,25 @@
     [SupplyParameterFromQuery(Name = "dlq")]
     public bool DlqParam { get; set; }
 
-    private ElementReference renameInputRef;
     private MessageList? _messageListRef;
 
     // Held in a field so Dispose can detach it. EntitySelectionState is registered scoped,
     // which in WebAssembly means it lives for the whole app, so an anonymous handler here
     // would survive every navigation away from the explorer and accumulate.
     private Action? _onEntitySelectionChanged;
+
+    private List<string> SelectedEntityCrumbs
+    {
+        get
+        {
+            var state = SelectionState.State;
+            if (state.SelectedQueueName != null) return [state.SelectedQueueName];
+            if (state.SelectedTopicName == null) return [];
+            return state.SelectedSubscriptionName != null
+                ? [state.SelectedTopicName, state.SelectedSubscriptionName]
+                : [state.SelectedTopicName];
+        }
+    }
 
     private string? GetColumnPreferenceKey()
     {
@@ -503,8 +509,8 @@
         PeekService.OnChange += StateHasChanged;
         SendService.OnChange += StateHasChanged;
         DialogService.OnChange += StateHasChanged;
-        MonitorService.OnChange += StateHasChanged;
         SearchStateService.OnChange += StateHasChanged;
+        NavState.OnChange += StateHasChanged; // the title shows the favorite's name, which can be renamed elsewhere
 
         _onEntitySelectionChanged = () =>
         {
@@ -513,41 +519,6 @@
                 _messageListRef.ClearSelection();
         };
         SelectionState.OnEntitySelectionChanged += _onEntitySelectionChanged;
-    }
-
-    private void StartRename()
-    {
-        DialogService.EditDisplayName = SelectionState.DisplayName;
-        DialogService.IsEditingDisplayName = true;
-        _ = FocusRenameInputAsync();
-    }
-
-    private async Task FocusRenameInputAsync()
-    {
-        await Task.Delay(10); // Wait for render
-        try { await renameInputRef.FocusAsync(); } catch { }
-    }
-
-    private void CancelRename()
-    {
-        DialogService.IsEditingDisplayName = false;
-        DialogService.EditDisplayName = "";
-    }
-
-    private async Task SaveDisplayNameAsync()
-    {
-        if (string.IsNullOrWhiteSpace(DialogService.EditDisplayName) || string.IsNullOrEmpty(SelectionState.State.FullyQualifiedNamespace)) return;
-        await NavState.RenameNamespaceAsync(SelectionState.State.FullyQualifiedNamespace, DialogService.EditDisplayName.Trim());
-        SelectionState.DisplayName = DialogService.EditDisplayName.Trim();
-        DialogService.IsEditingDisplayName = false;
-        DialogService.EditDisplayName = "";
-        NotificationService.NotifySuccess("Namespace renamed successfully.");
-    }
-
-    private async Task HandleRenameKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await SaveDisplayNameAsync();
-        else if (e.Key == "Escape") CancelRename();
     }
 
     private void ShowMessageDetail(ServiceBusMessage message)
@@ -603,8 +574,8 @@
         PeekService.OnChange -= StateHasChanged;
         SendService.OnChange -= StateHasChanged;
         DialogService.OnChange -= StateHasChanged;
-        MonitorService.OnChange -= StateHasChanged;
         SearchStateService.OnChange -= StateHasChanged;
+        NavState.OnChange -= StateHasChanged;
 
         if (_onEntitySelectionChanged != null)
         {

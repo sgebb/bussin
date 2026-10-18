@@ -28,8 +28,7 @@ public interface IServiceBusJsInteropService
     Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null);
     
     // Monitor operations (continuous non-destructive)
-    Task<IJSObjectReference> StartMonitoringQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef);
-    Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef);
+    Task<IJSObjectReference> StartMonitoringAsync(string namespaceName, string entityPath, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef);
     Task StopMonitoringAsync(IJSObjectReference monitorController);
     
     // Purge with progress (for future use if needed)

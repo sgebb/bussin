@@ -69,8 +69,7 @@ describe('ServiceBusAPI Bundle Verification', () => {
             'purgeSubscriptionDirect',
 
             // Monitor operations
-            'monitorQueue',
-            'monitorSubscription',
+            'monitorEntity',
 
             // Search operations
             'searchQueueMessages',

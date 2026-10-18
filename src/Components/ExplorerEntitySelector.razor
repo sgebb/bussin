@@ -83,15 +83,10 @@
                                 </span>
                             </span>
                             <div class="d-flex align-items-center gap-2">
-                                @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0 || queue.ScheduledMessageCount > 0)
+                                @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0)
                                 {
-                                    <span class="badge bg-secondary" title="Active (Scheduled) / Dead-lettered">
-                                        @queue.ActiveMessageCount
-                                        @if (queue.ScheduledMessageCount > 0)
-                                        {
-                                            <span class="text-info fw-bold">(@queue.ScheduledMessageCount)</span>
-                                        }
-                                        / <span class="text-dlq-orange fw-bold">@queue.DeadLetterMessageCount</span>
+                                    <span class="badge bg-secondary" title="@queue.ActiveMessageCount.ToString("N0") active / @queue.DeadLetterMessageCount.ToString("N0") dead-lettered">
+                                        @Compact(queue.ActiveMessageCount) / <span class="text-dlq-orange fw-bold">@Compact(queue.DeadLetterMessageCount)</span>
                                     </span>
                                 }
                                 @if (IsConnectionStringMode)
@@ -156,12 +151,6 @@
                                 </span>
                             </span>
                             <div class="d-flex align-items-center gap-2">
-                                @if (topic.ScheduledMessageCount > 0)
-                                {
-                                    <span class="badge bg-info" title="Scheduled messages">
-                                        <i class="bi bi-clock"></i> @topic.ScheduledMessageCount
-                                    </span>
-                                }
                                 @if (IsConnectionStringMode)
                                 {
                                     <button class="btn btn-link p-0 text-danger border-0 shadow-none entity-delete-btn" 
@@ -252,8 +241,8 @@
                                  <div class="d-flex align-items-center gap-2">
                                      @if (sub.ActiveMessageCount > 0 || sub.DeadLetterMessageCount > 0)
                                      {
-                                         <span class="badge bg-secondary" title="Active / Dead-lettered">
-                                             @sub.ActiveMessageCount / <span class="text-dlq-orange fw-bold">@sub.DeadLetterMessageCount</span>
+                                         <span class="badge bg-secondary" title="@sub.ActiveMessageCount.ToString("N0") active / @sub.DeadLetterMessageCount.ToString("N0") dead-lettered">
+                                             @Compact(sub.ActiveMessageCount) / <span class="text-dlq-orange fw-bold">@Compact(sub.DeadLetterMessageCount)</span>
                                          </span>
                                      }
                                      @if (IsConnectionStringMode)
@@ -297,6 +286,15 @@
     [Parameter] public EventCallback<string> OnDeleteQueue { get; set; }
     [Parameter] public EventCallback<string> OnDeleteTopic { get; set; }
     [Parameter] public EventCallback<(string Topic, string Subscription)> OnDeleteSubscription { get; set; }
+
+    // Bounded width (at most 4 characters) so a changing count can't squeeze the name much.
+    private static string Compact(long n) => n switch
+    {
+        < 1_000 => n.ToString(),
+        < 10_000 => $"{n / 1_000.0:0.#}k",
+        < 1_000_000 => $"{n / 1_000}k",
+        _ => $"{n / 1_000_000.0:0.#}M"
+    };
 
     private enum EntityTab { Queues, Topics, Subscriptions }
     private EntityTab _activeTab = EntityTab.Queues;

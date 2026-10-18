@@ -7,7 +7,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content" @onclick:stopPropagation="true">
                 <div class="modal-header">
-                    <h5 class="modal-title">@(NamespaceToEdit == null ? "Add Connection String Namespace" : "Edit Connection Namespace")</h5>
+                    <h5 class="modal-title">@(NamespaceToEdit == null ? "Add Namespace with a Connection String" : "Edit Connection Namespace")</h5>
                     <button type="button" class="btn-close" @onclick="OnClose"></button>
                 </div>
                 <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">

@@ -112,27 +112,15 @@
     <script src="_framework/blazor.webassembly.js"></script>
 
     <script>
-        // Helper functions for monitoring with DotNetObjectReference callbacks
-        window.startMonitoringQueue = async function (namespaceName, queueName, token, dotnetRef) {
-            return await ServiceBusAPI.monitorQueue(
+        // Adapts a MessageMonitorCallback DotNetObjectReference to monitorEntity's callbacks
+        window.startMonitoring = async function (namespaceName, entityPath, token, dotnetRef) {
+            return await ServiceBusAPI.monitorEntity(
                 namespaceName,
-                queueName,
+                entityPath,
                 token,
                 (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
                 (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error'),
-                dotnetRef
-            );
-        };
-
-        window.startMonitoringSubscription = async function (namespaceName, topicName, subscriptionName, token, dotnetRef) {
-            return await ServiceBusAPI.monitorSubscription(
-                namespaceName,
-                topicName,
-                subscriptionName,
-                token,
-                (msg) => dotnetRef.invokeMethodAsync('OnMessage', msg),
-                (err) => dotnetRef.invokeMethodAsync('OnError', err ? err.toString() : 'Unknown error'),
-                dotnetRef
+                () => dotnetRef.invokeMethodAsync('GetFreshToken')
             );
         };
 

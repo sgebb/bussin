@@ -14,9 +14,11 @@
                 <div class="d-flex align-items-center">
                     <div class="form-check me-3">
                         <input class="form-check-input" type="checkbox" id="selectAll" 
-                               @onchange="ToggleSelectAll" checked="@allSelected">
+                               @onchange="ToggleSelectAll" checked="@allSelected" title="Select all">
                         <label class="form-check-label fw-bold" for="selectAll">
-                            Select All (@SelectedMessages.Count)
+                            @(SelectedMessages.Count == 0
+                                ? $"{DisplayedMessages.Count} messages"
+                                : $"{SelectedMessages.Count} of {DisplayedMessages.Count} selected")
                         </label>
                     </div>
                 </div>
@@ -55,13 +57,13 @@
                     
                     @if (SelectedMessages.Any())
                     {
-                        <button class="btn btn-sm btn-outline-secondary me-2" @onclick="DownloadSelected" title="Download selected messages as JSON">
+                        <button class="btn btn-sm btn-outline-secondary me-2 desktop-only" @onclick="DownloadSelected" title="Download selected messages as JSON">
                             <i class="bi bi-download"></i> Download Selected (@SelectedMessages.Count)
                         </button>
                     }
                     else
                     {
-                        <div class="dropdown me-2" style="position: relative;">
+                        <div class="dropdown me-2 desktop-only" style="position: relative;">
                             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" @onclick="ToggleDownloadDropdown" type="button" title="Download options">
                                 <i class="bi bi-download"></i> Download
                             </button>
@@ -80,7 +82,7 @@
                         <i class="bi bi-trash"></i> Clear
                     </button>
 
-                    <div class="dropdown ms-2" style="position: relative;">
+                    <div class="dropdown ms-2 desktop-only" style="position: relative;">
                         <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleColumnDropdown" type="button" title="Configure visible properties">
                             <i class="bi bi-tags"></i> Properties
                         </button>

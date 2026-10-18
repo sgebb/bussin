@@ -1,0 +1,313 @@
+@using Bussin.Models
+@using Bussin.Services
+@inject NavigationStateService NavState
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="modal show d-block" tabindex="-1" data-theme="@(IsDarkMode ? "dark" : "light")"
+     style="position: fixed; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 9999;"
+     @onclick="NavState.HideOrganizeFavoritesModal">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-star me-2"></i>Organize favorites</h5>
+                <button type="button" class="btn-close" @onclick="NavState.HideOrganizeFavoritesModal"></button>
+            </div>
+            <div class="modal-body organize-favorites"
+                 @ondragover="() => dragOverFolderId = null" @ondragover:preventDefault="true"
+                 @ondrop="OnRootDrop" @ondrop:preventDefault="true">
+                <p class="text-muted small mb-3">Saved in this browser only.</p>
+                @* Folders and ordering rely on drag and drop, which touch screens don't support, so phones only get rename/remove *@
+                @if (_creatingFolder)
+                {
+                    <div class="d-flex gap-2 mb-3 desktop-only">
+                        <input @ref="_newFolderInput" type="text" class="form-control form-control-sm" placeholder="Folder name"
+                               @bind="_newFolderName" @bind:event="oninput" @onkeydown="OnNewFolderKeyDown" />
+                        <button class="btn btn-sm btn-primary" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(_newFolderName)">Create</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="() => _creatingFolder = false">Cancel</button>
+                    </div>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-outline-primary mb-3 desktop-only" @onclick="StartCreateFolder">
+                        <i class="bi bi-folder-plus"></i> New folder
+                    </button>
+                }
+
+                @foreach (var ns in NavState.GetFolder(DefaultFolderId)?.Namespaces.ToList() ?? [])
+                {
+                    @NamespaceRow((ns, 0))
+                }
+                @foreach (var folder in RootFolders)
+                {
+                    @FolderRows((folder, 0))
+                }
+                @if (!NavState.HasFavorites)
+                {
+                    <p class="text-muted small mb-0">No favorites yet. Star a namespace to add it here.</p>
+                }
+            </div>
+            <div class="modal-footer justify-content-between">
+                <small class="text-muted desktop-only">Drag to reorder or move into a folder.</small>
+                <small class="text-muted mobile-only">Folders and ordering can be managed on desktop.</small>
+                <button class="btn btn-primary" @onclick="NavState.HideOrganizeFavoritesModal">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsDarkMode { get; set; }
+
+    private bool _creatingFolder;
+    private string _newFolderName = "";
+    private ElementReference _newFolderInput;
+
+    // One inline editor for both namespace and folder names; the id is a namespace FQDN or a folder id
+    private string? _renamingId;
+    private string _renameValue = "";
+    private ElementReference _renameInput;
+
+    // Row awaiting an inline "are you sure" (namespace FQDN or folder id)
+    private string? _confirmingId;
+
+    // Set when an inline editor opens; the input only exists after the next render
+    private bool _focusEditor;
+
+    private string? draggedNamespace;
+    private string? draggedFolderId;
+    private string? dragOverFolderId;
+
+    private string DefaultFolderId => NavState.GetDefaultFolderIdValue();
+    private List<Folder> RootFolders => NavState.GetRootFolders().Where(f => f.Id != DefaultFolderId).ToList();
+
+    protected override void OnInitialized() => NavState.OnChange += StateHasChanged;
+    public void Dispose() => NavState.OnChange -= StateHasChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusEditor)
+        {
+            _focusEditor = false;
+            try { await (_renamingId != null ? _renameInput : _newFolderInput).FocusAsync(); } catch { }
+        }
+    }
+
+    // ---- Folders ----
+
+    private void StartCreateFolder()
+    {
+        _creatingFolder = true;
+        _newFolderName = "";
+        _renamingId = null;
+        _focusEditor = true;
+    }
+
+    private async Task CreateFolder()
+    {
+        if (string.IsNullOrWhiteSpace(_newFolderName)) return;
+        await NavState.CreateFolderAsync(_newFolderName.Trim());
+        _creatingFolder = false;
+        _newFolderName = "";
+    }
+
+    private async Task OnNewFolderKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CreateFolder();
+        else if (e.Key == "Escape") _creatingFolder = false;
+    }
+
+    // ---- Rename ----
+
+    private void StartRename(string id, string currentName)
+    {
+        _renamingId = id;
+        _renameValue = currentName;
+        _confirmingId = null;
+        _focusEditor = true;
+    }
+
+    private async Task CommitRename()
+    {
+        var id = _renamingId;
+        var name = _renameValue.Trim();
+        _renamingId = null;
+        if (id == null || name.Length == 0) return;
+
+        if (NavState.GetFolder(id) != null)
+            await NavState.RenameFolderAsync(id, name);
+        else
+            await NavState.RenameNamespaceAsync(id, name);
+    }
+
+    private async Task OnRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CommitRename();
+        else if (e.Key == "Escape") _renamingId = null;
+    }
+
+    // ---- Remove ----
+
+    private async Task RemoveNamespace(NamespaceConnection ns)
+    {
+        _confirmingId = null;
+        // A connection-string namespace only exists in favorites, so leave its explorer page if it's open
+        var leavePage = !string.IsNullOrEmpty(ns.ConnectionString)
+            && Navigation.Uri.Contains($"namespace={Uri.EscapeDataString(ns.FullyQualifiedNamespace)}");
+        await NavState.RemoveFromFavoritesAsync(ns.FullyQualifiedNamespace);
+        if (leavePage) Navigation.NavigateTo("/");
+    }
+
+    private async Task DeleteFolder(Folder folder)
+    {
+        _confirmingId = null;
+        await NavState.DeleteFolderAsync(folder.Id);
+    }
+
+    // ---- Drag and drop ----
+
+    private void OnDragEnd()
+    {
+        draggedNamespace = null;
+        draggedFolderId = null;
+        dragOverFolderId = null;
+    }
+
+    private async Task OnDropOnFolder(string targetFolderId)
+    {
+        if (draggedNamespace != null)
+        {
+            await NavState.MoveNamespaceToFolderAsync(draggedNamespace, targetFolderId);
+        }
+        else if (draggedFolderId != null && draggedFolderId != targetFolderId)
+        {
+            var dragged = NavState.GetFolder(draggedFolderId);
+            var target = NavState.GetFolder(targetFolderId);
+            if (dragged != null && target != null)
+            {
+                // Siblings: a drop means reorder. Otherwise it means move into the target.
+                if (dragged.ParentId == target.ParentId)
+                {
+                    var index = NavState.Folders.ToList().FindIndex(f => f.Id == targetFolderId);
+                    if (index > -1) await NavState.ReorderFolderAsync(draggedFolderId, index);
+                }
+                else
+                {
+                    await NavState.MoveFolderAsync(draggedFolderId, targetFolderId);
+                }
+            }
+        }
+        OnDragEnd();
+    }
+
+    private async Task OnDropOnNamespace(string targetFqn)
+    {
+        if (draggedNamespace != null && draggedNamespace != targetFqn)
+        {
+            var folderId = NavState.GetCurrentFolderId(targetFqn);
+            var folder = folderId != null ? NavState.GetFolder(folderId) : null;
+            var target = NavState.GetNamespaceConnection(targetFqn);
+            if (folder != null && target != null)
+                await NavState.ReorderNamespaceAsync(draggedNamespace, folder.Id, folder.Namespaces.IndexOf(target));
+        }
+        OnDragEnd();
+    }
+
+    private async Task OnRootDrop()
+    {
+        if (draggedNamespace != null)
+            await NavState.MoveNamespaceToFolderAsync(draggedNamespace, DefaultFolderId);
+        else if (draggedFolderId != null)
+            await NavState.MoveFolderAsync(draggedFolderId, null);
+        OnDragEnd();
+    }
+
+    // ---- Markup ----
+
+    private RenderFragment RenameEditor => @<input @ref="_renameInput" type="text" class="form-control form-control-sm"
+                                                   @bind="_renameValue" @bind:event="oninput"
+                                                   @onkeydown="OnRenameKeyDown" @onblur="CommitRename" />;
+
+    private RenderFragment<(NamespaceConnection Ns, int Depth)> NamespaceRow => item => __builder =>
+    {
+        var ns = item.Ns;
+        var fqn = ns.FullyQualifiedNamespace;
+        <div class="organize-row" style="margin-left: @(item.Depth * 1.5)rem;" draggable="true"
+             @ondragstart="() => { draggedNamespace = fqn; draggedFolderId = null; }" @ondragend="OnDragEnd"
+             @ondrop="() => OnDropOnNamespace(fqn)"
+             @ondragover:preventDefault="true" @ondragover:stopPropagation="true"
+             @ondrop:preventDefault="true" @ondrop:stopPropagation="true">
+            <i class="bi bi-grip-vertical organize-grip desktop-only"></i>
+            <i class="bi bi-hdd-network text-muted"></i>
+            <div class="organize-name">
+                @if (_renamingId == fqn)
+                {
+                    @RenameEditor
+                }
+                else
+                {
+                    <span class="fw-semibold text-truncate" title="@ns.DisplayName">@ns.DisplayName</span>
+                }
+                <small class="text-muted text-truncate" title="@fqn">@fqn</small>
+            </div>
+            @if (_confirmingId == fqn)
+            {
+                <span class="small text-danger">@(string.IsNullOrEmpty(ns.ConnectionString) ? "Remove from favorites?" : "Remove? This deletes the saved connection string.")</span>
+                <button class="btn btn-sm btn-danger" @onclick="() => RemoveNamespace(ns)">Remove</button>
+                <button class="btn btn-sm btn-secondary" @onclick="() => _confirmingId = null">Cancel</button>
+            }
+            else
+            {
+                <button class="organize-btn" title="Rename" @onclick="() => StartRename(fqn, ns.DisplayName)"><i class="bi bi-pencil"></i></button>
+                <button class="organize-btn danger" title="Remove from favorites" @onclick="() => _confirmingId = fqn"><i class="bi bi-trash"></i></button>
+            }
+        </div>
+    };
+
+    private RenderFragment<(Folder Folder, int Depth)> FolderRows => item => __builder =>
+    {
+        var folder = item.Folder;
+        var folderId = folder.Id;
+        var childFolders = NavState.GetChildFolders(folderId).ToList();
+        <div class="organize-row folder @(dragOverFolderId == folderId ? "drag-over" : "")" style="margin-left: @(item.Depth * 1.5)rem;" draggable="true"
+             @ondragstart="() => { draggedFolderId = folderId; draggedNamespace = null; }" @ondragend="OnDragEnd"
+             @ondragover="() => { if (draggedFolderId != folderId) dragOverFolderId = folderId; }"
+             @ondragleave="() => dragOverFolderId = null"
+             @ondrop="() => OnDropOnFolder(folderId)"
+             @ondragover:preventDefault="true" @ondragover:stopPropagation="true"
+             @ondrop:preventDefault="true" @ondrop:stopPropagation="true">
+            <i class="bi bi-grip-vertical organize-grip desktop-only"></i>
+            <i class="bi bi-folder2"></i>
+            <div class="organize-name">
+                @if (_renamingId == folderId)
+                {
+                    @RenameEditor
+                }
+                else
+                {
+                    <span class="fw-semibold text-truncate" title="@folder.Name">@folder.Name</span>
+                }
+                <small class="text-muted">@folder.Namespaces.Count favorite(s)@(childFolders.Count > 0 ? $", {childFolders.Count} folder(s)" : "")</small>
+            </div>
+            @if (_confirmingId == folderId)
+            {
+                <span class="small text-danger">Delete folder? Its favorites move to the top level.</span>
+                <button class="btn btn-sm btn-danger" @onclick="() => DeleteFolder(folder)">Delete</button>
+                <button class="btn btn-sm btn-secondary" @onclick="() => _confirmingId = null">Cancel</button>
+            }
+            else
+            {
+                <button class="organize-btn desktop-only" title="Rename folder" @onclick="() => StartRename(folderId, folder.Name)"><i class="bi bi-pencil"></i></button>
+                <button class="organize-btn danger desktop-only" title="Delete folder" @onclick="() => _confirmingId = folderId"><i class="bi bi-trash"></i></button>
+            }
+        </div>
+        @foreach (var ns in folder.Namespaces.ToList())
+        {
+            @NamespaceRow((ns, item.Depth + 1))
+        }
+        @foreach (var child in childFolders)
+        {
+            @FolderRows((child, item.Depth + 1))
+        }
+    };
+}

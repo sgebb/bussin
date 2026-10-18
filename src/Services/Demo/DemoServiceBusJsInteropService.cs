@@ -154,11 +154,11 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
     public async Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null)
         => await InvokeSimulatorAsync<BatchOperationResult>("deadLetter", (object)lockTokens, options);
 
-    public async Task<IJSObjectReference> StartMonitoringQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
-        => await InvokeSimulatorAsync<IJSObjectReference>("monitorQueue", namespaceName, queueName, token, callbackRef);
-
-    public async Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
-        => await InvokeSimulatorAsync<IJSObjectReference>("monitorSubscription", namespaceName, topicName, subscriptionName, token, callbackRef);
+    public async Task<IJSObjectReference> StartMonitoringAsync(string namespaceName, string entityPath, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
+    {
+        await EnsureSimulatorAsync();
+        return await JSRuntime.InvokeAsync<IJSObjectReference>("startMonitoring", namespaceName, entityPath, token, callbackRef);
+    }
 
     public async Task StopMonitoringAsync(IJSObjectReference monitorController)
     {

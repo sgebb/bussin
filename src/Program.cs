@@ -76,7 +76,6 @@ builder.Services.AddScoped<EntitySelectionState>();
 builder.Services.AddScoped<MessageListState>();
 builder.Services.AddScoped<PeekService>();
 builder.Services.AddScoped<SendService>();
-builder.Services.AddScoped<MonitorService>();
 builder.Services.AddScoped<SearchStateService>();
 builder.Services.AddScoped<ExplorerDialogService>();
 

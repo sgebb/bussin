@@ -41,10 +41,7 @@ import {
     searchSubscriptionMessages
 } from './src/searchOperations.js';
 
-import {
-    monitorQueue,
-    monitorSubscription
-} from './src/monitorOperations.js';
+import { monitorEntity } from './src/monitorOperations.js';
 
 import {
     enableSimulator,
@@ -99,8 +96,7 @@ if (typeof window !== 'undefined') {
         purgeSubscriptionDirect,
 
         // Monitor operations
-        monitorQueue,
-        monitorSubscription,
+        monitorEntity,
 
         // Search operations
         searchQueueMessages,
@@ -157,8 +153,7 @@ export {
     purgeSubscriptionDirect,
 
     // Monitor operations
-    monitorQueue,
-    monitorSubscription,
+    monitorEntity,
 
     // Search operations
     searchQueueMessages,

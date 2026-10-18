@@ -173,48 +173,8 @@ public sealed class ServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceB
 
     // Monitor operations (continuous non-destructive)
     
-    public async Task<IJSObjectReference> StartMonitoringQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
-    {
-        try
-        {
-            // Call the JavaScript helper function directly
-            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "startMonitoringQueue",
-                namespaceName, 
-                queueName, 
-                token, 
-                callbackRef);
-            
-            return controller;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error starting queue monitor: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<IJSObjectReference> StartMonitoringSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
-    {
-        try
-        {
-            // Call the JavaScript helper function directly
-            var controller = await jsRuntime.InvokeAsync<IJSObjectReference>(
-                "startMonitoringSubscription",
-                namespaceName, 
-                topicName, 
-                subscriptionName, 
-                token, 
-                callbackRef);
-            
-            return controller;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error starting subscription monitor: {ex.Message}");
-            throw;
-        }
-    }
+    public async Task<IJSObjectReference> StartMonitoringAsync(string namespaceName, string entityPath, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
+        => await jsRuntime.InvokeAsync<IJSObjectReference>("startMonitoring", namespaceName, entityPath, token, callbackRef);
 
     public async Task StopMonitoringAsync(IJSObjectReference monitorController)
     {

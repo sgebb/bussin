@@ -22,17 +22,10 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         NotifyStateChanged();
     }
 
-    // Delete folder modal state
-    private bool _showDeleteFolderModal = false;
-    private string _folderIdToDelete = "";
-    private string _folderNameToDelete = "";
-    private int _folderNamespaceCount = 0;
-
     // Support modal state
     private bool _showSupportModal = false;
 
     public event Action? OnChange;
-    public event Action? OnDeleteModalChange;
     public event Action? OnSupportModalChange;
 
     public IReadOnlyList<Folder> Folders => _preferences?.Folders?
@@ -41,11 +34,23 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
 
     public bool IsInitialized => _isInitialized;
 
-    // Delete folder modal properties
-    public bool ShowDeleteFolderModal => _showDeleteFolderModal;
-    public string FolderIdToDelete => _folderIdToDelete;
-    public string FolderNameToDelete => _folderNameToDelete;
-    public int FolderNamespaceCount => _folderNamespaceCount;
+    /// <summary>True when the current tenant has any favorite namespace or a folder of its own.</summary>
+    public bool HasFavorites => Folders.Any(f => f.Id != GetDefaultFolderId() || f.Namespaces.Count > 0);
+
+    // Organize favorites modal
+    public bool ShowOrganizeFavoritesModal { get; private set; }
+
+    public void ShowOrganizeFavoritesModalDialog()
+    {
+        ShowOrganizeFavoritesModal = true;
+        NotifyStateChanged();
+    }
+
+    public void HideOrganizeFavoritesModal()
+    {
+        ShowOrganizeFavoritesModal = false;
+        NotifyStateChanged();
+    }
 
     // Support modal properties
     public bool ShowSupportModal => _showSupportModal;
@@ -207,6 +212,12 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
             defaultFolder.Namespaces.Add(ns);
         }
 
+        // Subfolders move up a level instead of being orphaned under a parent that no longer exists
+        foreach (var child in _preferences.Folders.Where(f => f.ParentId == folderId))
+        {
+            child.ParentId = folderToDelete.ParentId;
+        }
+
         _preferences.Folders.Remove(folderToDelete);
         
         await preferencesService.SavePreferencesAsync(_preferences);
@@ -355,51 +366,7 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         return false;
     }
 
-    public int GetFolderDepth(string folderId)
-    {
-        if (!_isInitialized || _preferences?.Folders == null) return 0;
-        
-        int depth = 0;
-        var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
-        while (folder?.ParentId != null)
-        {
-            depth++;
-            folder = _preferences.Folders.FirstOrDefault(f => f.Id == folder.ParentId);
-        }
-        return depth;
-    }
-
     private void NotifyStateChanged() => OnChange?.Invoke();
-
-    public void ShowDeleteFolderConfirmation(string folderId, string folderName)
-    {
-        var folder = _preferences.Folders.FirstOrDefault(f => f.Id == folderId);
-        if (folder == null) return;
-
-        _folderIdToDelete = folderId;
-        _folderNameToDelete = folderName;
-        _folderNamespaceCount = folder.Namespaces.Count;
-        _showDeleteFolderModal = true;
-        OnDeleteModalChange?.Invoke();
-    }
-
-    public void HideDeleteFolderModal()
-    {
-        _showDeleteFolderModal = false;
-        _folderIdToDelete = "";
-        _folderNameToDelete = "";
-        _folderNamespaceCount = 0;
-        OnDeleteModalChange?.Invoke();
-    }
-
-    public async Task ConfirmDeleteFolderAsync()
-    {
-        if (!string.IsNullOrEmpty(_folderIdToDelete))
-        {
-            await DeleteFolderAsync(_folderIdToDelete);
-        }
-        HideDeleteFolderModal();
-    }
 
     public void ShowSupportModalDialog()
     {

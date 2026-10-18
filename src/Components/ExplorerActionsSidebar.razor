@@ -1,6 +1,7 @@
 <div class="explorer-actions-sidebar">
     <!-- Send + DLQ Toggle Row -->
-    <div class="send-dlq-row">
+    @* Hidden on phones: no Send there, and the DLQ toggle sits in the explorer header instead *@
+    <div class="send-dlq-row desktop-only">
         <button class="btn btn-action btn-primary send-btn @(!CanSend ? "disabled-grey" : "")"
                 @onclick="OnShowSendMessage"
                 disabled="@(!CanSend)"
@@ -28,20 +29,47 @@
     <!-- Read Actions -->
     <div class="action-btn-group">
         <div class="action-btn-group-title">Read</div>
-        <div class="peek-btn-combined @(!HasQueueOrSubscriptionSelected || IsPeeking ? "disabled" : "")">
-            <button class="peek-btn-main"
-                    @onclick="@(PeekedMessagesCount > 0 ? OnPeekNext : OnPeek)"
-                    disabled="@(!HasQueueOrSubscriptionSelected || IsPeeking)">
-                <i class="bi bi-search"></i> @(PeekedMessagesCount > 0 ? "Peek More" : "Peek")
-            </button>
-            <button class="peek-btn-options @(ArePeekOptionsModified ? "text-warning" : "")"
-                    @onclick="OnShowPeekOptions"
-                    @onclick:stopPropagation="true"
-                    disabled="@(!HasQueueOrSubscriptionSelected)"
-                    title="@(ArePeekOptionsModified ? "Advanced Peek (Active)" : "Advanced Peek - includes filters and live monitor")">
-                <i class="bi bi-gear"></i>
-            </button>
+        <div class="peek-split">
+            <div class="peek-btn-combined @(!HasQueueOrSubscriptionSelected || IsPeeking ? "disabled" : "")">
+                <button class="peek-btn-main"
+                        @onclick="@(PeekedMessagesCount > 0 ? OnPeekNext : OnPeek)"
+                        disabled="@(!HasQueueOrSubscriptionSelected || IsPeeking)">
+                    <i class="bi bi-search"></i> @(PeekedMessagesCount > 0 ? "Peek More" : "Peek")
+                </button>
+                <button class="peek-btn-options desktop-only @(ArePeekOptionsModified ? "text-warning" : "")"
+                        @onclick="() => _peekMenuOpen = !_peekMenuOpen"
+                        @onclick:stopPropagation="true"
+                        disabled="@(!HasQueueOrSubscriptionSelected)"
+                        title="@(ArePeekOptionsModified ? "More ways to peek (custom options active)" : "More ways to peek")">
+                    <i class="bi bi-caret-down-fill"></i>
+                </button>
+            </div>
+            @if (_peekMenuOpen && HasQueueOrSubscriptionSelected)
+            {
+                <div class="peek-menu-backdrop" @onclick="() => _peekMenuOpen = false"></div>
+                <div class="peek-menu" role="menu">
+                    <button class="peek-menu-item" role="menuitem" @onclick="() => RunMenu(OnPeekNewest)">
+                        <i class="bi bi-sort-numeric-down-alt"></i>
+                        <span><strong>Newest first</strong><small>Peek the latest 50 messages</small></span>
+                    </button>
+                    <button class="peek-menu-item" role="menuitem" @onclick="() => RunMenu(OnWatch)">
+                        <i class="bi bi-broadcast"></i>
+                        <span><strong>Watch new messages</strong><small>Show messages as they arrive (M)</small></span>
+                    </button>
+                    <div class="peek-menu-divider"></div>
+                    <button class="peek-menu-item" role="menuitem" @onclick="() => RunMenu(OnShowPeekOptions)">
+                        <i class="bi bi-sliders"></i>
+                        <span><strong>Advanced peek…</strong><small>Count, start position, filters</small></span>
+                    </button>
+                </div>
+            }
         </div>
+        @if (ArePeekOptionsModified && ActivePeekOptions != null)
+        {
+            <div class="peek-active-options" title="Peek More continues with these options. Clear the list and press Peek to go back to defaults.">
+                <i class="bi bi-sliders"></i> @DescribeOptions(ActivePeekOptions)
+            </div>
+        }
     </div>
 
     <!-- Modify Actions -->
@@ -64,7 +92,7 @@
     @if (IsSubscriptionSelected)
     {
         <!-- Filters Actions -->
-        <div class="action-btn-group">
+        <div class="action-btn-group desktop-only">
             <div class="action-btn-group-title">Filters</div>
             <button class="btn btn-action btn-warning w-100"
                     @onclick="OnManageFilters"
@@ -100,5 +128,26 @@
     [Parameter] public EventCallback OnResubmitAll { get; set; }
     [Parameter] public EventCallback OnPurge { get; set; }
     [Parameter] public EventCallback OnManageFilters { get; set; }
-    [Parameter] public EventCallback OnStartLiveMonitor { get; set; }
+    [Parameter] public EventCallback OnWatch { get; set; }
+    [Parameter] public EventCallback OnPeekNewest { get; set; }
+
+    [Parameter] public PeekOptions? ActivePeekOptions { get; set; }
+
+    private bool _peekMenuOpen;
+
+    private static string DescribeOptions(PeekOptions o)
+    {
+        var parts = new List<string>();
+        if (o.PeekFromNewest) parts.Add("Newest first");
+        else if (o.FromSequenceNumber > 0) parts.Add($"From #{o.FromSequenceNumber}");
+        if (o.HasActiveFilter) parts.Add("Filtered");
+        parts.Add($"{o.MaxCount} per peek");
+        return string.Join(" · ", parts);
+    }
+
+    private async Task RunMenu(EventCallback action)
+    {
+        _peekMenuOpen = false;
+        await action.InvokeAsync();
+    }
 }
