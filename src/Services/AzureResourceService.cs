@@ -44,26 +44,22 @@ public sealed class AzureResourceService : IAzureResourceService
 
         // Fetch a new snapshot even after a cache hit so the in-app refresh and
         // namespace switching paths observe broker changes immediately.
+        // The cache is replaced with the fresh items seen so far before each yield,
+        // so a load that is abandoned midway (navigation, cancellation, error)
+        // still leaves what it found for the next caller.
         var freshItems = new List<T>();
-        
+
         await foreach (var item in fetchFresh(cancellationToken))
         {
-            if (cancellationToken.IsCancellationRequested) 
-            {
-                // Update cache with partial fresh results if cancelled
-                if (freshItems.Count > 0)
-                {
-                    updateCache(freshItems);
-                }
-                yield break;
-            }
-            
+            if (cancellationToken.IsCancellationRequested) yield break;
+
             freshItems.Add(item);
+            updateCache(freshItems);
             yield return item;
         }
 
-        // Update cache with complete fresh list (replaces old cache)
-        updateCache(freshItems);
+        // A completed fetch that found nothing still replaces the old snapshot.
+        if (freshItems.Count == 0) updateCache(freshItems);
     }
 
     public async IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(
