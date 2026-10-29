@@ -74,6 +74,11 @@
     }
     </script>
 
+    <script>
+        // Seasonal background skin (see css/app.css): Pride in June, Halloween in October, Christmas in December.
+        document.documentElement.dataset.season = { 5: 'pride', 9: 'halloween', 11: 'christmas' }[new Date().getMonth()] ?? '';
+    </script>
+
     <!-- GoatCounter analytics (cookie-free) -->
     <script>
         // no_onload: the Blazor app reports page views itself (see js/analytics.js),
@@ -89,9 +94,9 @@
         <div class="d-flex justify-content-center align-items-center" style="height: 100vh;">
             <div class="text-center">
                 <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                    <span class="visually-hidden">Loading...</span>
+                    <span class="visually-hidden">Loadin...</span>
                 </div>
-                <p class="mt-3">Loading bussin...</p>
+                <p class="mt-3">Loadin bussin...</p>
             </div>
         </div>
     </div>

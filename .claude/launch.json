@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bussin",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/Bussin.csproj", "--launch-profile", "Bussin"],
+      "port": 63080
+    }
+  ]
+}

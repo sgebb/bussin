@@ -6,7 +6,6 @@
 @inject IPreferencesService PreferencesService
 @inject NavigationStateService NavState
 @inject AuthenticationStateProvider AuthStateProvider
-@inject INotificationService NotificationService
 @inject BackgroundSearchService BackgroundSearch
 @inject NavigationManager Navigation
 @inject ExplorerDialogService DialogService
@@ -27,7 +26,7 @@
         {
             <div class="d-flex justify-content-center align-items-center" style="height: 100vh;">
                 <div class="spinner-border" role="status">
-                    <span class="visually-hidden">Loading...</span>
+                    <span class="visually-hidden">Loadin...</span>
                 </div>
             </div>
         }
@@ -44,7 +43,7 @@
                 {
                     <div class="d-flex justify-content-center align-items-center" style="height: 100vh;">
                         <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">Loadin...</span>
                         </div>
                     </div>
                 }
@@ -52,7 +51,7 @@
             <Authorizing>
                 <div class="d-flex justify-content-center align-items-center" style="height: 100vh;">
                     <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Authenticating...</span>
+                        <span class="visually-hidden">Authenticatin...</span>
                     </div>
                 </div>
             </Authorizing>
@@ -132,7 +131,6 @@
     {
         await NavState.AddNamespaceConnectionAsync(ns);
         NavState.HideAddConnectionStringModal();
-        NotificationService.NotifySuccess("Manual connection saved successfully.");
     }
 
     private void HandleViewSearchResults(SearchOperation operation)

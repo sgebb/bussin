@@ -97,127 +97,117 @@
 
                         <!-- Broker Properties Accordion -->
                         <div class="accordion mb-3" id="sendMessageAccordion">
-                            <div class="accordion-item">
-                                <h2 class="accordion-header">
-                                    <button class="accordion-button @(showBrokerProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showBrokerProperties = !showBrokerProperties">
-                                        <small>Broker Properties</small>
-                                    </button>
-                                </h2>
-                                @if (showBrokerProperties)
-                                {
-                                    <div class="accordion-body py-2">
-                                        <div class="row g-2">
-                                            @if (RequiresSession)
-                                            {
-                                                <div class="col-md-6">
-                                                    <label class="form-label small mb-1">Session ID <span class="text-danger">*</span></label>
-                                                    <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Required for session-enabled entities" />
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="col-md-6">
-                                                    <label class="form-label small mb-1">Session ID</label>
-                                                    <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Optional" />
-                                                </div>
-                                            }
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">Message ID</label>
-                                                <input type="text" class="form-control form-control-sm" @bind="messageId" placeholder="Auto-generated if empty" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">Correlation ID</label>
-                                                <input type="text" class="form-control form-control-sm" @bind="correlationId" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">Subject / Label</label>
-                                                <input type="text" class="form-control form-control-sm" @bind="subject" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">Reply To</label>
-                                                <input type="text" class="form-control form-control-sm" @bind="replyTo" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">To</label>
-                                                <input type="text" class="form-control form-control-sm" @bind="to" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">Time to Live (seconds)</label>
-                                                <input type="number" class="form-control form-control-sm" @bind="ttlSeconds" min="0" placeholder="Default: entity setting" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">Content Type</label>
-                                                <input type="text" class="form-control form-control-sm" @bind="contentType" placeholder="Auto-detected" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1">Scheduled Enqueue (UTC)</label>
-                                                <input type="datetime-local" 
-                                                       class="form-control form-control-sm datetime-picker-enhanced" 
-                                                       @bind="scheduledEnqueueTime" 
-                                                       min="@GetMinDateTime()" />
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label small mb-1 d-flex align-items-center gap-1">
-                                                    Relative Schedule
-                                                    <span class="schedule-help-icon" title="Schedule relative to now. Examples: 5m (5 minutes), 2h (2 hours), 1d (1 day), 30s (30 seconds). Overrides the datetime field above if specified.">
-                                                        <i class="bi bi-question-circle"></i>
-                                                    </span>
-                                                </label>
-                                                <input type="text" class="form-control form-control-sm" @bind="relativeScheduleTime" @bind:event="oninput" placeholder="e.g., 5m, 2h, 1d" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-
-                            <div class="accordion-item">
-                                <h2 class="accordion-header">
-                                    <button class="accordion-button @(showCustomProperties ? "" : "collapsed") py-2" type="button" @onclick="() => showCustomProperties = !showCustomProperties">
-                                        <small>Custom Properties (@customProperties.Count)</small>
-                                    </button>
-                                </h2>
-                                @if (showCustomProperties)
-                                {
-                                    <div class="accordion-body py-2">
-                                        @foreach (var prop in customProperties)
+                            <details class="accordion-item" open="@RequiresSession">
+                                <summary class="accordion-button py-2">
+                                    <small>Broker Properties</small>
+                                </summary>
+                                <div class="accordion-body py-2">
+                                    <div class="row g-2">
+                                        @if (RequiresSession)
                                         {
-                                            <div class="row g-2 mb-2 align-items-end">
-                                                <div class="col-4">
-                                                    <input type="text" class="form-control form-control-sm" @bind="prop.Key" placeholder="Key" />
-                                                </div>
-                                                <div class="col-3">
-                                                    <select class="form-select form-select-sm" @bind="prop.Type">
-                                                        <option value="string">String</option>
-                                                        <option value="number">Number</option>
-                                                        <option value="boolean">Boolean</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-4">
-                                                    @if (prop.Type == "boolean")
-                                                    {
-                                                        <select class="form-select form-select-sm" @bind="prop.Value">
-                                                            <option value="true">true</option>
-                                                            <option value="false">false</option>
-                                                        </select>
-                                                    }
-                                                    else
-                                                    {
-                                                        <input type="@(prop.Type == "number" ? "number" : "text")" class="form-control form-control-sm" @bind="prop.Value" placeholder="Value" />
-                                                    }
-                                                </div>
-                                                <div class="col-1">
-                                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCustomProperty(prop)">
-                                                        <i class="bi bi-x"></i>
-                                                    </button>
-                                                </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Session ID <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Required for session-enabled entities" />
                                             </div>
                                         }
-                                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddCustomProperty">
-                                            <i class="bi bi-plus"></i> Add Property
-                                        </button>
+                                        else
+                                        {
+                                            <div class="col-md-6">
+                                                <label class="form-label small mb-1">Session ID</label>
+                                                <input type="text" class="form-control form-control-sm" @bind="sessionId" @bind:event="oninput" placeholder="Optional" />
+                                            </div>
+                                        }
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Message ID</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="messageId" placeholder="Auto-generated if empty" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Correlation ID</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="correlationId" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Subject / Label</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="subject" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Reply To</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="replyTo" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">To</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="to" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Time to Live (seconds)</label>
+                                            <input type="number" class="form-control form-control-sm" @bind="ttlSeconds" min="0" placeholder="Default: entity setting" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Content Type</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="contentType" placeholder="Auto-detected" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Scheduled Enqueue (UTC)</label>
+                                            <input type="datetime-local" 
+                                                   class="form-control form-control-sm datetime-picker-enhanced" 
+                                                   @bind="scheduledEnqueueTime" 
+                                                   min="@GetMinDateTime()" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1 d-flex align-items-center gap-1">
+                                                Relative Schedule
+                                                <span class="schedule-help-icon" title="Schedule relative to now. Examples: 5m (5 minutes), 2h (2 hours), 1d (1 day), 30s (30 seconds). Overrides the datetime field above if specified.">
+                                                    <i class="bi bi-question-circle"></i>
+                                                </span>
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm" @bind="relativeScheduleTime" @bind:event="oninput" placeholder="e.g., 5m, 2h, 1d" />
+                                        </div>
                                     </div>
-                                }
-                            </div>
+                                </div>
+                            </details>
+
+                            <details class="accordion-item">
+                                <summary class="accordion-button py-2">
+                                    <small>Custom Properties (@customProperties.Count)</small>
+                                </summary>
+                                <div class="accordion-body py-2">
+                                    @foreach (var prop in customProperties)
+                                    {
+                                        <div class="row g-2 mb-2 align-items-end">
+                                            <div class="col-4">
+                                                <input type="text" class="form-control form-control-sm" @bind="prop.Key" placeholder="Key" />
+                                            </div>
+                                            <div class="col-3">
+                                                <select class="form-select form-select-sm" @bind="prop.Type">
+                                                    <option value="string">String</option>
+                                                    <option value="number">Number</option>
+                                                    <option value="boolean">Boolean</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-4">
+                                                @if (prop.Type == "boolean")
+                                                {
+                                                    <select class="form-select form-select-sm" @bind="prop.Value">
+                                                        <option value="true">true</option>
+                                                        <option value="false">false</option>
+                                                    </select>
+                                                }
+                                                else
+                                                {
+                                                    <input type="@(prop.Type == "number" ? "number" : "text")" class="form-control form-control-sm" @bind="prop.Value" placeholder="Value" />
+                                                }
+                                            </div>
+                                            <div class="col-1">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCustomProperty(prop)">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddCustomProperty">
+                                        <i class="bi bi-plus"></i> Add Property
+                                    </button>
+                                </div>
+                            </details>
                         </div>
                     }
                 </div>
@@ -264,10 +254,6 @@
     
     // Custom properties
     private List<CustomProperty> customProperties = new();
-    
-    // Accordion state
-    private bool showBrokerProperties = false;
-    private bool showCustomProperties = false;
 
     public string MessageBody
     {
@@ -281,12 +267,6 @@
 
     protected override void OnParametersSet()
     {
-        if (IsVisible && RequiresSession && !showBrokerProperties)
-        {
-            // Auto-expand broker properties if session is required
-            showBrokerProperties = true;
-        }
-        
         if (!IsVisible)
         {
             ResetForm();
@@ -310,8 +290,6 @@
         scheduledEnqueueTime = null;
         relativeScheduleTime = "";
         customProperties.Clear();
-        showBrokerProperties = false;
-        showCustomProperties = false;
     }
 
     private async Task HandleSend()

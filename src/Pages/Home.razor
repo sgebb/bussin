@@ -7,7 +7,6 @@
 @inject NavigationStateService NavState
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
-@inject INotificationService NotificationService
 @implements IDisposable
 
 <PageTitle>bussin</PageTitle>
@@ -63,18 +62,16 @@
         {
             @if (hasArmPermission || isCheckingPermissions)
             {
-                <div class="row justify-content-center mb-4 mt-2">
+                <div class="row justify-content-center mb-4 mt-2 namespace-filter-bar">
                     <div class="col-lg-8">
                         <div class="d-flex align-items-center gap-3">
                             <div class="position-relative flex-grow-1">
-                                <input type="text" class="form-control form-control-lg text-center" placeholder="Search namespaces..." 
-                                       @bind="searchTerm" @bind:event="oninput" />
+                                <input type="search" class="form-control form-control-lg text-center namespace-filter-input" placeholder="Filter namespaces..."
+                                       aria-label="Filter namespaces" @bind="searchTerm" @bind:event="oninput" />
                                 @if (isRefreshing)
                                 {
-                                    <div class="position-absolute top-50 end-0 translate-middle-y me-3">
-                                        <div class="spinner-border spinner-border-sm text-muted" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
+                                    <div class="spinner-border spinner-border-sm text-muted namespace-filter-spinner" role="status">
+                                        <span class="visually-hidden">Loadin...</span>
                                     </div>
                                 }
                             </div>
@@ -90,9 +87,9 @@
             {
                 <div class="text-center my-5">
                     <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Checking permissions...</span>
+                        <span class="visually-hidden">Checkin permissions...</span>
                     </div>
-                    <p class="mt-2 text-muted">Checking permissions...</p>
+                    <p class="mt-2 text-muted">Checkin permissions...</p>
                 </div>
             }
             else if (access is { IsComplete: false } && !isGrantingAccess)
@@ -187,10 +184,10 @@
                 <div class="alert alert-info border-info shadow-sm">
                     <div class="d-flex align-items-center gap-3">
                         <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">Loadin...</span>
                         </div>
                         <div>
-                            <h6 class="mb-0 fw-bold">Authenticating...</h6>
+                            <h6 class="mb-0 fw-bold">Authenticatin...</h6>
                             <span class="text-muted small">Complete the sign-in in the popup window.</span>
                         </div>
                     </div>
@@ -203,25 +200,25 @@
                 {
                     <div class="text-center mb-3">
                         <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">Loadin...</span>
                         </div>
                     </div>
                 }
                 else if (namespaces.Count > 0)
                 {
-                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3">
-                        <div class="col-md-4 mb-3">
+                    <div class="namespace-grid">
+                        <div>
                             <button class="card h-100 w-100 namespace-card add-namespace-card" @onclick="OpenAddManualModal">
-                                <span class="card-body d-flex flex-column align-items-center justify-content-center text-center">
-                                    <i class="bi bi-plus-circle fs-3 mb-2"></i>
+                                <span class="card-body d-flex flex-column align-items-center justify-content-center text-center gap-1">
+                                    <i class="bi bi-plus-circle fs-3"></i>
                                     <span class="fw-bold">Add namespace</span>
-                                    <small class="text-muted">Not listed here? Connect with a connection string.</small>
+                                    <small class="text-muted desktop-only">Not listed here? Connect with a connection string.</small>
                                 </span>
                             </button>
                         </div>
                         @foreach (var ns in FilteredNamespaces)
                         {
-                            <div class="col-md-4 mb-3">
+                            <div>
                                 <div class="card h-100 namespace-card" style="cursor: pointer;" @onclick="() => NavigateToExplorer(ns)">
                                     <button class="favorite-btn @(NavState.IsFavorite(ns.FullyQualifiedNamespace) ? "favorited" : "not-favorited")" 
                                             @onclick="async () => await ToggleFavorite(ns.FullyQualifiedNamespace)" 
@@ -231,12 +228,13 @@
                                     </button>
                                     <div class="card-body pb-4">
                                         <h5 class="card-title fw-bold">@ns.Name</h5>
-                                        <p class="card-text text-muted mb-0 small">
-                                            <strong>Subscription:</strong> @ns.SubscriptionName<br />
-                                            <strong>Resource Group:</strong> @ns.ResourceGroup<br />
-                                            <strong>Location:</strong> @ns.Location<br />
-                                            <strong>Tenant:</strong> @ns.TenantId
-                                        </p>
+                                        @* Phones show only the subscription, keeping tiles short *@
+                                        <dl class="namespace-card-details card-text text-muted mb-0 small">
+                                            <div><dt>Subscription:</dt> <dd>@ns.SubscriptionName</dd></div>
+                                            <div class="desktop-only"><dt>Resource Group:</dt> <dd>@ns.ResourceGroup</dd></div>
+                                            <div class="desktop-only"><dt>Location:</dt> <dd>@ns.Location</dd></div>
+                                            <div class="desktop-only"><dt>Tenant:</dt> <dd>@ns.TenantId</dd></div>
+                                        </dl>
                                     </div>
                                 </div>
                             </div>
@@ -313,6 +311,67 @@ else
         border-radius: 4px;
     }
 
+    /* Stays reachable while scrolling a long namespace list. */
+    .namespace-filter-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin-top: -0.5rem !important;
+        padding-block: 0.5rem;
+    }
+
+    /* Symmetric padding keeps centred text clear of the spinner. */
+    .namespace-filter-input {
+        padding-inline: 2.75rem;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    /* Phones */
+    @@media (max-width: 767.98px) {
+        /* Below the fixed mobile top bar */
+        .namespace-filter-bar {
+            top: 50px;
+        }
+
+        /* Room for the placeholder matters more than perfect centring */
+        .namespace-filter-input {
+            padding-inline: 0.5rem 2rem;
+        }
+
+        /* Compact tiles: less padding and no tall placeholder for the add card */
+        .namespace-card {
+            padding: 0.25rem !important;
+        }
+
+        .namespace-card .card-body {
+            padding-bottom: 1rem !important;
+        }
+
+        .namespace-grid .add-namespace-card {
+            min-height: 0;
+        }
+    }
+
+    .namespace-filter-spinner {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-end: 1rem;
+        margin-block: auto;
+    }
+
+    /* As many columns as fit, each at least wide enough for a typical namespace name. */
+    .namespace-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+        gap: 1rem;
+    }
+
+    .namespace-card-details dt,
+    .namespace-card-details dd {
+        display: inline;
+        margin: 0;
+    }
+
     .add-namespace-card {
         border-style: dashed !important;
         background: transparent !important;
@@ -349,10 +408,10 @@ else
     private string InTenant(string preposition) =>
         string.IsNullOrEmpty(currentTenantId) ? "" : $"{preposition} {currentTenantName ?? currentTenantId}";
 
-    private RenderFragment ManualNamespaceCards => @<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-3 mb-5">
+    private RenderFragment ManualNamespaceCards => @<div class="namespace-grid mb-5">
         @foreach (var ns in manualNamespaces)
         {
-            <div class="col">
+            <div>
                 <div class="card h-100 namespace-card position-relative" style="cursor: pointer;" @onclick="() => NavigateToManualExplorer(ns)">
                     <div class="card-body pb-5">
                         <div class="d-flex align-items-center justify-content-between mb-2">
@@ -364,13 +423,13 @@ else
                         </p>
                         @if (!string.IsNullOrEmpty(ns.WebSocketUrl))
                         {
-                            <p class="card-text text-muted small text-truncate" title="@ns.WebSocketUrl">
+                            <p class="card-text text-muted small text-truncate desktop-only" title="@ns.WebSocketUrl">
                                 <strong>WebSocket:</strong> @ns.WebSocketUrl
                             </p>
                         }
                         else
                         {
-                            <p class="card-text text-muted small">
+                            <p class="card-text text-muted small desktop-only">
                                 <strong>WebSocket:</strong> Default (Secure)
                             </p>
                         }
@@ -406,7 +465,6 @@ else
     {
         await NavState.RemoveFromFavoritesAsync(ns.FullyQualifiedNamespace);
         LoadManualNamespaces();
-        NotificationService.NotifySuccess("Manual connection deleted.");
     }
 
     private void NavigateToManualExplorer(NamespaceConnection ns)

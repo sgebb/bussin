@@ -10,9 +10,9 @@
     {
         <!-- Sticky header for selection controls -->
         <div class="message-list-header">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <div class="form-check me-3">
+            <div class="d-flex justify-content-between align-items-center gap-2">
+                <div class="d-flex align-items-center message-list-toolbar">
+                    <div class="form-check me-3 message-select-all">
                         <input class="form-check-input" type="checkbox" id="selectAll" 
                                @onchange="ToggleSelectAll" checked="@allSelected" title="Select all">
                         <label class="form-check-label fw-bold" for="selectAll">
@@ -23,10 +23,10 @@
                     </div>
                 </div>
                 
-                <div class="d-flex align-items-center">
+                <div class="d-flex align-items-center message-list-toolbar">
                     @if (SelectedMessages.Any())
                     {
-                        <div class="btn-group btn-group-sm me-2">
+                        <div class="btn-group btn-group-sm me-2 desktop-only">
                             <button class="btn btn-danger" @onclick="OnDeleteSelected" disabled="@IsProcessing" 
                                     title="Delete selected messages">
                                 Delete
@@ -48,7 +48,7 @@
                     }
 
                     <div class="message-search me-2">
-                        <input type="text" class="form-control form-control-sm" 
+                        <input type="search" class="form-control form-control-sm" 
                                placeholder="Search messages..." 
                                @bind="SearchTerm" 
                                @bind:event="oninput" />
@@ -63,66 +63,58 @@
                     }
                     else
                     {
-                        <div class="dropdown me-2 desktop-only" style="position: relative;">
-                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" @onclick="ToggleDownloadDropdown" type="button" title="Download options">
+                        <div class="me-2 desktop-only download-menu-anchor">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" popovertarget="download-menu" type="button" title="Download options">
                                 <i class="bi bi-download"></i> Download
                             </button>
-                            @if (showDownloadDropdown)
-                            {
-                                <div style="position: fixed; inset: 0; z-index: 1040;" @onclick="() => showDownloadDropdown = false"></div>
-                                <ul class="dropdown-menu show" style="display: block; position: absolute; right: 0; left: auto; top: 100%; z-index: 1050; min-width: 210px; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);" @onclick:stopPropagation="true">
-                                    <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" @onclick="DownloadLoaded">Download Loaded (@Messages.Count)</button></li>
-                                    <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" @onclick="DownloadEntireEntity">Download Queue/Sub (Max 10k)</button></li>
-                                </ul>
-                            }
+                            <ul id="download-menu" class="dropdown-menu download-menu anchored-popover" popover>
+                                <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" popovertarget="download-menu" popovertargetaction="hide" @onclick="OnDownloadLoaded">Download Loaded (@Messages.Count)</button></li>
+                                <li><button class="dropdown-item py-2" style="font-size: 0.85rem;" popovertarget="download-menu" popovertargetaction="hide" @onclick="OnDownloadEntireEntity">Download Queue/Sub (Max 10k)</button></li>
+                            </ul>
                         </div>
                     }
 
                     <button class="btn btn-sm btn-outline-secondary" @onclick="OnClearMessagesClick" title="Clear all peeked messages">
-                        <i class="bi bi-trash"></i> Clear
+                        <i class="bi bi-trash"></i> <span class="btn-label">Clear</span>
                     </button>
 
-                    <div class="dropdown ms-2 desktop-only" style="position: relative;">
-                        <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleColumnDropdown" type="button" title="Configure visible properties">
+                    <div class="ms-2 desktop-only properties-menu-anchor">
+                        <button class="btn btn-sm btn-outline-secondary" popovertarget="properties-menu" type="button" title="Configure visible properties">
                             <i class="bi bi-tags"></i> Properties
                         </button>
-                        @if (_showColumnDropdown)
-                        {
-                            <div style="position: fixed; inset: 0; z-index: 1040;" @onclick="() => _showColumnDropdown = false"></div>
-                            <div class="column-dropdown" style="position: absolute; right: 0; top: 100%; z-index: 1050;" @onclick:stopPropagation="true">
-                                <div class="column-dropdown-header">
-                                    <strong>Visible properties</strong>
-                                    <button class="btn-close" @onclick="() => _showColumnDropdown = false"></button>
-                                </div>
-                                <div class="column-dropdown-list">
-                                    @foreach (var key in AlwaysOnProperties)
+                        <div id="properties-menu" class="column-dropdown anchored-popover" popover>
+                            <div class="column-dropdown-header">
+                                <strong>Visible properties</strong>
+                                <button class="btn-close" popovertarget="properties-menu" popovertargetaction="hide" title="Close"></button>
+                            </div>
+                            <div class="column-dropdown-list">
+                                @foreach (var key in AlwaysOnProperties)
+                                {
+                                    <label class="column-dropdown-item column-dropdown-item-locked" title="Always visible">
+                                        <input type="checkbox" checked disabled />
+                                        <span>@key</span>
+                                        <i class="bi bi-lock ms-auto" style="font-size: 0.7rem; opacity: 0.45;"></i>
+                                    </label>
+                                }
+                                @if (_discoveredAppProperties.Any(k => !AlwaysShownDlqProps.Contains(k)))
+                                {
+                                    <div class="column-dropdown-divider"></div>
+                                    @foreach (var key in _discoveredAppProperties.Where(k => !AlwaysShownDlqProps.Contains(k)).OrderBy(k => k))
                                     {
-                                        <label class="column-dropdown-item column-dropdown-item-locked" title="Always visible">
-                                            <input type="checkbox" checked disabled />
+                                        var isChecked = _activeColumns.Contains(key);
+                                        <label class="column-dropdown-item">
+                                            <input type="checkbox" checked="@isChecked"
+                                                   @onchange="() => ToggleColumn(key)" />
                                             <span>@key</span>
-                                            <i class="bi bi-lock ms-auto" style="font-size: 0.7rem; opacity: 0.45;"></i>
                                         </label>
                                     }
-                                    @if (_discoveredAppProperties.Any(k => !AlwaysShownDlqProps.Contains(k)))
-                                    {
-                                        <div class="column-dropdown-divider"></div>
-                                        @foreach (var key in _discoveredAppProperties.Where(k => !AlwaysShownDlqProps.Contains(k)).OrderBy(k => k))
-                                        {
-                                            var isChecked = _activeColumns.Contains(key);
-                                            <label class="column-dropdown-item">
-                                                <input type="checkbox" checked="@isChecked"
-                                                       @onchange="() => ToggleColumn(key)" />
-                                                <span>@key</span>
-                                            </label>
-                                        }
-                                    }
-                                    else if (!_discoveredAppProperties.Any())
-                                    {
-                                        <div class="column-dropdown-empty">No custom properties in loaded messages.</div>
-                                    }
-                                </div>
+                                }
+                                else if (!_discoveredAppProperties.Any())
+                                {
+                                    <div class="column-dropdown-empty">No custom properties in loaded messages.</div>
+                                }
                             </div>
-                        }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -152,7 +144,7 @@
                      id="@(isNavigated ? "navigated-msg" : null)"
                      @onclick="() => OnMessageClick(message)">
                     <div class="d-flex align-items-center">
-                        <div class="message-checkbox-wrapper" @onclick:stopPropagation="true">
+                        <div class="message-checkbox-wrapper desktop-only" @onclick:stopPropagation="true">
                             <input class="form-check-input message-checkbox" type="checkbox" 
                                    checked="@(message.SequenceNumber.HasValue && SelectedMessages.Contains(message.SequenceNumber.Value))"
                                    @onchange="() => ToggleMessage(message.SequenceNumber)">
@@ -245,7 +237,6 @@
     // _activeColumns = user-chosen custom app properties (stored in prefs)
     private List<string> _activeColumns = new();
     private HashSet<string> _discoveredAppProperties = new();
-    private bool _showColumnDropdown = false;
     private string? _lastColumnPreferenceKey;
 
     private string SearchTerm
@@ -281,7 +272,6 @@
         {
             _lastColumnPreferenceKey = ColumnPreferenceKey;
             _discoveredAppProperties = new();
-            _showColumnDropdown = false;
 
             _activeColumns = new List<string>();
             if (!string.IsNullOrEmpty(ColumnPreferenceKey))
@@ -418,11 +408,6 @@
         return (regularMessages, scheduledCount);
     }
 
-    private void ToggleColumnDropdown()
-    {
-        _showColumnDropdown = !_showColumnDropdown;
-    }
-
     private async Task ToggleColumn(string key)
     {
         if (_activeColumns.Contains(key))
@@ -524,27 +509,8 @@
         await OnClearMessages.InvokeAsync();
     }
 
-    private bool showDownloadDropdown = false;
-
-    private void ToggleDownloadDropdown()
-    {
-        showDownloadDropdown = !showDownloadDropdown;
-    }
-
     private async Task DownloadSelected()
     {
         await OnDownloadSelected.InvokeAsync(SelectedMessages.ToList());
-    }
-
-    private async Task DownloadLoaded()
-    {
-        showDownloadDropdown = false;
-        await OnDownloadLoaded.InvokeAsync();
-    }
-
-    private async Task DownloadEntireEntity()
-    {
-        showDownloadDropdown = false;
-        await OnDownloadEntireEntity.InvokeAsync();
     }
 }

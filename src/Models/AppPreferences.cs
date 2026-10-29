@@ -9,6 +9,9 @@ public sealed class AppPreferences
     // Key: "{namespace}|{entityPath}", Value: list of ApplicationProperty keys to show as columns
     public Dictionary<string, List<string>> EntityColumnPreferences { get; set; } = new();
 
+    // Key: fully qualified namespace, Value: its favorite entities, listed first and shown under the namespace in the sidebar
+    public Dictionary<string, List<PinnedEntity>> PinnedEntities { get; set; } = new();
+
     public static string BuildColumnPreferenceKey(string @namespace, string entityPath) => $"{@namespace}|{entityPath}";
 }
 

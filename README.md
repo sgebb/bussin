@@ -13,7 +13,7 @@ Because all connections are established directly from your browser to Azure, the
 * **Background Operations**: Run connection-safe bulk actions in the background without freezing the user interface.
 * **Batch Transmissions**: Send high-volume message payloads using concurrent AMQP pipelining.
 * **Bulk Management**: Resubmit or delete combinations of active and dead-letter messages with dynamic depth-locking to prevent data loss.
-* **Namespace Organization**: Manage multiple Entra ID environments using folder nesting and text searching.
+* **Namespace Organization**: Manage multiple Entra ID environments using folder nesting and name filters, and star the queues, topics and subscriptions you use most to keep them first in their list and one click away in the sidebar.
 * **Message Search**: Search and peek messages using property and body pattern matching.
 
 For visual walkthroughs, screenshots, and detailed guides of these features, visit the website at **[bussin.dev](https://bussin.dev)**.

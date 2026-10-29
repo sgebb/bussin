@@ -18,36 +18,32 @@
 
 <div class="explorer-layout">
     <!-- Section 1: Restructured Header -->
+    @* Desktop: one row with the entity filter centred. Phones: name + actions, then the filter on its own line;
+       the entity selector already shows what is selected, so there is no path there. *@
     <div class="explorer-header">
-        <a href="/" class="explorer-breadcrumb-home desktop-only" @onclick:preventDefault @onclick="@(() => Navigation.NavigateTo("/"))">
-            <i class="bi bi-chevron-left"></i> Namespaces
-        </a>
-        @* Desktop: one row. Phones: name + actions on the first line, the entity path (with the DLQ toggle) on the second. *@
         <div class="explorer-header-left">
+            <a href="/" class="explorer-breadcrumb-home desktop-only" title="Back to namespaces" @onclick:preventDefault @onclick="@(() => Navigation.NavigateTo("/"))">
+                <i class="bi bi-chevron-left"></i> <span class="btn-label">Namespaces</span>
+            </a>
             <h1 class="explorer-namespace-title" title="@NamespaceParam">@SelectionState.DisplayName</h1>
             @{ var crumbs = SelectedEntityCrumbs; }
             @if (crumbs.Count > 0)
             {
-                <div class="explorer-entity-path">
+                <div class="explorer-entity-path desktop-only">
                     @for (var i = 0; i < crumbs.Count; i++)
                     {
                         <i class="bi bi-chevron-right explorer-crumb-sep"></i>
                         <span class="explorer-crumb @(i == crumbs.Count - 1 ? "leaf" : "")" title="@crumbs[i]">@crumbs[i]</span>
                     }
-                    @if (SelectionState.HasQueueOrSubscriptionSelected)
+                    @if (SelectionState.HasQueueOrSubscriptionSelected && SelectionState.State.IsViewingDLQ)
                     {
-                        @if (SelectionState.State.IsViewingDLQ)
-                        {
-                            <span class="badge explorer-crumb-dlq desktop-only">DLQ</span>
-                        }
-                        <button class="btn btn-sm explorer-dlq-toggle mobile-only @(SelectionState.State.IsViewingDLQ ? "active" : "")"
-                                @onclick="SelectionState.ToggleDLQ" title="Switch between the active messages and the dead-letter queue">
-                            <i class="bi @(SelectionState.State.IsViewingDLQ ? "bi-check-square-fill" : "bi-square")"></i> DLQ
-                        </button>
+                        <span class="badge explorer-crumb-dlq">DLQ</span>
                     }
                 </div>
             }
         </div>
+        <input type="search" class="form-control form-control-sm explorer-entity-filter" placeholder="Filter entities..."
+               aria-label="Filter queues, topics and subscriptions" @bind="entityFilter" @bind:event="oninput" />
         <div class="explorer-header-right">
             <div class="namespace-summary-actions">
                 <button class="btn btn-sm btn-outline-secondary namespace-favorite-btn @(SelectionState.IsFavorite ? "favorited" : "")"
@@ -71,14 +67,7 @@
                     <button class="btn btn-sm btn-outline-secondary" @onclick="() => SelectionState.RefreshEntitiesAsync()"
                             disabled="@SelectionState.IsLoadingEntities"
                             title="Reload queues, topics and message counts@(SelectionState.EntitiesLoadedAt is { } at ? $" (counts as of {at:HH:mm:ss})" : "")">
-                        @if (SelectionState.IsLoadingEntities)
-                        {
-                            <span class="spinner-border spinner-border-sm" role="status"></span>
-                        }
-                        else
-                        {
-                            <i class="bi bi-arrow-clockwise"></i>
-                        }
+                        <i class="bi bi-arrow-clockwise @(SelectionState.IsLoadingEntities ? "icon-spin" : "")"></i>
                         <span class="btn-label">Refresh</span>
                     </button>
                     <button class="btn btn-sm btn-outline-secondary desktop-only" @onclick="() => DialogService.ShowStatsModal = true" title="Message flow and state over time">
@@ -95,6 +84,9 @@
         <ExplorerEntitySelector Queues="@SelectionState.Queues"
                                 Topics="@SelectionState.Topics"
                                 Subscriptions="@SelectionState.Subscriptions"
+                                Filter="@entityFilter"
+                                PinnedEntities="@SelectionState.PinnedEntities"
+                                OnTogglePin="@SelectionState.TogglePinnedEntityAsync"
                                 SelectedQueueName="@SelectionState.State.SelectedQueueName"
                                 SelectedTopicName="@SelectionState.State.SelectedTopicName"
                                 SelectedSubscriptionName="@SelectionState.State.SelectedSubscriptionName"
@@ -373,6 +365,7 @@
     public bool DlqParam { get; set; }
 
     private MessageList? _messageListRef;
+    private string entityFilter = "";
 
     // Held in a field so Dispose can detach it. EntitySelectionState is registered scoped,
     // which in WebAssembly means it lives for the whole app, so an anonymous handler here
@@ -420,6 +413,7 @@
         if (nsChanged)
         {
             _currentNamespace = NamespaceParam;
+            entityFilter = "";
             lock (_loadedSubscriptionRules)
             {
                 _loadedSubscriptionRules.Clear();

@@ -17,7 +17,6 @@ public sealed class SearchStateService : IDisposable
     private readonly EntitySelectionState _entitySelectionState;
     private readonly PeekService _peekService;
     private readonly IServiceBusJsInteropService _jsInterop;
-    private readonly INotificationService _notificationService;
 
     public event Action? OnChange;
     private void NotifyStateChanged() => OnChange?.Invoke();
@@ -27,15 +26,13 @@ public sealed class SearchStateService : IDisposable
         MessageListState messageListState,
         EntitySelectionState entitySelectionState,
         PeekService peekService,
-        IServiceBusJsInteropService jsInterop,
-        INotificationService notificationService)
+        IServiceBusJsInteropService jsInterop)
     {
         _backgroundSearch = backgroundSearch;
         _messageListState = messageListState;
         _entitySelectionState = entitySelectionState;
         _peekService = peekService;
         _jsInterop = jsInterop;
-        _notificationService = notificationService;
 
         _backgroundSearch.OnViewResultsRequested += OnViewSearchResultsRequested;
     }
@@ -62,7 +59,6 @@ public sealed class SearchStateService : IDisposable
         };
 
         await _backgroundSearch.StartSearchAsync(searchOptions);
-        _notificationService.NotifySuccess("Background search started.");
     }
 
     private void OnViewSearchResultsRequested(SearchOperation operation)

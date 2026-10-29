@@ -98,3 +98,6 @@ Desktop.ini
 
 # PWA icons (placeholder - add actual icons later)
 # wwwroot/icon-*.png
+
+# Claude Code worktrees (live git checkouts, never commit)
+.claude/worktrees/

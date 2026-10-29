@@ -635,7 +635,7 @@ public sealed class PeekService : IDisposable
 
             _messageListState.NotifyUpdate();
             _confirmModal.Close();
-            _ = _entitySelectionState.RefreshEntitiesAsync(notify: false);
+            _ = _entitySelectionState.RefreshEntitiesAsync();
         }
         catch (Exception ex)
         {
@@ -723,7 +723,7 @@ public sealed class PeekService : IDisposable
             _messageListState.NotifyUpdate();
             _notificationService.NotifySuccess($"{char.ToUpper(operationName[0])}{operationName[1..]} {sequenceNumbers.Count} messages successfully.");
             _confirmModal.Close();
-            _ = _entitySelectionState.RefreshEntitiesAsync(notify: false);
+            _ = _entitySelectionState.RefreshEntitiesAsync();
         }
         catch (Exception ex)
         {
@@ -758,7 +758,7 @@ public sealed class PeekService : IDisposable
                 {
                     _entitySelectionState.QueueDict[op.EntityPath] = queue with { ActiveMessageCount = 0 };
                 }
-                _entitySelectionState.RefreshEntitiesAsync(notify: false).ConfigureAwait(false);
+                _entitySelectionState.RefreshEntitiesAsync().ConfigureAwait(false);
             }
         }
         else if (op.EntityType == "subscription")
@@ -774,7 +774,7 @@ public sealed class PeekService : IDisposable
                     else
                         _entitySelectionState.SubscriptionDict[subscriptionName] = sub with { ActiveMessageCount = 0 };
                     
-                    _entitySelectionState.RefreshEntitiesAsync(notify: false).ConfigureAwait(false);
+                    _entitySelectionState.RefreshEntitiesAsync().ConfigureAwait(false);
                 }
             }
         }
@@ -789,7 +789,7 @@ public sealed class PeekService : IDisposable
             return;
         }
 
-        _entitySelectionState.RefreshEntitiesAsync(notify: false).ConfigureAwait(false);
+        _entitySelectionState.RefreshEntitiesAsync().ConfigureAwait(false);
     }
 
     private string _currentExportMode = "selected";

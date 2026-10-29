@@ -167,7 +167,18 @@
               @onclick="() => Navigation.NavigateTo(GetExplorerUrl(ns))">
             <div class="fw-semibold text-truncate" title="@ns.DisplayName">@ns.DisplayName</div>
             <small class="text-muted text-truncate d-block" title="@ns.FullyQualifiedNamespace">@ns.FullyQualifiedNamespace</small>
+            @foreach (var entity in NavState.GetPinnedEntities(ns.FullyQualifiedNamespace))
+            {
+                <a class="pinned-entity-link" href="@GetEntityUrl(ns, entity)" title="@entity.DisplayName" @onclick:stopPropagation="true">
+                    <i class="bi bi-star-fill"></i><span class="text-truncate">@entity.DisplayName</span>
+                </a>
+            }
         </div>;
+
+    private string GetEntityUrl(NamespaceConnection ns, PinnedEntity entity) =>
+        GetExplorerUrl(ns) + (entity.Queue != null
+            ? $"&queue={Uri.EscapeDataString(entity.Queue)}"
+            : $"&topic={Uri.EscapeDataString(entity.Topic!)}" + (entity.Subscription != null ? $"&subscription={Uri.EscapeDataString(entity.Subscription)}" : ""));
 
     private RenderFragment<(Folder Folder, int Depth)> FolderBlock => item => __builder =>
     {

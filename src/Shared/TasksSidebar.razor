@@ -57,7 +57,7 @@
                                 </div>
                                 <div class="task-details">
                                     <div class="task-name">
-                                        @if (isStopping) { <span class="text-warning me-1">Stopping...</span> }
+                                        @if (isStopping) { <span class="text-warning me-1">Stoppin...</span> }
                                         Purging @task.EntityPath
                                     </div>
                                     <div class="task-meta">
@@ -128,8 +128,8 @@
                                 </div>
                                 <div class="task-details">
                                     <div class="task-name">
-                                        @if (isStopping) { <span class="text-info me-1">Stopping...</span> }
-                                        <i class="bi bi-search me-1"></i>Searching @task.EntityPath
+                                        @if (isStopping) { <span class="text-info me-1">Stoppin...</span> }
+                                        <i class="bi bi-search me-1"></i>Searchin @task.EntityPath
                                     </div>
                                     <div class="task-meta">
                                         @if (task.IsDeadLetter) { <span class="badge bg-secondary me-1">DLQ</span> }

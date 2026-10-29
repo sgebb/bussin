@@ -337,18 +337,13 @@ public sealed class EntitySelectionState : IDisposable
         catch (OperationCanceledException) { }
     }
 
-    public async Task RefreshEntitiesAsync(bool notify = true)
+    public async Task RefreshEntitiesAsync()
     {
         await LoadEntitiesAsync();
 
         if (State.SelectedTopicName != null)
         {
             await LoadSubscriptionsAsync(State.SelectedTopicName);
-        }
-
-        if (notify)
-        {
-            _notificationService.NotifySuccess("Refreshed queues and topics");
         }
     }
 
@@ -395,6 +390,26 @@ public sealed class EntitySelectionState : IDisposable
         NotifyStateChanged();
     }
 
+    public IReadOnlyList<PinnedEntity> PinnedEntities =>
+        State.CurrentNamespace == null ? [] : _navState.GetPinnedEntities(State.CurrentNamespace.FullyQualifiedNamespace);
+
+    /// <summary>
+    /// Pins or unpins an entity. Pinning also makes the namespace a favorite, since that is where
+    /// the sidebar lists the namespace's pinned entities.
+    /// </summary>
+    public async Task TogglePinnedEntityAsync(PinnedEntity entity)
+    {
+        if (State.CurrentNamespace == null) return;
+        var ns = State.CurrentNamespace;
+
+        await _navState.TogglePinnedEntityAsync(ns.FullyQualifiedNamespace, entity);
+        if (!IsFavorite && PinnedEntities.Contains(entity))
+        {
+            await _navState.AddToFavoritesAsync(ns.FullyQualifiedNamespace, ns.ResourceGroup, ns.SubscriptionId, DisplayName);
+        }
+        NotifyStateChanged();
+    }
+
     public async Task ToggleFavoriteAsync()
     {
         if (State.CurrentNamespace == null) return;
@@ -403,12 +418,10 @@ public sealed class EntitySelectionState : IDisposable
         if (IsFavorite)
         {
             await _navState.RemoveFromFavoritesAsync(fqn);
-            _notificationService.NotifySuccess("Removed from favorites");
         }
         else
         {
             await _navState.AddToFavoritesAsync(fqn, State.CurrentNamespace.ResourceGroup, State.CurrentNamespace.SubscriptionId, DisplayName);
-            _notificationService.NotifySuccess("Added to favorites");
         }
         NotifyStateChanged();
     }
@@ -591,7 +604,6 @@ public sealed class EntitySelectionState : IDisposable
                 RequiresSession = false
             };
             NotifyStateChanged();
-            _notificationService.NotifySuccess($"Queue '{queueName}' registered successfully.");
         }
         else
         {
@@ -617,7 +629,6 @@ public sealed class EntitySelectionState : IDisposable
                 SubscriptionCount = 0
             };
             NotifyStateChanged();
-            _notificationService.NotifySuccess($"Topic '{topicName}' registered successfully.");
         }
         else
         {
@@ -655,7 +666,6 @@ public sealed class EntitySelectionState : IDisposable
                 TopicDict[topicName] = topicInfo with { SubscriptionCount = topic.Subscriptions.Count };
             }
             NotifyStateChanged();
-            _notificationService.NotifySuccess($"Subscription '{subscriptionName}' registered successfully.");
         }
         else
         {
@@ -687,7 +697,6 @@ public sealed class EntitySelectionState : IDisposable
                         State.ClearSelection();
                     }
                     NotifyStateChanged();
-                    _notificationService.NotifySuccess($"Queue '{queueName}' forgotten successfully.");
                 }
             }
         );
@@ -719,7 +728,6 @@ public sealed class EntitySelectionState : IDisposable
                         SubscriptionDict.Clear();
                     }
                     NotifyStateChanged();
-                    _notificationService.NotifySuccess($"Topic '{topicName}' forgotten successfully.");
                 }
             }
         );
@@ -757,7 +765,6 @@ public sealed class EntitySelectionState : IDisposable
                         TopicDict[topicName] = topicInfo with { SubscriptionCount = topic.Subscriptions.Count };
                     }
                     NotifyStateChanged();
-                    _notificationService.NotifySuccess($"Subscription '{subscriptionName}' forgotten successfully.");
                 }
             }
         );

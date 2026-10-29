@@ -1,0 +1,40 @@
+# Same shape as the official docker-compose-default.yml from
+# Azure/azure-service-bus-emulator-installer, plus the WebSocket port from PR #154.
+# The WebSocket port only does something once a public image includes that listener.
+name: bussin-emulator-probe
+services:
+  emulator:
+    container_name: "bussin-probe-servicebus-emulator"
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:${EMULATOR_TAG:-latest}
+    pull_policy: always
+    volumes:
+      - "./Config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
+    ports:
+      - "5672:5672"
+      - "5300:5300"
+      - "5673:5673"
+    environment:
+      SQL_SERVER: sqledge
+      MSSQL_SA_PASSWORD: "${SQL_PASSWORD}"
+      ACCEPT_EULA: ${ACCEPT_EULA}
+      EMULATOR_HTTP_PORT: 5300
+      SERVICEBUS_WEBSOCKET_PORT: 5673
+    depends_on:
+      - sqledge
+    networks:
+      sb-emulator:
+        aliases:
+          - "sb-emulator"
+  sqledge:
+    container_name: "bussin-probe-sqledge"
+    image: "mcr.microsoft.com/azure-sql-edge:latest"
+    networks:
+      sb-emulator:
+        aliases:
+          - "sqledge"
+    environment:
+      ACCEPT_EULA: ${ACCEPT_EULA}
+      MSSQL_SA_PASSWORD: "${SQL_PASSWORD}"
+
+networks:
+  sb-emulator:

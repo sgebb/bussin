@@ -149,6 +149,31 @@ public sealed class NavigationStateService(IPreferencesService preferencesServic
         }
     }
 
+    public IReadOnlyList<PinnedEntity> GetPinnedEntities(string fullyQualifiedNamespace) =>
+        _preferences.PinnedEntities.TryGetValue(fullyQualifiedNamespace, out var pinned) ? pinned : [];
+
+    /// <summary>Adds the entity to the namespace's favorite entities, or removes it if it is already there.</summary>
+    public async Task TogglePinnedEntityAsync(string fullyQualifiedNamespace, PinnedEntity entity)
+    {
+        if (!_preferences.PinnedEntities.TryGetValue(fullyQualifiedNamespace, out var pinned))
+        {
+            pinned = [];
+            _preferences.PinnedEntities[fullyQualifiedNamespace] = pinned;
+        }
+
+        if (!pinned.Remove(entity))
+        {
+            pinned.Add(entity);
+        }
+        else if (pinned.Count == 0)
+        {
+            _preferences.PinnedEntities.Remove(fullyQualifiedNamespace);
+        }
+
+        await preferencesService.SavePreferencesAsync(_preferences);
+        NotifyStateChanged();
+    }
+
     public async Task ToggleFolderExpandedAsync(string folderId)
     {
         if (!_isInitialized || _preferences?.Folders == null) return;

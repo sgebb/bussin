@@ -1,7 +1,9 @@
-/* Explorer header. Desktop, one row:  ‹ Namespaces | namespace › entity path [DLQ] | actions
-   Phones, two rows:  namespace | actions  /  entity path [DLQ toggle] */
+/* Explorer header. Desktop, one row:  ‹ Namespaces | namespace › entity path [DLQ] | entity filter | actions
+   Phones, two rows:  namespace | actions  /  entity filter */
 .explorer-header {
-    display: flex;
+    display: grid;
+    /* Equal outer columns keep the filter in the middle; the actions column never shrinks below its buttons */
+    grid-template-columns: minmax(0, 1fr) minmax(8rem, 16rem) minmax(max-content, 1fr);
     align-items: center;
     gap: 1rem;
 }
@@ -10,14 +12,17 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
     min-width: 0;
 }
 
 .explorer-header-right {
     display: flex;
     align-items: center;
-    flex-shrink: 0;
+    justify-self: end;
+}
+
+.explorer-entity-filter {
+    text-align: center;
 }
 
 .explorer-breadcrumb-home {
@@ -80,35 +85,45 @@
     color: #fff;
 }
 
-.explorer-dlq-toggle {
-    flex-shrink: 0;
-    margin-left: auto;
-    border: 1px solid var(--border-color);
-    color: var(--text-color);
-}
-
-.explorer-dlq-toggle.active {
-    border-color: #fd7e14;
-    background-color: #fd7e14;
-    color: #fff;
-}
-
 .namespace-summary-actions {
     display: flex;
     gap: 6px;
+}
+
+/* A gap rather than a text space keeps the icon clear of the label, and the spinning
+   refresh icon is the same glyph as the idle one, so the button never changes size. */
+.namespace-summary-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
 }
 
 .namespace-favorite-btn.favorited i {
     color: #ffc107;
 }
 
+/* Small laptops and tablets: the title gets the room exact centring would take, and the back link and
+   actions are icon-only; each title attribute still names them */
+@media (max-width: 1279.98px) {
+    .explorer-header {
+        grid-template-columns: minmax(0, 1.5fr) minmax(7rem, 1fr) auto;
+    }
+
+    .namespace-summary-actions .btn-label,
+    .explorer-breadcrumb-home .btn-label {
+        display: none;
+    }
+}
+
 @media (max-width: 767.98px) {
     .explorer-header {
+        display: flex;
         flex-wrap: wrap;
         gap: 0.4rem 0.75rem;
     }
 
-    /* Let the title and the entity path take part in the header's own wrapping */
+    /* Let the title take part in the header's own wrapping */
     .explorer-header-left {
         display: contents;
     }
@@ -123,22 +138,8 @@
         order: 2;
     }
 
-    .explorer-entity-path {
+    .explorer-entity-filter {
         order: 3;
         flex-basis: 100%;
-    }
-
-    /* The path starts its own line, so it needs no leading chevron */
-    .explorer-entity-path > .explorer-crumb-sep:first-child {
-        display: none;
-    }
-
-    .explorer-crumb {
-        font-size: 1.05rem;
-    }
-
-    /* Icon-only buttons; the title attribute still names each one */
-    .namespace-summary-actions .btn-label {
-        display: none;
     }
 }

@@ -103,8 +103,8 @@
 
 /* Dark Mode Overrides - Matched directly with website */
 [data-theme='dark'] {
-    /* Subtle pride gradient opacity in dark mode */
-    --pride-opacity: 0.045;
+    /* Subtler seasonal background in dark mode */
+    --season-opacity: 0.045;
 
     /* Brand Accent Colors */
     --primary-color: #22C2B7;
@@ -700,9 +700,28 @@ textarea:focus {
     color: var(--text-color) !important;
 }
 
-.accordion-button:not(.collapsed) {
+/* Accordions are native <details>: the open attribute replaces Bootstrap's .collapsed toggling */
+summary.accordion-button {
+    list-style: none;
+    cursor: pointer;
+}
+
+summary.accordion-button::-webkit-details-marker {
+    display: none;
+}
+
+details[open] > .accordion-button {
     background-color: var(--hover-bg) !important;
     color: var(--text-color) !important;
+}
+
+details:not([open]) > .accordion-button {
+    box-shadow: none;
+}
+
+details:not([open]) > .accordion-button::after {
+    background-image: var(--bs-accordion-btn-icon);
+    transform: none;
 }
 
 .accordion-button::after {

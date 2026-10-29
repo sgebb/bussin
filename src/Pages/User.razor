@@ -67,15 +67,11 @@
                     {
                          <span class="badge bg-success">Demo Active</span>
                     }
-                    else if (!isCheckingAccess)
-                    {
-                        <button class="btn btn-outline-primary btn-sm" @onclick="CheckAccess">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh Status
-                        </button>
-                    }
                     else
                     {
-                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <button class="btn btn-outline-primary btn-sm" @onclick="CheckAccess" disabled="@isCheckingAccess">
+                            <i class="bi bi-arrow-clockwise @(isCheckingAccess ? "icon-spin" : "")"></i> @(isCheckingAccess ? "Checkin..." : "Refresh Status")
+                        </button>
                     }
                 </div>
                 <div class="card-body">
@@ -91,14 +87,14 @@
                                     <h6 class="mb-0">Azure Management API</h6>
                                     <small class="text-muted">Required to list your Service Bus namespaces.</small>
                                 </div>
-                                <i class="bi @(access.Management == AccessProblem.None ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") fs-5"></i>
+                                @StatusIcon(access.Management)
                             </div>
                             <div class="list-group-item d-flex justify-content-between align-items-center px-0">
                                 <div>
                                     <h6 class="mb-0">Service Bus Data API</h6>
                                     <small class="text-muted">Required for sending/receiving messages.</small>
                                 </div>
-                                <i class="bi @(access.ServiceBus == AccessProblem.None ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") fs-5"></i>
+                                @StatusIcon(access.ServiceBus)
                             </div>
                         </div>
 
@@ -166,11 +162,19 @@
         await CheckAccess();
     }
 
+    // While re-checking, each previous result turns into a spinner so the refresh is visible.
+    private RenderFragment StatusIcon(AccessProblem problem) => isCheckingAccess
+        ? @<span class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">Checkin...</span></span>
+        : @<i class="bi @(problem == AccessProblem.None ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") fs-5"></i>;
+
     private async Task CheckAccess()
     {
         isCheckingAccess = true;
         StateHasChanged();
+        // The check is often answered from the token cache instantly; hold the spinners briefly so the refresh registers.
+        var minimumDuration = Task.Delay(600);
         access = await AuthService.CheckAccessAsync();
+        await minimumDuration;
         isCheckingAccess = false;
     }
 

@@ -4,15 +4,15 @@
     <!-- Mobile Entity Tab Header -->
     <div class="mobile-entity-tabs d-md-none">
         <button class="entity-tab-btn @(_activeTab == EntityTab.Queues ? "active" : "")" @onclick="() => SetActiveTab(EntityTab.Queues)">
-            <i class="bi bi-list-ul me-1"></i> Queues (@Queues.Count)
+            <i class="bi bi-list-ul me-1"></i> Queues (@_visibleQueues.Count)
         </button>
         <button class="entity-tab-btn @(_activeTab == EntityTab.Topics ? "active" : "")" @onclick="() => SetActiveTab(EntityTab.Topics)">
-            <i class="bi bi-broadcast me-1"></i> Topics (@Topics.Count)
+            <i class="bi bi-broadcast me-1"></i> Topics (@_visibleTopics.Count)
         </button>
         <button class="entity-tab-btn @(_activeTab == EntityTab.Subscriptions ? "active" : "")" 
                 disabled="@(!HasSubscriptionsForSelectedTopic())" 
                 @onclick="() => SetActiveTab(EntityTab.Subscriptions)">
-            <i class="bi bi-envelope me-1"></i> Subs (@Subscriptions.Count)
+            <i class="bi bi-envelope me-1"></i> Subs (@_visibleSubscriptions.Count)
         </button>
     </div>
 
@@ -23,7 +23,7 @@
                  @onclick="() => ToggleZoom(ZoomedColumn.Queues)"
                  title="@(_zoomedColumn == ZoomedColumn.Queues ? "Click to make narrower" : "Click to make wider")">
                 <span class="d-flex align-items-center gap-2">
-                    <i class="bi bi-list-ul"></i> Queues (@Queues.Count)
+                    <i class="bi bi-list-ul"></i> Queues (@_visibleQueues.Count)
                     @if (IsConnectionStringMode)
                     {
                         <button class="btn btn-xs btn-outline-primary p-0 border-0 bg-transparent" 
@@ -48,7 +48,7 @@
                 </div>
             </div>
             <div class="entity-list-scroll entity-list-grid @(_zoomedColumn == ZoomedColumn.Queues ? "zoomed" : "")">
-                @foreach (var queue in Queues)
+                @foreach (var queue in _visibleQueues)
                 {
                     <div @key="queue.Name" class="entity-item @(SelectedQueueName == queue.Name ? "active" : "") @(queue.Status != "Active" ? "entity-disabled" : "")"
                          @onclick="() => OnQueueSelected.InvokeAsync(queue.Name)" title="@queue.Name">
@@ -89,6 +89,7 @@
                                         @Compact(queue.ActiveMessageCount) / <span class="text-dlq-orange fw-bold">@Compact(queue.DeadLetterMessageCount)</span>
                                     </span>
                                 }
+                                @PinButton(new PinnedEntity(Queue: queue.Name))
                                 @if (IsConnectionStringMode)
                                 {
                                     <button class="btn btn-link p-0 text-danger border-0 shadow-none entity-delete-btn" 
@@ -111,7 +112,7 @@
                  @onclick="() => ToggleZoom(ZoomedColumn.Topics)"
                  title="@(_zoomedColumn == ZoomedColumn.Topics ? "Click to make narrower" : "Click to make wider")">
                 <span class="d-flex align-items-center gap-2">
-                    <i class="bi bi-broadcast"></i> Topics (@Topics.Count)
+                    <i class="bi bi-broadcast"></i> Topics (@_visibleTopics.Count)
                     @if (IsConnectionStringMode)
                     {
                         <button class="btn btn-xs btn-outline-primary p-0 border-0 bg-transparent" 
@@ -136,7 +137,7 @@
                 </div>
             </div>
             <div class="entity-list-scroll entity-list-grid @(_zoomedColumn == ZoomedColumn.Topics ? "zoomed" : "")">
-                @foreach (var topic in Topics)
+                @foreach (var topic in _visibleTopics)
                 {
                     <div @key="topic.Name" class="entity-item @(SelectedTopicName == topic.Name ? "active" : "")"
                          @onclick="() => SelectTopic(topic)" title="@topic.Name">
@@ -151,6 +152,7 @@
                                 </span>
                             </span>
                             <div class="d-flex align-items-center gap-2">
+                                @PinButton(new PinnedEntity(Topic: topic.Name))
                                 @if (IsConnectionStringMode)
                                 {
                                     <button class="btn btn-link p-0 text-danger border-0 shadow-none entity-delete-btn" 
@@ -173,7 +175,7 @@
                  @onclick="() => ToggleZoom(ZoomedColumn.Subscriptions)"
                  title="@(_zoomedColumn == ZoomedColumn.Subscriptions ? "Click to make narrower" : "Click to make wider")">
                 <span class="d-flex align-items-center gap-2">
-                    <i class="bi bi-envelope"></i> Subscriptions (@Subscriptions.Count)
+                    <i class="bi bi-envelope"></i> Subscriptions (@_visibleSubscriptions.Count)
                     @if (IsConnectionStringMode && !string.IsNullOrEmpty(SelectedTopicName))
                     {
                         <button class="btn btn-xs btn-outline-primary p-0 border-0 bg-transparent" 
@@ -212,7 +214,7 @@
                 }
                 else
                 {
-                    @foreach (var sub in Subscriptions)
+                    @foreach (var sub in _visibleSubscriptions)
                     {
                         <div @key="sub.Name" class="entity-item @(SelectedSubscriptionName == sub.Name ? "active" : "") @(sub.Status != "Active" ? "entity-disabled" : "")"
                              @onclick="() => OnSubscriptionSelected.InvokeAsync(sub.Name)" title="@sub.Name">
@@ -245,6 +247,7 @@
                                              @Compact(sub.ActiveMessageCount) / <span class="text-dlq-orange fw-bold">@Compact(sub.DeadLetterMessageCount)</span>
                                          </span>
                                      }
+                                     @PinButton(new PinnedEntity(Topic: SelectedTopicName, Subscription: sub.Name))
                                      @if (IsConnectionStringMode)
                                      {
                                          <button class="btn btn-link p-0 text-danger border-0 shadow-none entity-delete-btn" 
@@ -269,6 +272,12 @@
     [Parameter] public List<ServiceBusTopicInfo> Topics { get; set; } = new();
     [Parameter] public List<ServiceBusSubscriptionInfo> Subscriptions { get; set; } = new();
     
+    /// <summary>Case-insensitive substring that entity names must contain to be listed.</summary>
+    [Parameter] public string? Filter { get; set; }
+
+    [Parameter] public IReadOnlyList<PinnedEntity> PinnedEntities { get; set; } = [];
+    [Parameter] public EventCallback<PinnedEntity> OnTogglePin { get; set; }
+
     [Parameter] public bool IsConnectionStringMode { get; set; }
     [Parameter] public EventCallback OnAddQueue { get; set; }
     [Parameter] public EventCallback OnAddTopic { get; set; }
@@ -307,8 +316,34 @@
         _activeTab = tab;
     }
 
+    private List<ServiceBusQueueInfo> _visibleQueues = new();
+    private List<ServiceBusTopicInfo> _visibleTopics = new();
+    private List<ServiceBusSubscriptionInfo> _visibleSubscriptions = new();
+
+    private bool IsPinned(PinnedEntity entity) => PinnedEntities.Contains(entity);
+
+    // Hidden until the row is hovered or selected, unless pinned; it keeps its space so names don't shift.
+    private RenderFragment PinButton(PinnedEntity entity) =>
+        @<button class="entity-pin-btn @(IsPinned(entity) ? "pinned" : "")"
+                 @onclick="() => OnTogglePin.InvokeAsync(entity)" @onclick:stopPropagation="true"
+                 title="@(IsPinned(entity) ? "Remove from favorites" : "Add to favorites: listed first, and in the sidebar")">
+            <i class="bi @(IsPinned(entity) ? "bi-star-fill" : "bi-star")"></i>
+        </button>;
+
+    private bool Matches(string name) =>
+        string.IsNullOrWhiteSpace(Filter) || name.Contains(Filter.Trim(), StringComparison.OrdinalIgnoreCase);
+
     protected override void OnParametersSet()
     {
+        // Pinned entities come first; otherwise the incoming order is kept (OrderBy is stable).
+        _visibleQueues = Queues.Where(q => Matches(q.Name))
+            .OrderByDescending(q => IsPinned(new PinnedEntity(Queue: q.Name))).ToList();
+        _visibleTopics = Topics.Where(t => Matches(t.Name))
+            .OrderByDescending(t => IsPinned(new PinnedEntity(Topic: t.Name))).ToList();
+        // A topic found by the filter shows all its subscriptions; otherwise they are filtered by their own names.
+        _visibleSubscriptions = Subscriptions.Where(s => SelectedTopicName != null && Matches(SelectedTopicName) || Matches(s.Name))
+            .OrderByDescending(s => IsPinned(new PinnedEntity(Topic: SelectedTopicName, Subscription: s.Name))).ToList();
+
         if (_activeTab == EntityTab.Subscriptions && !HasSubscriptionsForSelectedTopic())
         {
             _activeTab = EntityTab.Topics;

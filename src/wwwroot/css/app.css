@@ -13,23 +13,48 @@
     --top-row-bg: #ffffff;
     --content-bg: #f5f7fa;
 
-    /* Pride flag background variables */
-    --pride-opacity: 0.12;
-    --pride-background: repeating-linear-gradient(
+    /* Strength of the seasonal background pattern; dark mode lowers it */
+    --season-opacity: 0.12;
+}
+
+/* Seasonal skins. index.html sets data-season on <html> from the month. The pattern is declared on
+   [data-theme] rather than :root so it picks up that theme's --season-opacity. */
+:root[data-season="pride"] [data-theme] {
+    --season-background: repeating-linear-gradient(
         135deg,
-        rgba(239, 68, 68, var(--pride-opacity)) 0px,
-        rgba(239, 68, 68, var(--pride-opacity)) 30px,
-        rgba(249, 115, 22, var(--pride-opacity)) 30px,
-        rgba(249, 115, 22, var(--pride-opacity)) 60px,
-        rgba(234, 179, 8, var(--pride-opacity)) 60px,
-        rgba(234, 179, 8, var(--pride-opacity)) 90px,
-        rgba(34, 197, 94, var(--pride-opacity)) 90px,
-        rgba(34, 197, 94, var(--pride-opacity)) 120px,
-        rgba(59, 130, 246, var(--pride-opacity)) 120px,
-        rgba(59, 130, 246, var(--pride-opacity)) 150px,
-        rgba(168, 85, 247, var(--pride-opacity)) 150px,
-        rgba(168, 85, 247, var(--pride-opacity)) 180px
+        rgba(239, 68, 68, var(--season-opacity)) 0px 30px,
+        rgba(249, 115, 22, var(--season-opacity)) 30px 60px,
+        rgba(234, 179, 8, var(--season-opacity)) 60px 90px,
+        rgba(34, 197, 94, var(--season-opacity)) 90px 120px,
+        rgba(59, 130, 246, var(--season-opacity)) 120px 150px,
+        rgba(168, 85, 247, var(--season-opacity)) 150px 180px
     );
+}
+
+/* Jack-o'-lanterns and bats over pumpkin-and-purple stripes */
+:root[data-season="halloween"] [data-theme] {
+    --season-background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg opacity='0.28'%3E%3Cg transform='translate(55 65)'%3E%3Crect x='-2' y='-21' width='4' height='8' rx='1' fill='%2365a30d'/%3E%3Cellipse rx='20' ry='16' fill='%23ea580c'/%3E%3Cellipse rx='9' ry='16' fill='%23f97316'/%3E%3Cpath d='M-10 -3 l4 -6 l4 6z M2 -3 l4 -6 l4 6z M-10 5 q10 7 20 0 q-10 3 -20 0z' fill='%231c1917'/%3E%3C/g%3E%3Cpath transform='translate(160 160)' d='M0 0 q-6 -7 -16 -5 q5 2 5 7 q-5 -3 -10 2 q7 0 10 5 q5 -5 11 -2 q6 -3 11 2 q3 -5 10 -5 q-5 -5 -10 -2 q0 -5 5 -7 q-10 -2 -16 5z' fill='%237e22ce'/%3E%3C/g%3E%3C/svg%3E"),
+        repeating-linear-gradient(
+            135deg,
+            rgba(249, 115, 22, var(--season-opacity)) 0px 40px,
+            transparent 40px 80px,
+            rgba(126, 34, 206, var(--season-opacity)) 80px 120px,
+            transparent 120px 160px
+        );
+}
+
+/* Christmas trees and snowflakes over red-and-green stripes */
+:root[data-season="christmas"] [data-theme] {
+    --season-background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg opacity='0.3'%3E%3Cg transform='translate(55 65)'%3E%3Crect x='-3' y='17' width='6' height='7' fill='%2378350f'/%3E%3Cpath d='M0 -20 l14 22 h-7 l10 15 h-34 l10 -15 h-7z' fill='%2316a34a'/%3E%3Ccircle cy='-22' r='3.5' fill='%23facc15'/%3E%3Ccircle cx='-5' cy='6' r='2' fill='%23dc2626'/%3E%3Ccircle cx='6' cy='12' r='2' fill='%23dc2626'/%3E%3C/g%3E%3Cpath transform='translate(160 160)' d='M0 -14 V14 M-12 -7 L12 7 M-12 7 L12 -7' stroke='%2393c5fd' stroke-width='2.5' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E"),
+        repeating-linear-gradient(
+            135deg,
+            rgba(220, 38, 38, var(--season-opacity)) 0px 40px,
+            transparent 40px 80px,
+            rgba(22, 163, 74, var(--season-opacity)) 80px 120px,
+            transparent 120px 160px
+        );
 }
 
 
@@ -83,12 +108,12 @@ a,
 main {
     flex: 1;
     background-color: var(--content-bg);
-    background-image: var(--pride-background);
+    background-image: var(--season-background, none);
 }
 
 .content {
     background-color: var(--content-bg);
-    background-image: var(--pride-background);
+    background-image: var(--season-background, none);
 }
 
 .sidebar {
@@ -1076,6 +1101,10 @@ code {
     flex: 1;
 }
 
+.action-btn-group .dlq-toggle-btn {
+    width: 100%;
+}
+
 .send-dlq-row .dlq-toggle-btn {
     flex: 1;
 }
@@ -1230,24 +1259,36 @@ code {
     cursor: not-allowed;
 }
 
-/* Dropdown under the Peek split button */
-.peek-split {
-    position: relative;
+
+/* Dropdowns are native popovers: the browser handles toggling, outside clicks, Escape and stacking.
+   Each sits just below its trigger through CSS anchor positioning (the trigger's wrapper sets
+   anchor-name, the popover sets position-anchor and its horizontal side), flipping above when
+   there is no room below. */
+.anchored-popover {
+    inset: auto;
+    top: anchor(bottom);
+    margin: 4px 0 0;
+    color: var(--text-color);
+    position-try-fallbacks: flip-block;
 }
 
-.peek-menu-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
+/* Without anchor positioning a dropdown opens centred on screen instead */
+@supports not (anchor-name: --any) {
+    .anchored-popover {
+        inset: 0;
+        margin: auto;
+    }
+}
+
+/* Dropdown under the Peek split button */
+.peek-split {
+    anchor-name: --peek-split;
 }
 
 .peek-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    left: 0;
-    z-index: 1001;
-    margin-top: 4px;
+    position-anchor: --peek-split;
+    left: anchor(left);
+    width: anchor-size(width);
     padding: 4px;
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
@@ -1533,4 +1574,179 @@ code {
     align-items: center;
     justify-content: center;
     padding: 0.25rem;
+}
+/* Spins an icon in place (e.g. the refresh arrow) without changing its size, unlike swapping in a spinner */
+.icon-spin {
+    display: inline-block;
+    animation: icon-spin 0.8s linear infinite;
+}
+
+@keyframes icon-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .icon-spin {
+        animation-duration: 2.4s;
+    }
+}
+
+/* Long ids, property values and unbroken JSON wrap instead of making the message dialog scroll sideways */
+.message-detail-body table {
+    table-layout: fixed;
+}
+
+.message-detail-body td {
+    overflow-wrap: anywhere;
+}
+
+.message-detail-body pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* The floating task and event buttons would cover a dialog's footer buttons, notably on phones */
+body:has(.modal.show) :is(.tasks-float-btn, .notifications-badge) {
+    display: none;
+}
+
+.message-list-toolbar {
+    min-width: 0;
+}
+
+.message-select-all .form-check-label {
+    white-space: nowrap;
+}
+
+/* Phones: no multi-select (a tap opens the message), a single flat toolbar row that stays put
+   while the messages scroll beneath it. */
+@media (max-width: 767.98px) {
+    .explorer-messages-list:has(> .message-list) {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden !important;
+    }
+
+    .explorer-messages-list > .message-list {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .message-list .list-group {
+        min-height: 0;
+    }
+
+    .message-list-header {
+        padding: 0.35rem 0.5rem;
+        margin-bottom: 0;
+    }
+
+    .message-select-all {
+        padding-left: 0;
+        margin-right: 0 !important;
+        min-height: 0;
+        margin-bottom: 0;
+    }
+
+    .message-select-all .form-check-input {
+        display: none;
+    }
+
+    .message-list-toolbar:last-child {
+        flex: 1;
+    }
+
+    .message-list-toolbar .message-search {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+    }
+
+    .message-list-toolbar .btn-label {
+        display: none;
+    }
+}
+
+.security-info-card > summary {
+    cursor: pointer;
+}
+
+.download-menu-anchor {
+    anchor-name: --download-menu;
+}
+
+.download-menu {
+    position-anchor: --download-menu;
+    right: anchor(right);
+    min-width: 210px;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* Bootstrap hides .dropdown-menu unless .show; for popover menus the popover state decides */
+.dropdown-menu.anchored-popover:popover-open {
+    display: block;
+}
+
+.properties-menu-anchor {
+    anchor-name: --properties-menu;
+}
+
+#properties-menu {
+    position-anchor: --properties-menu;
+    right: anchor(right);
+}
+
+.tenant-selector {
+    anchor-name: --tenant-menu;
+}
+
+.tenant-menu {
+    position-anchor: --tenant-menu;
+    left: anchor(left);
+}
+
+/* Favorite (pinned) entities. The star shows on hover, on the selected row (phones have no hover)
+   and always once pinned; otherwise it is invisible but keeps its space so names don't shift. */
+.entity-pin-btn {
+    padding: 0;
+    border: none;
+    background: none;
+    line-height: 1;
+    color: var(--muted-text);
+    visibility: hidden;
+}
+
+.entity-item:hover .entity-pin-btn,
+.entity-item.active .entity-pin-btn,
+.entity-pin-btn:focus-visible,
+.entity-pin-btn.pinned {
+    visibility: visible;
+}
+
+.entity-pin-btn.pinned,
+.entity-pin-btn:hover {
+    color: #ffc107;
+}
+
+/* Pinned entities listed under their favorite namespace in the sidebar */
+.pinned-entity-link {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+.pinned-entity-link:hover {
+    color: var(--link-color);
+}
+
+.pinned-entity-link i {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    color: #ffc107;
 }

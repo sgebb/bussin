@@ -10,7 +10,7 @@
                     <h5 class="modal-title">@(isEditing ? "Edit & Resubmit Message" : "Message Details")</h5>
                     <button type="button" class="btn-close" @onclick="Close" title="Close" disabled="@IsProcessing"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body message-detail-body">
                     @if (isEditing)
                     {
                         <div class="row">
@@ -120,7 +120,7 @@
                                 <table class="table table-sm">
                                     <tbody>
                                         <tr>
-                                            <td class="fw-bold" style="width: 200px;">Sequence Number</td>
+                                            <td class="fw-bold" style="width: 40%;">Sequence Number</td>
                                             <td>@Message.SequenceNumber</td>
                                         </tr>
                                         @if (!string.IsNullOrEmpty(Message.MessageId))
@@ -225,7 +225,7 @@
                                             @foreach (var prop in Message.ApplicationProperties)
                                             {
                                                 <tr>
-                                                    <td class="fw-bold" style="width: 200px;">@prop.Key</td>
+                                                    <td class="fw-bold" style="width: 40%;">@prop.Key</td>
                                                     <td>@prop.Value</td>
                                                 </tr>
                                             }
@@ -297,7 +297,7 @@
                     }
                     else
                     {
-                        <button class="btn btn-secondary me-auto" @onclick="StartEdit" disabled="@IsScheduledMessage" title="Edit message content and properties">
+                        <button class="btn btn-secondary me-auto desktop-only" @onclick="StartEdit" disabled="@IsScheduledMessage" title="Edit message content and properties">
                             <i class="bi bi-pencil-square me-1"></i> Edit
                         </button>
                         
