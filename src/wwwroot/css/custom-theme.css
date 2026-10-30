@@ -1162,10 +1162,10 @@ mark {
         display: none !important;
     }
     
+    /* The page itself scrolls on phones; main only clears the fixed top bar. It must not get an
+       overflow of its own, or it becomes the container that sticky elements stick to. */
     main {
         padding-top: 50px !important;
-        height: 100vh !important;
-        overflow-y: auto !important;
     }
     
     /* Reposition notifications & tasks floating badges to top header on mobile */

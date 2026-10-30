@@ -68,7 +68,8 @@
                             <div class="position-relative flex-grow-1">
                                 <input type="search" class="form-control form-control-lg text-center namespace-filter-input" placeholder="Filter namespaces..."
                                        aria-label="Filter namespaces" @bind="searchTerm" @bind:event="oninput" />
-                                @if (isRefreshing)
+                                @* Only while refreshing a list that is already shown; an empty page gets the loading block below *@
+                                @if (isRefreshing && namespaces.Count > 0)
                                 {
                                     <div class="spinner-border spinner-border-sm text-muted namespace-filter-spinner" role="status">
                                         <span class="visually-hidden">Loadin...</span>
@@ -76,20 +77,18 @@
                                 }
                             </div>
                             <a href="user" class="text-secondary text-decoration-none text-nowrap small" title="Can't find your namespace? Check your tenant settings.">
-                                <small><i class="bi bi-question-circle me-1"></i>Wrong Tenant?</small>
+                                <small><i class="bi bi-question-circle"></i><span class="desktop-only ms-1">Wrong Tenant?</span></small>
                             </a>
                         </div>
                     </div>
                 </div>
             }
 
-            @if (isCheckingPermissions && namespaces.Count == 0)
+            @if ((isCheckingPermissions || isRefreshing) && namespaces.Count == 0)
             {
                 <div class="text-center my-5">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Checkin permissions...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Checkin permissions...</p>
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">@(isCheckingPermissions ? "Checkin permissions..." : "Loadin namespaces...")</p>
                 </div>
             }
             else if (access is { IsComplete: false } && !isGrantingAccess)
@@ -196,23 +195,17 @@
             
             @if (hasArmPermission || isCheckingPermissions)
             {
-                @if (isRefreshing && namespaces.Count == 0)
-                {
-                    <div class="text-center mb-3">
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loadin...</span>
-                        </div>
-                    </div>
-                }
-                else if (namespaces.Count > 0)
+                @if (namespaces.Count > 0)
                 {
                     <div class="namespace-grid">
                         <div>
                             <button class="card h-100 w-100 namespace-card add-namespace-card" @onclick="OpenAddManualModal">
-                                <span class="card-body d-flex flex-column align-items-center justify-content-center text-center gap-1">
+                                <span class="card-body add-namespace-body">
                                     <i class="bi bi-plus-circle fs-3"></i>
-                                    <span class="fw-bold">Add namespace</span>
-                                    <small class="text-muted desktop-only">Not listed here? Connect with a connection string.</small>
+                                    <span>
+                                        <span class="fw-bold d-block">Add namespace</span>
+                                        <small class="text-muted"><span class="desktop-only">Not listed here? </span>Connect with a connection string</small>
+                                    </span>
                                 </span>
                             </button>
                         </div>
@@ -311,19 +304,31 @@ else
         border-radius: 4px;
     }
 
-    /* Stays reachable while scrolling a long namespace list. */
+    /* Stays reachable while scrolling a long namespace list */
     .namespace-filter-bar {
         position: sticky;
         top: 0;
         z-index: 10;
         margin-top: -0.5rem !important;
         padding-block: 0.5rem;
+        /* Frosted, so cards scrolling underneath don't show through around the input */
+        background-color: color-mix(in srgb, var(--content-bg) 80%, transparent);
+        backdrop-filter: blur(6px);
     }
 
     /* Symmetric padding keeps centred text clear of the spinner. */
     .namespace-filter-input {
         padding-inline: 2.75rem;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    .add-namespace-body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.25rem;
+        text-align: center;
     }
 
     /* Phones */
@@ -349,6 +354,14 @@ else
 
         .namespace-grid .add-namespace-card {
             min-height: 0;
+        }
+
+        /* Icon beside the text instead of above it */
+        .add-namespace-body {
+            flex-direction: row;
+            justify-content: flex-start;
+            gap: 0.75rem;
+            text-align: start;
         }
     }
 
