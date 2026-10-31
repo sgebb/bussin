@@ -5,6 +5,7 @@
 
 import type { ServiceBusConnection } from './connection.js';
 import type { ReceiverOptions, MessageCallback, ErrorCallback } from './types.js';
+import { formatAmqpError } from './types.js';
 import type { Receiver, Message } from 'rhea';
 
 /**
@@ -74,7 +75,7 @@ export class MessageReceiver {
         this.receiver.on('receiver_error', (context: any) => {
             if (onError) {
                 const error = context.receiver.error;
-                onError(new Error(error ? error.toString() : 'Receiver error'));
+                onError(new Error(error ? formatAmqpError(error) : 'Receiver error'));
             }
         });
         

@@ -1,4 +1,3 @@
-using Azure.Core;
 using Bussin.Models;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -11,7 +10,7 @@ public interface IMetricsService
     /// Gets message metrics for a Service Bus namespace over the specified time period.
     /// </summary>
     Task<EntityMetrics> GetNamespaceMetricsAsync(
-        TokenCredential credential,
+        ArmToken credential,
         ServiceBusNamespaceInfo namespaceInfo,
         TimeSpan period,
         CancellationToken cancellationToken = default);
@@ -20,7 +19,7 @@ public interface IMetricsService
     /// Gets message metrics for a specific queue over the specified time period.
     /// </summary>
     Task<EntityMetrics> GetQueueMetricsAsync(
-        TokenCredential credential,
+        ArmToken credential,
         ServiceBusNamespaceInfo namespaceInfo,
         string queueName,
         TimeSpan period,
@@ -30,7 +29,7 @@ public interface IMetricsService
     /// Gets message metrics for a specific topic over the specified time period.
     /// </summary>
     Task<EntityMetrics> GetTopicMetricsAsync(
-        TokenCredential credential,
+        ArmToken credential,
         ServiceBusNamespaceInfo namespaceInfo,
         string topicName,
         TimeSpan period,
@@ -40,7 +39,6 @@ public interface IMetricsService
 public sealed class MetricsService : IMetricsService
 {
     private readonly HttpClient _httpClient;
-    private const string AzureManagementScope = "https://management.azure.com/.default";
     private const string ApiVersion = "2023-10-01";
 
     public MetricsService(HttpClient httpClient)
@@ -49,7 +47,7 @@ public sealed class MetricsService : IMetricsService
     }
 
     public async Task<EntityMetrics> GetNamespaceMetricsAsync(
-        TokenCredential credential,
+        ArmToken credential,
         ServiceBusNamespaceInfo namespaceInfo,
         TimeSpan period,
         CancellationToken cancellationToken = default)
@@ -59,7 +57,7 @@ public sealed class MetricsService : IMetricsService
     }
 
     public async Task<EntityMetrics> GetQueueMetricsAsync(
-        TokenCredential credential,
+        ArmToken credential,
         ServiceBusNamespaceInfo namespaceInfo,
         string queueName,
         TimeSpan period,
@@ -70,7 +68,7 @@ public sealed class MetricsService : IMetricsService
     }
 
     public async Task<EntityMetrics> GetTopicMetricsAsync(
-        TokenCredential credential,
+        ArmToken credential,
         ServiceBusNamespaceInfo namespaceInfo,
         string topicName,
         TimeSpan period,
@@ -81,7 +79,7 @@ public sealed class MetricsService : IMetricsService
     }
 
     private async Task<EntityMetrics> GetMetricsAsync(
-        TokenCredential credential,
+        ArmToken credential,
         string resourceId,
         string? entityName,
         TimeSpan period,
@@ -92,9 +90,6 @@ public sealed class MetricsService : IMetricsService
         
         try
         {
-            // Get token for Azure Management API
-            var tokenRequest = new TokenRequestContext(new[] { AzureManagementScope });
-            var accessToken = await credential.GetTokenAsync(tokenRequest, cancellationToken);
 
             // Build the metrics query URL
             // Azure Monitor Metrics API: https://learn.microsoft.com/en-us/rest/api/monitor/metrics/list
@@ -121,7 +116,7 @@ public sealed class MetricsService : IMetricsService
             }
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken.Token);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential.Token);
 
             using var response = await _httpClient.SendAsync(request, cancellationToken);
             

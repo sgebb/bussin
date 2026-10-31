@@ -1,4 +1,3 @@
-using Azure.Core;
 using Bussin.Models;
 using Bussin.Services;
 
@@ -13,14 +12,14 @@ public class DemoAuthenticationService : IAuthenticationService
         return Task.FromResult(true);
     }
 
-    public Task<TokenCredential?> GetTokenCredentialAsync()
+    public Task<ArmToken?> GetTokenCredentialAsync()
     {
-        return Task.FromResult<TokenCredential?>(new DemoTokenCredential());
+        return Task.FromResult<ArmToken?>(new ArmToken("demo-token", DateTimeOffset.UtcNow.AddHours(1)));
     }
 
-    public Task<TokenCredential?> GetHomeTokenCredentialAsync()
+    public Task<ArmToken?> GetHomeTokenCredentialAsync()
     {
-        return Task.FromResult<TokenCredential?>(new DemoTokenCredential());
+        return Task.FromResult<ArmToken?>(new ArmToken("demo-token", DateTimeOffset.UtcNow.AddHours(1)));
     }
 
     public Task<string?> GetServiceBusTokenAsync()

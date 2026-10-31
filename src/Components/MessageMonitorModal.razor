@@ -36,7 +36,11 @@
 
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div>
-                            <strong>Messages Received:</strong> @messages.Count
+                            <strong>Messages Received:</strong> @receivedCount
+                            @if (receivedCount > messages.Count)
+                            {
+                                <small class="text-muted ms-1">(showing the latest @messages.Count)</small>
+                            }
                         </div>
                         <button class="btn btn-sm btn-outline-secondary" @onclick="ClearMessages" title="Clear messages">
                             <i class="bi bi-trash"></i>
@@ -118,8 +122,11 @@
     [Parameter] public string? SubscriptionName { get; set; }
     [Parameter] public bool IsDLQ { get; set; }
 
+    // The newest messages are kept; the JS monitor only reports each sequence number once
+    private const int MaxShownMessages = 500;
     private List<ServiceBusMessage> messages = new();
-    private HashSet<long> seenSequenceNumbers = new(); // Track seen messages by sequence number
+    private int receivedCount;
+    private bool renderQueued;
     private bool isMonitoring = false;
     private string? errorMessage;
     private IJSObjectReference? monitorController;
@@ -147,30 +154,24 @@
             errorMessage = null;
             var entityPath = EntityPath;
             var token = await PeekService.GetTokenAsync(entityPath);
-            if (string.IsNullOrEmpty(token))
-            {
-                errorMessage = "Service Bus token not available";
-                return;
-            }
 
-            // Create callback with deduplication
             callback = new MessageMonitorCallback(
                 onMessage: (msg) =>
                 {
-                    // Only add message if we haven't seen this sequence number before
-                    if (msg.SequenceNumber.HasValue && seenSequenceNumbers.Add(msg.SequenceNumber.Value))
+                    messages.Add(msg);
+                    receivedCount++;
+                    if (messages.Count > MaxShownMessages)
                     {
-                        messages.Add(msg);
-                        InvokeAsync(StateHasChanged);
+                        messages.RemoveRange(0, messages.Count - MaxShownMessages);
                     }
+                    QueueRender();
                 },
                 onError: (err) =>
                 {
                     errorMessage = err;
                     InvokeAsync(StateHasChanged);
                 },
-                getFreshToken: async () => await PeekService.GetTokenAsync(entityPath)
-                    ?? throw new InvalidOperationException("Service Bus token not available")
+                getFreshToken: () => PeekService.GetTokenAsync(entityPath)
             );
 
             callbackRef = DotNetObjectReference.Create(callback);
@@ -203,10 +204,23 @@
         callbackRef = null;
     }
 
+    // A busy entity delivers dozens of messages per poll; render them at most every 250 ms
+    private void QueueRender()
+    {
+        if (renderQueued) return;
+        renderQueued = true;
+        _ = InvokeAsync(async () =>
+        {
+            await Task.Delay(250);
+            renderQueued = false;
+            StateHasChanged();
+        });
+    }
+
     private void ClearMessages()
     {
         messages.Clear();
-        seenSequenceNumbers.Clear();
+        receivedCount = 0;
     }
 
     private async Task Close()

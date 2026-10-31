@@ -5,89 +5,32 @@ namespace Bussin.Services;
 public sealed class ServiceBusOperationsService : IServiceBusOperationsService
 {
     private readonly IServiceBusJsInteropService _jsInterop;
-    private readonly IAuthenticationService _authService;
     private readonly INotificationService _notificationService;
-    private readonly NavigationStateService _navState;
+    private readonly ServiceBusTokenProvider _tokenProvider;
 
     public ServiceBusOperationsService(
         IServiceBusJsInteropService jsInterop,
-        IAuthenticationService authService,
         INotificationService notificationService,
-        NavigationStateService navState)
+        ServiceBusTokenProvider tokenProvider)
     {
         _jsInterop = jsInterop;
-        _authService = authService;
         _notificationService = notificationService;
-        _navState = navState;
+        _tokenProvider = tokenProvider;
     }
 
-    private async Task<string> GetTokenAsync(string namespaceName, string entityPath)
+    private static string EntityPath(string? queueName, string? topicName, string? subscriptionName, bool fromDeadLetter)
     {
-        await _navState.InitializeAsync();
-        var connection = _navState.GetNamespaceConnection(namespaceName);
-        if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
-        {
-            var (endpoint, keyName, key, defaultEntityPath) = ServiceBusConnectionStringHelper.ParseConnectionString(connection.ConnectionString);
-            var activePath = !string.IsNullOrEmpty(defaultEntityPath) ? defaultEntityPath : entityPath;
-            return ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, activePath, TimeSpan.FromHours(2));
-        }
-
-        var token = await _authService.GetServiceBusTokenAsync();
-        if (string.IsNullOrEmpty(token))
-        {
-            var errorMsg = "Service Bus token not available. You may need to sign out and sign in again to consent to the Service Bus scope.";
-            Console.WriteLine($"ERROR: {errorMsg}");
-            throw new InvalidOperationException(errorMsg);
-        }
-        return token;
-    }
-
-    // Peek operations
-    
-    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, int count = 10, bool fromDeadLetter = false)
-    {
-        try
-        {
-            var entityPath = fromDeadLetter ? $"{queueName}/$DeadLetterQueue" : queueName;
-            var token = await GetTokenAsync(namespaceName, entityPath);
-            var messages = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, count, 0, fromDeadLetter);
-            var source = fromDeadLetter ? "DLQ" : "queue";
-            _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source} '{queueName}'");
-            return messages;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to peek messages: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, int count = 10, bool fromDeadLetter = false)
-    {
-        try
-        {
-            var subPath = $"{topicName}/subscriptions/{subscriptionName}";
-            var entityPath = fromDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
-            var token = await GetTokenAsync(namespaceName, entityPath);
-            var messages = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, count, 0, fromDeadLetter);
-            var source = fromDeadLetter ? "DLQ" : "subscription";
-            _notificationService.NotifySuccess($"Peeked {messages.Count} messages from {source} '{topicName}/Subscriptions/{subscriptionName}'");
-            return messages;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to peek messages: {ex.Message}");
-            throw;
-        }
+        var path = queueName ?? $"{topicName}/subscriptions/{subscriptionName}";
+        return fromDeadLetter ? $"{path}/$DeadLetterQueue" : path;
     }
 
     // Send operations
-    
+
     public async Task SendQueueMessageAsync(string namespaceName, string queueName, object messageBody, MessageProperties? properties = null)
     {
         try
         {
-            var token = await GetTokenAsync(namespaceName, queueName);
+            var token = await _tokenProvider.GetTokenAsync(namespaceName, queueName);
             await _jsInterop.SendQueueMessageAsync(namespaceName, queueName, token, messageBody, properties);
             _notificationService.NotifySuccess($"Message sent successfully to queue '{queueName}'");
         }
@@ -102,7 +45,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync(namespaceName, topicName);
+            var token = await _tokenProvider.GetTokenAsync(namespaceName, topicName);
             await _jsInterop.SendTopicMessageAsync(namespaceName, topicName, token, messageBody, properties);
             _notificationService.NotifySuccess($"Message sent successfully to topic '{topicName}'");
         }
@@ -117,7 +60,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync(namespaceName, queueName);
+            var token = await _tokenProvider.GetTokenAsync(namespaceName, queueName);
             await _jsInterop.SendQueueMessageBatchAsync(namespaceName, queueName, token, messages.ToArray());
             _notificationService.NotifySuccess($"Batch of {messages.Count} messages sent successfully to queue '{queueName}'");
             return new BatchOperationResult { SuccessCount = messages.Count };
@@ -133,7 +76,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync(namespaceName, topicName);
+            var token = await _tokenProvider.GetTokenAsync(namespaceName, topicName);
             await _jsInterop.SendTopicMessageBatchAsync(namespaceName, topicName, token, messages.ToArray());
             _notificationService.NotifySuccess($"Batch of {messages.Count} messages sent successfully to topic '{topicName}'");
             return new BatchOperationResult { SuccessCount = messages.Count };
@@ -145,133 +88,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    // Purge operations
-    
-    public async Task<int> PurgeQueueAsync(string namespaceName, string queueName, bool fromDeadLetter = false)
-    {
-        try
-        {
-            var entityPath = fromDeadLetter ? $"{queueName}/$DeadLetterQueue" : queueName;
-            var token = await GetTokenAsync(namespaceName, entityPath);
-            var count = await _jsInterop.PurgeQueueAsync(namespaceName, queueName, token, fromDeadLetter);
-            var source = fromDeadLetter ? "DLQ" : "queue";
-            _notificationService.NotifySuccess($"{source} '{queueName}' purged successfully - deleted {count} message(s)");
-            return count;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to purge: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, bool fromDeadLetter = false)
-    {
-        try
-        {
-            var subPath = $"{topicName}/subscriptions/{subscriptionName}";
-            var entityPath = fromDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
-            var token = await GetTokenAsync(namespaceName, entityPath);
-            var count = await _jsInterop.PurgeSubscriptionAsync(namespaceName, topicName, subscriptionName, token, fromDeadLetter);
-            var source = fromDeadLetter ? "DLQ" : "subscription";
-            _notificationService.NotifySuccess($"{source} '{topicName}/Subscriptions/{subscriptionName}' purged successfully - deleted {count} message(s)");
-            return count;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to purge: {ex.Message}");
-            throw;
-        }
-    }
-
-    // Internal lock-based operations
-    
-    private async Task<List<ServiceBusMessage>> LockQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
-    {
-        try
-        {
-            var entityPath = fromDeadLetter ? $"{queueName}/$DeadLetterQueue" : queueName;
-            var token = await GetTokenAsync(namespaceName, entityPath);
-            var maxSeq = sequenceNumbers.Max();
-            
-            int itemsToLock = 0;
-            int peekSequence = 0;
-            
-            while (true)
-            {
-                var peeked = await _jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, 250, peekSequence, fromDeadLetter);
-                if (peeked.Count == 0)
-                {
-                    break;
-                }
-                
-                var lastInBatch = peeked.Last();
-                if ((lastInBatch.SequenceNumber ?? 0) >= maxSeq)
-                {
-                    var exactIndex = peeked.FindLastIndex(m => m.SequenceNumber == maxSeq);
-                    itemsToLock += (exactIndex >= 0 ? exactIndex + 1 : peeked.Count);
-                    break;
-                }
-                
-                itemsToLock += peeked.Count;
-                peekSequence = (int)(lastInBatch.SequenceNumber ?? 0) + 1;
-            }
-            
-            if (itemsToLock <= 0) itemsToLock = sequenceNumbers.Length;
-            
-            var lockedMessages = await _jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 10, fromDeadLetter, itemsToLock, fromDeadLetter ? null : sessionId);
-            return lockedMessages;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to lock messages: {ex.Message}");
-            throw;
-        }
-    }
-
-    private async Task<List<ServiceBusMessage>> LockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
-    {
-        try
-        {
-            var subPath = $"{topicName}/subscriptions/{subscriptionName}";
-            var entityPath = fromDeadLetter ? $"{subPath}/$DeadLetterQueue" : subPath;
-            var token = await GetTokenAsync(namespaceName, entityPath);
-            var maxSeq = sequenceNumbers.Max();
-            
-            int itemsToLock = 0;
-            int peekSequence = 0;
-            
-            while (true)
-            {
-                var peeked = await _jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 250, peekSequence, fromDeadLetter);
-                if (peeked.Count == 0)
-                {
-                    break;
-                }
-                
-                var lastInBatch = peeked.Last();
-                if ((lastInBatch.SequenceNumber ?? 0) >= maxSeq)
-                {
-                    var exactIndex = peeked.FindLastIndex(m => m.SequenceNumber == maxSeq);
-                    itemsToLock += (exactIndex >= 0 ? exactIndex + 1 : peeked.Count);
-                    break;
-                }
-                
-                itemsToLock += peeked.Count;
-                peekSequence = (int)(lastInBatch.SequenceNumber ?? 0) + 1;
-            }
-            
-            if (itemsToLock <= 0) itemsToLock = sequenceNumbers.Length;
-            
-            var lockedMessages = await _jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, token, 10, fromDeadLetter, itemsToLock, fromDeadLetter ? null : sessionId);
-            return lockedMessages;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to lock messages: {ex.Message}");
-            throw;
-        }
-    }
+    // Lock settlement operations (used by ReceiveAndLockModal)
 
     public async Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens)
     {
@@ -312,37 +129,21 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
+    // Operations on specific messages. Service Bus only receives deferred messages by sequence number,
+    // so client-js locks from the head of the entity up to the requested messages, settles those and
+    // releases the rest.
 
-    // High-level operations (lock + settle in one call)
-    
-    public async Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
+    public Task<BatchOperationResult> DeleteQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
+        => DeleteMessagesAsync(namespaceName, queueName, null, null, sequenceNumbers, fromDeadLetter, sessionId);
+
+    public Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
+        => DeleteMessagesAsync(namespaceName, null, topicName, subscriptionName, sequenceNumbers, fromDeadLetter, sessionId);
+
+    private async Task<BatchOperationResult> DeleteMessagesAsync(string namespaceName, string? queueName, string? topicName, string? subscriptionName, long[] sequenceNumbers, bool fromDeadLetter, string? sessionId)
     {
-        // Note: In Azure Service Bus AMQP data-plane protocols, receiving/deleting directly by sequence number 
-        // is only supported for DEFERRED messages. For active or standard dead-lettered messages, we must use 
-        // the lock-match-complete pattern (i.e. locking messages sequentially from the receiver link, checking 
-        // their sequence numbers, completing those that match, and abandoning the rest).
         try
         {
-            var lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, fromDeadLetter, sessionId);
-            
-            var matchingTokens = lockedMessages
-                .Where(m => m.LockToken != null && sequenceNumbers.Contains(m.SequenceNumber ?? -1))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            
-            var result = await CompleteMessagesAsync(matchingTokens);
-            
-            // Abandon any locked messages we didn't use
-            var unusedTokens = lockedMessages
-                .Where(m => m.LockToken != null && !matchingTokens.Contains(m.LockToken))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            if (unusedTokens.Length > 0)
-            {
-                await AbandonMessagesAsync(unusedTokens);
-            }
-            
-            return result;
+            return (await RemoveMessagesAsync(namespaceName, queueName, topicName, subscriptionName, sequenceNumbers, fromDeadLetter, sessionId)).ToBatchResult();
         }
         catch (Exception ex)
         {
@@ -351,160 +152,95 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         }
     }
 
-    public async Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null)
+    private async Task<SettleBySequenceResult> RemoveMessagesAsync(string namespaceName, string? queueName, string? topicName, string? subscriptionName, long[] sequenceNumbers, bool fromDeadLetter, string? sessionId)
     {
-        // Note: receive-by-sequence-number only works for DEFERRED messages.
-        // So we use lock-match-complete approach.
+        var token = await _tokenProvider.GetTokenAsync(namespaceName, EntityPath(queueName, topicName, subscriptionName, fromDeadLetter));
+        // A dead-letter queue never requires sessions
+        var lockSessionId = fromDeadLetter ? null : sessionId;
+        return queueName != null
+            ? await _jsInterop.DeleteQueueMessagesBySequenceAsync(namespaceName, queueName, token, sequenceNumbers, fromDeadLetter, lockSessionId)
+            : await _jsInterop.DeleteSubscriptionMessagesBySequenceAsync(namespaceName, topicName!, subscriptionName!, token, sequenceNumbers, fromDeadLetter, lockSessionId);
+    }
+
+    public Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null)
+        => MoveToDLQAsync(namespaceName, queueName, null, null, sequenceNumbers, reason, description, sessionId);
+
+    public Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null)
+        => MoveToDLQAsync(namespaceName, null, topicName, subscriptionName, sequenceNumbers, reason, description, sessionId);
+
+    private async Task<BatchOperationResult> MoveToDLQAsync(string namespaceName, string? queueName, string? topicName, string? subscriptionName, long[] sequenceNumbers, string? reason, string? description, string? sessionId)
+    {
         try
         {
-            var lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, sequenceNumbers, fromDeadLetter, sessionId);
-            
-            var matchingTokens = lockedMessages
-                .Where(m => m.LockToken != null && sequenceNumbers.Contains(m.SequenceNumber ?? -1))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            
-            var result = await CompleteMessagesAsync(matchingTokens);
-            
-            // Abandon any locked messages we didn't use
-            var unusedTokens = lockedMessages
-                .Where(m => m.LockToken != null && !matchingTokens.Contains(m.LockToken))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            if (unusedTokens.Length > 0)
-            {
-                await AbandonMessagesAsync(unusedTokens);
-            }
-            
-            return result;
+            var token = await _tokenProvider.GetTokenAsync(namespaceName, EntityPath(queueName, topicName, subscriptionName, false));
+            reason ??= "Manual move to DLQ";
+            description ??= "Moved by user";
+            var result = queueName != null
+                ? await _jsInterop.DeadLetterQueueMessagesBySequenceAsync(namespaceName, queueName, token, sequenceNumbers, reason, description, sessionId)
+                : await _jsInterop.DeadLetterSubscriptionMessagesBySequenceAsync(namespaceName, topicName!, subscriptionName!, token, sequenceNumbers, reason, description, sessionId);
+            return result.ToBatchResult();
         }
         catch (Exception ex)
         {
-            _notificationService.NotifyError($"Failed to delete messages: {ex.Message}");
+            _notificationService.NotifyError($"Failed to move messages to DLQ: {ex.Message}");
             throw;
         }
     }
 
     public Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true, string? sessionId = null)
-    {
-        return ResendMessagesInternalAsync(
-            namespaceName,
-            queueName,
-            null, null,
-            sequenceNumbers,
-            fromDeadLetter,
-            deleteOriginal,
-            sessionId
-        );
-    }
+        => ResendMessagesAsync(namespaceName, queueName, null, null, sequenceNumbers, fromDeadLetter, deleteOriginal, sessionId);
 
     public Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true, string? sessionId = null)
-    {
-        return ResendMessagesInternalAsync(
-            namespaceName,
-            null,
-            topicName, subscriptionName,
-            sequenceNumbers,
-            fromDeadLetter,
-            deleteOriginal,
-            sessionId
-        );
-    }
+        => ResendMessagesAsync(namespaceName, null, topicName, subscriptionName, sequenceNumbers, fromDeadLetter, deleteOriginal, sessionId);
 
-    private async Task<BatchOperationResult> ResendMessagesInternalAsync(
-        string namespaceName,
-        string? queueName,
-        string? topicName, string? subscriptionName,
-        long[] sequenceNumbers,
-        bool fromDeadLetter,
-        bool deleteOriginal,
-        string? sessionId = null)
+    private async Task<BatchOperationResult> ResendMessagesAsync(string namespaceName, string? queueName, string? topicName, string? subscriptionName, long[] sequenceNumbers, bool fromDeadLetter, bool deleteOriginal, string? sessionId)
     {
         try
         {
-            string entityPath = queueName ?? topicName!;
-            if (subscriptionName != null)
+            var sourceToken = await _tokenProvider.GetTokenAsync(namespaceName, EntityPath(queueName, topicName, subscriptionName, fromDeadLetter));
+            var originals = queueName != null
+                ? await _jsInterop.PeekQueueMessagesBySequenceAsync(namespaceName, queueName, sourceToken, sequenceNumbers, fromDeadLetter)
+                : await _jsInterop.PeekSubscriptionMessagesBySequenceAsync(namespaceName, topicName!, subscriptionName!, sourceToken, sequenceNumbers, fromDeadLetter);
+
+            if (originals.Count == 0)
             {
-                entityPath = $"{topicName}/subscriptions/{subscriptionName}";
+                return new SettleBySequenceResult { NotFound = sequenceNumbers }.ToBatchResult();
             }
-            var token = await GetTokenAsync(namespaceName, entityPath);
-            
-            // Peek to get the message content we want to resend
-            List<ServiceBusMessage> allMessages;
-            if (queueName != null)
-            {
-                allMessages = await _jsInterop.PeekQueueMessagesBySequenceAsync(namespaceName, queueName, token, sequenceNumbers, fromDeadLetter);
-            }
-            else
-            {
-                allMessages = await _jsInterop.PeekSubscriptionMessagesBySequenceAsync(namespaceName, topicName!, subscriptionName!, token, sequenceNumbers, fromDeadLetter);
-            }
-            
-            var messagesToResend = allMessages.Where(m => sequenceNumbers.Contains(m.SequenceNumber ?? -1)).ToList();
-            
-            if (!messagesToResend.Any())
-            {
-                return new BatchOperationResult { SuccessCount = 0, FailureCount = sequenceNumbers.Length, Errors = [] };
-            }
-            
-            // Prepare batch of messages to send
-            var batchMessages = messagesToResend.Select(msg => new
+
+            var batch = originals.Select(msg => new
             {
                 body = msg.Body ?? "",
                 properties = CreateResendProperties(msg, fromDeadLetter)
             }).ToArray<object>();
-            
-            // Send all messages in one batch (single connection)
+
+            // Messages go back to the queue, or to the topic the subscription belongs to
+            var sendToken = await _tokenProvider.GetTokenAsync(namespaceName, queueName ?? topicName!);
             if (queueName != null)
             {
-                await _jsInterop.SendQueueMessageBatchAsync(namespaceName, queueName, token, batchMessages);
+                await _jsInterop.SendQueueMessageBatchAsync(namespaceName, queueName, sendToken, batch);
             }
             else
             {
-                await _jsInterop.SendTopicMessageBatchAsync(namespaceName, topicName!, token, batchMessages);
+                await _jsInterop.SendTopicMessageBatchAsync(namespaceName, topicName!, sendToken, batch);
             }
-            
-            // Delete originals using lock-match-complete (since receive-by-sequence only works for deferred)
+
+            var result = new BatchOperationResult { SuccessCount = originals.Count };
             if (deleteOriginal)
             {
-                List<ServiceBusMessage> lockedMessages;
-                if (queueName != null)
+                var resent = originals.Select(m => m.SequenceNumber!.Value).ToArray();
+                var removal = await RemoveMessagesAsync(namespaceName, queueName, topicName, subscriptionName, resent, fromDeadLetter, sessionId);
+                result.FailureCount = removal.NotFound.Length;
+                result.Errors = removal.NotFound.Select(seq => new BatchOperationError
                 {
-                    lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, fromDeadLetter, sessionId);
-                }
-                else
-                {
-                    lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, sequenceNumbers, fromDeadLetter, sessionId);
-                }
-                
-                // Match by sequence number and complete only those
-                var matchingTokens = lockedMessages
-                    .Where(m => m.LockToken != null && sequenceNumbers.Contains(m.SequenceNumber ?? -1))
-                    .Select(m => m.LockToken!)
-                    .ToArray();
-                
-                if (matchingTokens.Length > 0)
-                {
-                    await CompleteMessagesAsync(matchingTokens);
-                }
-                
-                // Abandon any locked messages we didn't use
-                var unusedTokens = lockedMessages
-                    .Where(m => m.LockToken != null && !matchingTokens.Contains(m.LockToken))
-                    .Select(m => m.LockToken!)
-                    .ToArray();
-                if (unusedTokens.Length > 0)
-                {
-                    await AbandonMessagesAsync(unusedTokens);
-                }
+                    MessageId = $"#{seq}",
+                    Error = "Resent, but the original could not be removed"
+                }).ToList();
             }
-            
-            return new BatchOperationResult { SuccessCount = messagesToResend.Count, FailureCount = 0, Errors = [] };
+            return result;
         }
         catch (Exception ex)
         {
             _notificationService.NotifyError($"Failed to resend messages: {ex.Message}");
-            Console.WriteLine($"Resend error details: {ex}");
             throw;
         }
     }
@@ -512,10 +248,10 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     private static MessageProperties CreateResendProperties(ServiceBusMessage msg, bool fromDeadLetter)
     {
         // Start with existing application properties or create new dictionary
-        var appProps = msg.ApplicationProperties != null 
-            ? new Dictionary<string, object>(msg.ApplicationProperties) 
+        var appProps = msg.ApplicationProperties != null
+            ? new Dictionary<string, object>(msg.ApplicationProperties)
             : new Dictionary<string, object>();
-        
+
         // Add resubmit marker
         appProps["x-bussin-resubmitted"] = "true";
         appProps["x-bussin-resubmitted-at"] = DateTime.UtcNow.ToString("o");
@@ -523,7 +259,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         {
             appProps["x-bussin-original-message-id"] = msg.MessageId;
         }
-        
+
         return new MessageProperties
         {
             MessageId = fromDeadLetter ? Guid.NewGuid().ToString() : msg.MessageId,
@@ -537,7 +273,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
             ApplicationProperties = appProps,
             // Carry over annotations if any (e.g. scheduled time)
             // But exclude standard ones that the broker will re-set (seq, enqueued time)
-            MessageAnnotations = msg.MessageAnnotations != null 
+            MessageAnnotations = msg.MessageAnnotations != null
                 ? msg.MessageAnnotations
                     .Where(k => !k.Key.StartsWith("x-opt-"))
                     .ToDictionary(k => k.Key, v => v.Value)
@@ -545,93 +281,11 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         };
     }
 
-    public async Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null)
-    {
-        // Note: receive-by-sequence-number only works for DEFERRED messages, not regular messages.
-        // So we must use the lock-match-abandon approach for moving to DLQ.
-        try
-        {
-            // Lock more messages than needed to ensure we get the ones we want
-            var lockedMessages = await LockQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, false, sessionId);
-            
-            // Match by sequence number and dead letter only those
-            var matchingTokens = lockedMessages
-                .Where(m => m.LockToken != null && sequenceNumbers.Contains(m.SequenceNumber ?? -1))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            
-            var result = await DeadLetterMessagesAsync(matchingTokens, new DeadLetterOptions 
-            { 
-                DeadLetterReason = reason ?? "Manual move to DLQ", 
-                DeadLetterErrorDescription = description ?? "Moved by user" 
-            });
-            
-            // Abandon any locked messages we didn't use
-            var unusedTokens = lockedMessages
-                .Where(m => m.LockToken != null && !matchingTokens.Contains(m.LockToken))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            if (unusedTokens.Length > 0)
-            {
-                await AbandonMessagesAsync(unusedTokens);
-            }
-            
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to move messages to DLQ: {ex.Message}");
-            throw;
-        }
-    }
-
-    public async Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null)
-    {
-        // Note: receive-by-sequence-number only works for DEFERRED messages, not regular messages.
-        // So we must use the lock-match-abandon approach for moving to DLQ.
-        try
-        {
-            // Lock more messages than needed to ensure we get the ones we want
-            var lockedMessages = await LockSubscriptionMessagesAsync(namespaceName, topicName, subscriptionName, sequenceNumbers, false, sessionId);
-            
-            // Match by sequence number and dead letter only those
-            var matchingTokens = lockedMessages
-                .Where(m => m.LockToken != null && sequenceNumbers.Contains(m.SequenceNumber ?? -1))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            
-            var result = await DeadLetterMessagesAsync(matchingTokens, new DeadLetterOptions 
-            { 
-                DeadLetterReason = reason ?? "Manual move to DLQ", 
-                DeadLetterErrorDescription = description ?? "Moved by user" 
-            });
-            
-            // Abandon any locked messages we didn't use
-            var unusedTokens = lockedMessages
-                .Where(m => m.LockToken != null && !matchingTokens.Contains(m.LockToken))
-                .Select(m => m.LockToken!)
-                .ToArray();
-            if (unusedTokens.Length > 0)
-            {
-                await AbandonMessagesAsync(unusedTokens);
-            }
-            
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _notificationService.NotifyError($"Failed to move messages to DLQ: {ex.Message}");
-            throw;
-        }
-    }
-
-
-
     public async Task<BatchOperationResult> CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers)
     {
         try
         {
-            var token = await GetTokenAsync(namespaceName, queueName);
+            var token = await _tokenProvider.GetTokenAsync(namespaceName, queueName);
             await _jsInterop.CancelScheduledQueueMessagesAsync(namespaceName, queueName, token, sequenceNumbers);
             _notificationService.NotifySuccess($"Cancelled {sequenceNumbers.Length} scheduled message(s) from queue '{queueName}' successfully.");
             return new BatchOperationResult { SuccessCount = sequenceNumbers.Length };
@@ -647,7 +301,7 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
     {
         try
         {
-            var token = await GetTokenAsync(namespaceName, topicName);
+            var token = await _tokenProvider.GetTokenAsync(namespaceName, topicName);
             await _jsInterop.CancelScheduledTopicMessagesAsync(namespaceName, topicName, token, sequenceNumbers);
             _notificationService.NotifySuccess($"Cancelled {sequenceNumbers.Length} scheduled message(s) from topic '{topicName}' successfully.");
             return new BatchOperationResult { SuccessCount = sequenceNumbers.Length };

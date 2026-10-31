@@ -381,8 +381,8 @@ class MockConnection extends EventEmitter {
 
                 response.application_properties.statusCode = 200;
                 response.application_properties['status-code'] = 200;
-            } else if (operation === 'com.microsoft:purge-messages') {
-                // Purge all (or N) messages from the entity
+            } else if (operation === 'com.microsoft:batch-delete-messages') {
+                // Batch delete: remove up to N messages from the head of the entity
                 const rawCount = msg.body?.['message-count'];
                 const msgCount = rawCount !== undefined ? Number(rawCount.value ?? rawCount) : Infinity;
                 const queue = this.broker.getMessages(entityPath);

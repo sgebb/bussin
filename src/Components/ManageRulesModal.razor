@@ -366,9 +366,7 @@
         }
     }
 
-    private async Task<string> GetRequiredTokenAsync() =>
-        await PeekService.GetTokenAsync(EntityPath)
-            ?? throw new InvalidOperationException("Service Bus authentication is required.");
+    private Task<string> GetRequiredTokenAsync() => PeekService.GetTokenAsync(EntityPath);
 
     private void HandleContentMouseDown()
     {

@@ -74,10 +74,7 @@
             var mgmtCred = await AuthService.GetTokenCredentialAsync();
             if (mgmtCred != null)
             {
-                var mgmtToken = await mgmtCred.GetTokenAsync(
-                    new Azure.Core.TokenRequestContext(new[] { "https://management.azure.com/.default" }), 
-                    default);
-                diagnosticInfo.ManagementToken = $"Available (expires: {mgmtToken.ExpiresOn})";
+                diagnosticInfo.ManagementToken = $"Available (expires: {mgmtCred.ExpiresOn})";
             }
             else
             {

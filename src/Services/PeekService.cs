@@ -18,8 +18,7 @@ public sealed class PeekService : IDisposable
     private readonly EntitySelectionState _entitySelectionState;
     private readonly IServiceBusJsInteropService _jsInterop;
     private readonly INotificationService _notificationService;
-    private readonly IAuthenticationService _authService;
-    private readonly NavigationStateService _navState;
+    private readonly ServiceBusTokenProvider _tokenProvider;
     private readonly IJSRuntime _jsRuntime;
     private readonly IConfirmModalService _confirmModal;
     private readonly BackgroundPurgeService _backgroundPurge;
@@ -64,8 +63,7 @@ public sealed class PeekService : IDisposable
         EntitySelectionState entitySelectionState,
         IServiceBusJsInteropService jsInterop,
         INotificationService notificationService,
-        IAuthenticationService authService,
-        NavigationStateService navState,
+        ServiceBusTokenProvider tokenProvider,
         IJSRuntime jsRuntime,
         IConfirmModalService confirmModal,
         BackgroundPurgeService backgroundPurge,
@@ -77,8 +75,7 @@ public sealed class PeekService : IDisposable
         _entitySelectionState = entitySelectionState;
         _jsInterop = jsInterop;
         _notificationService = notificationService;
-        _authService = authService;
-        _navState = navState;
+        _tokenProvider = tokenProvider;
         _jsRuntime = jsRuntime;
         _confirmModal = confirmModal;
         _backgroundPurge = backgroundPurge;
@@ -100,19 +97,8 @@ public sealed class PeekService : IDisposable
         NotifyStateChanged();
     }
 
-    public async Task<string?> GetTokenAsync(string entityPath)
-    {
-        var connection = _navState.GetNamespaceConnection(_entitySelectionState.State.FullyQualifiedNamespace);
-        if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
-        {
-            var (endpoint, keyName, key, defaultEntityPath) = ServiceBusConnectionStringHelper.ParseConnectionString(connection.ConnectionString);
-            var activePath = !string.IsNullOrEmpty(defaultEntityPath) ? defaultEntityPath : entityPath;
-            return ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, activePath, TimeSpan.FromHours(2));
-        }
-
-        var token = await _authService.GetServiceBusTokenAsync();
-        return token;
-    }
+    public Task<string> GetTokenAsync(string entityPath) =>
+        _tokenProvider.GetTokenAsync(_entitySelectionState.State.FullyQualifiedNamespace, entityPath);
 
     private string GetEntityPath()
     {
@@ -158,18 +144,12 @@ public sealed class PeekService : IDisposable
         }
         else if (_messageListState.PeekedMessages.Any())
         {
-            _messageListState.PeekFromSequence = (int)(_messageListState.PeekedMessages.Max(m => m.SequenceNumber ?? 0) + 1);
+            _messageListState.PeekFromSequence = _messageListState.PeekedMessages.Max(m => m.SequenceNumber ?? 0) + 1;
         }
 
         try
         {
             var token = await GetTokenAsync(GetEntityPath());
-            if (string.IsNullOrEmpty(token))
-            {
-                ErrorMessage = "Service Bus token not available";
-                NotifyStateChanged();
-                return;
-            }
 
             var messages = await PeekEntityMessagesInternalAsync(token);
 
@@ -240,12 +220,6 @@ public sealed class PeekService : IDisposable
         try
         {
             var token = await GetTokenAsync(GetEntityPath());
-            if (string.IsNullOrEmpty(token))
-            {
-                ErrorMessage = "Service Bus token not available";
-                NotifyStateChanged();
-                return;
-            }
 
             long startSequence = options.FromSequenceNumber;
             if (append)
@@ -270,14 +244,14 @@ public sealed class PeekService : IDisposable
             {
                 var result = await PeekWithFiltersAsync(token, options, startSequence);
                 messages = result.messages;
-                _messageListState.PeekFromSequence = (int)result.nextSequence;
+                _messageListState.PeekFromSequence = result.nextSequence;
             }
             else
             {
                 messages = await PeekIterativeAsync(token, options.MaxCount, startSequence, options.SessionId);
                 if (messages.Any())
                 {
-                    _messageListState.PeekFromSequence = (int)(messages.Max(m => m.SequenceNumber ?? 0) + 1);
+                    _messageListState.PeekFromSequence = messages.Max(m => m.SequenceNumber ?? 0) + 1;
                 }
             }
 
@@ -334,9 +308,9 @@ public sealed class PeekService : IDisposable
         var namespaceOnly = _entitySelectionState.NamespaceNameOnly;
         var state = _entitySelectionState.State;
         if (state.SelectedQueueName != null)
-            return _jsInterop.PeekQueueMessagesAsync(namespaceOnly, state.SelectedQueueName, token, count, (int)startSequence, state.IsViewingDLQ, sessionId);
+            return _jsInterop.PeekQueueMessagesAsync(namespaceOnly, state.SelectedQueueName, token, count, startSequence, state.IsViewingDLQ, sessionId);
         if (state.IsSubscriptionSelected)
-            return _jsInterop.PeekSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, token, count, (int)startSequence, state.IsViewingDLQ, sessionId);
+            return _jsInterop.PeekSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, token, count, startSequence, state.IsViewingDLQ, sessionId);
         return Task.FromResult(new List<ServiceBusMessage>());
     }
 
@@ -413,7 +387,6 @@ public sealed class PeekService : IDisposable
         }
 
         var token = await GetTokenAsync(entityPath);
-        if (string.IsNullOrEmpty(token)) throw new InvalidOperationException("Service Bus token not available");
 
         if (state.SelectedQueueName != null)
             return await _jsInterop.ReceiveAndLockQueueMessagesAsync(_entitySelectionState.NamespaceNameOnly, state.SelectedQueueName, token, durationSeconds, state.IsViewingDLQ, count, sessionId);
@@ -843,13 +816,9 @@ public sealed class PeekService : IDisposable
                     tokenPath = state.IsViewingDLQ ? $"{subPath}/$DeadLetterQueue" : subPath;
                 }
                 var token = await GetTokenAsync(tokenPath);
-                if (string.IsNullOrEmpty(token))
-                {
-                    throw new InvalidOperationException("Failed to get authentication token.");
-                }
 
                 int countToFetch = 10000;
-                int currentSequence = 0;
+                long currentSequence = 0;
 
                 while (countToFetch > 0)
                 {
@@ -874,7 +843,7 @@ public sealed class PeekService : IDisposable
                     var lastSeq = batch.Last().SequenceNumber;
                     if (!lastSeq.HasValue) break;
 
-                    currentSequence = (int)lastSeq.Value + 1;
+                    currentSequence = lastSeq.Value + 1;
                 }
             }
 

@@ -217,12 +217,14 @@
     protected override void OnInitialized()
     {
         BackgroundPurge.OnOperationsChanged += StateHasChanged;
+        BackgroundPurge.OnProgressChanged += StateHasChanged;
         BackgroundSearch.OnOperationsChanged += StateHasChanged;
     }
 
     public void Dispose()
     {
         BackgroundPurge.OnOperationsChanged -= StateHasChanged;
+        BackgroundPurge.OnProgressChanged -= StateHasChanged;
         BackgroundSearch.OnOperationsChanged -= StateHasChanged;
     }
 

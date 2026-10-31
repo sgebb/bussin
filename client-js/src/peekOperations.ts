@@ -1,4 +1,3 @@
-import rhea from 'rhea';
 import { ServiceBusConnection } from './connection.js';
 import { ManagementClient } from './managementClient.js';
 import { parseServiceBusMessage } from './messageParser.js';
@@ -12,21 +11,11 @@ import { formatAmqpError } from './types.js';
 
 // Store active message handles by lock token (necessary for settlement)
 // This is minimal state - just the AMQP handles that can't serialize
-// A handle is either a live AMQP delivery (settled directly on its receiver) or a
-// management lock (settled over a fresh $management link), never a mix of the two.
-type MessageHandle =
-    | {
-          isManagementLock?: false;
-          delivery: any;
-          receiver: any;
-          connection: any;
-      }
-    | {
-          isManagementLock: true;
-          namespace: string;
-          entityPath: string;
-          token: string;
-      };
+type MessageHandle = {
+    delivery: any;
+    receiver: any;
+    connection: any;
+};
 
 const messageHandles = new Map<string, MessageHandle>();
 
@@ -276,73 +265,65 @@ async function _receiveAndLockMessagesInternal(
     }
 }
 
+type Settle = (delivery: any) => void;
+
+const accept: Settle = delivery => delivery.accept();
+const release: Settle = delivery => delivery.release();
+const deadLetterWith = (options: DeadLetterOptions): Settle => delivery => delivery.reject({
+    condition: 'com.microsoft:dead-letter',
+    description: options.deadLetterErrorDescription || 'Manual dead letter from browser',
+    info: {
+        'DeadLetterReason': options.deadLetterReason || 'Manual dead letter',
+        'DeadLetterErrorDescription': options.deadLetterErrorDescription || 'Manual dead letter from browser'
+    }
+});
+
+/**
+ * Settles each locked message on the receiver that delivered it. A receiver (and its connection)
+ * is closed once none of its messages are still locked, so settling part of a batch keeps the
+ * locks on the rest.
+ */
+function settleLocked(settlements: Array<[lockToken: string, settle: Settle]>): BatchOperationResult {
+    const result: BatchOperationResult = { successCount: 0, failureCount: 0, errors: [] };
+    const touched = new Map<any, any>(); // receiver -> connection
+
+    for (const [lockToken, settle] of settlements) {
+        const handle = messageHandles.get(lockToken);
+        if (!handle) {
+            result.failureCount++;
+            result.errors.push({ messageId: lockToken, error: 'Message not found or lock expired' });
+            continue;
+        }
+
+        try {
+            settle(handle.delivery);
+            result.successCount++;
+        } catch (err) {
+            result.failureCount++;
+            result.errors.push({ messageId: lockToken, error: (err as Error).message });
+        }
+        messageHandles.delete(lockToken);
+        touched.set(handle.receiver, handle.connection);
+    }
+
+    const stillLocked = new Set([...messageHandles.values()].map(h => h.receiver));
+    for (const [receiver, connection] of touched) {
+        if (stillLocked.has(receiver)) continue;
+        try { receiver.close(); } catch {}
+        try { connection.close(); } catch {}
+    }
+
+    return result;
+}
+
+const toArray = (lockTokens: string[] | string) => Array.isArray(lockTokens) ? lockTokens : [lockTokens];
+
 /**
  * Complete (delete) locked messages by lock tokens
  * @param lockTokens - Array of lock tokens from receiveAndLock
  */
 export async function complete(lockTokens: string[] | string): Promise<BatchOperationResult> {
-    const tokens = Array.isArray(lockTokens) ? lockTokens : [lockTokens];
-    console.log(`[ServiceBusAPI] complete called for ${tokens.length} tokens`);
-    const result: BatchOperationResult = {
-        successCount: 0,
-        failureCount: 0,
-        errors: []
-    };
-
-    const receiversToClose = new Set<any>();
-    const connectionsToClose = new Set<any>();
-
-    for (const lockToken of tokens) {
-        try {
-            const handle = messageHandles.get(lockToken);
-            if (!handle) {
-                console.error(`[ServiceBusAPI] Lock token ${lockToken} not found in messageHandles Map (size: ${messageHandles.size})`);
-                throw new Error('Message not found or lock expired');
-            }
-
-            if (handle.isManagementLock) {
-                const connection = new ServiceBusConnection(handle.namespace, handle.token);
-                await connection.connect();
-                await connection.authenticateCBS(handle.entityPath);
-                const managementClient = new ManagementClient(connection, handle.entityPath);
-                await managementClient.open();
-                await managementClient.updateDisposition([lockToken], 'completed');
-                await managementClient.close();
-                await connection.close();
-                messageHandles.delete(lockToken);
-                result.successCount++;
-                continue;
-            }
-
-            // Accept the delivery (complete/delete)
-            handle.delivery.accept();
-
-            // Cleanup
-            if (!handle.isManagementLock) {
-                receiversToClose.add(handle.receiver);
-                connectionsToClose.add(handle.connection);
-            }
-            messageHandles.delete(lockToken);
-
-            result.successCount++;
-        } catch (err) {
-            result.failureCount++;
-            result.errors.push({
-                messageId: lockToken,
-                error: (err as Error).message
-            });
-        }
-    }
-
-    // Close standard handles that were settled
-    for (const receiver of receiversToClose) {
-        try { receiver.close(); } catch {}
-    }
-    for (const connection of connectionsToClose) {
-        try { connection.close(); } catch {}
-    }
-
-    return result;
+    return settleLocked(toArray(lockTokens).map(t => [t, accept]));
 }
 
 /**
@@ -350,67 +331,7 @@ export async function complete(lockTokens: string[] | string): Promise<BatchOper
  * @param lockTokens - Array of lock tokens from receiveAndLock
  */
 export async function abandon(lockTokens: string[] | string): Promise<BatchOperationResult> {
-    const tokens = Array.isArray(lockTokens) ? lockTokens : [lockTokens];
-    console.log(`[ServiceBusAPI] abandon called for ${tokens.length} tokens`);
-    const result: BatchOperationResult = {
-        successCount: 0,
-        failureCount: 0,
-        errors: []
-    };
-
-    const receiversToClose = new Set<any>();
-    const connectionsToClose = new Set<any>();
-
-    for (const lockToken of tokens) {
-        try {
-            const handle = messageHandles.get(lockToken);
-            if (!handle) {
-                throw new Error('Message not found or lock expired');
-            }
-
-            if (handle.isManagementLock) {
-                const connection = new ServiceBusConnection(handle.namespace, handle.token);
-                await connection.connect();
-                await connection.authenticateCBS(handle.entityPath);
-                const managementClient = new ManagementClient(connection, handle.entityPath);
-                await managementClient.open();
-                await managementClient.updateDisposition([lockToken], 'abandoned');
-                await managementClient.close();
-                await connection.close();
-                messageHandles.delete(lockToken);
-                result.successCount++;
-                continue;
-            }
-
-            // Release the message (abandon)
-            handle.delivery.release();
-
-            // Cleanup
-            if (!handle.isManagementLock) {
-                receiversToClose.add(handle.receiver);
-                connectionsToClose.add(handle.connection);
-            }
-            messageHandles.delete(lockToken);
-
-            result.successCount++;
-        } catch (err) {
-            result.failureCount++;
-            result.errors.push({
-                messageId: lockToken,
-                error: (err as Error).message
-            });
-        }
-    }
-
-    // Close standard handles that were settled
-    for (const receiver of receiversToClose) {
-        try { receiver.close(); } catch {}
-    }
-    for (const connection of connectionsToClose) {
-        try { connection.close(); } catch {}
-    }
-
-    return result;
+    return settleLocked(toArray(lockTokens).map(t => [t, release]));
 }
 
 /**
@@ -421,74 +342,78 @@ export async function deadLetter(
     lockTokens: string[] | string,
     options: DeadLetterOptions = {}
 ): Promise<BatchOperationResult> {
-    const tokens = Array.isArray(lockTokens) ? lockTokens : [lockTokens];
-    console.log(`[ServiceBusAPI] deadLetter called for ${tokens.length} tokens`);
-    const result: BatchOperationResult = {
-        successCount: 0,
-        failureCount: 0,
-        errors: []
-    };
+    const settle = deadLetterWith(options);
+    return settleLocked(toArray(lockTokens).map(t => [t, settle]));
+}
 
-    const receiversToClose = new Set<any>();
-    const connectionsToClose = new Set<any>();
+export interface SettleBySequenceResult {
+    /** Sequence numbers that were completed or dead-lettered. */
+    settled: number[];
+    /** Requested sequence numbers that were not found among the locked messages. */
+    notFound: number[];
+}
 
-    for (const lockToken of tokens) {
-        try {
-            const handle = messageHandles.get(lockToken);
-            if (!handle) {
-                throw new Error('Message not found or lock expired');
-            }
+/**
+ * Completes (deletes) or dead-letters specific messages by sequence number.
+ *
+ * Service Bus only receives *deferred* messages by sequence number, so this locks messages
+ * from the head of the entity up to the highest requested one, settles the requested ones and
+ * releases the rest. Releasing returns those messages to the entity.
+ */
+export async function settleBySequence(
+    namespace: string,
+    entityPath: string,
+    token: string,
+    sequenceNumbers: number[],
+    action: 'complete' | 'deadLetter',
+    deadLetterOptions: DeadLetterOptions = {},
+    sessionId?: string
+): Promise<SettleBySequenceResult> {
+    const targets = new Set(sequenceNumbers);
+    const ahead = await countMessagesThrough(namespace, entityPath, token, Math.max(...sequenceNumbers));
+    if (ahead === 0) {
+        return { settled: [], notFound: [...sequenceNumbers] };
+    }
+    const locked = await receiveAndLockMessages(
+        namespace, entityPath, token, 30, Math.max(ahead, sequenceNumbers.length), sessionId
+    );
 
-            if (handle.isManagementLock) {
-                const connection = new ServiceBusConnection(handle.namespace, handle.token);
-                await connection.connect();
-                await connection.authenticateCBS(handle.entityPath);
-                const managementClient = new ManagementClient(connection, handle.entityPath);
-                await managementClient.open();
-                await managementClient.updateDisposition([lockToken], 'suspended', options.deadLetterReason, options.deadLetterErrorDescription);
-                await managementClient.close();
-                await connection.close();
-                messageHandles.delete(lockToken);
-                result.successCount++;
-                continue;
-            }
+    const settleMatch = action === 'complete' ? accept : deadLetterWith(deadLetterOptions);
+    const isTarget = (m: LockedMessage) => m.sequenceNumber !== undefined && targets.has(m.sequenceNumber);
+    const result = settleLocked(locked.map(m => [m.lockToken, isTarget(m) ? settleMatch : release]));
 
-            // Reject the delivery to move to DLQ with error info
-            handle.delivery.reject({
-                condition: 'com.microsoft:dead-letter',
-                description: options.deadLetterErrorDescription || 'Manual dead letter from browser',
-                info: {
-                    'DeadLetterReason': options.deadLetterReason || 'Manual dead letter',
-                    'DeadLetterErrorDescription': options.deadLetterErrorDescription || 'Manual dead letter from browser'
-                }
-            });
+    const failed = new Set(result.errors.map(e => e.messageId));
+    const settled = locked.filter(m => isTarget(m) && !failed.has(m.lockToken)).map(m => m.sequenceNumber!);
+    const settledSet = new Set(settled);
+    return { settled, notFound: sequenceNumbers.filter(s => !settledSet.has(s)) };
+}
 
-            // Cleanup
-            if (!handle.isManagementLock) {
-                receiversToClose.add(handle.receiver);
-                connectionsToClose.add(handle.connection);
-            }
-            messageHandles.delete(lockToken);
+/** Number of messages from the head of the entity up to and including maxSequence. */
+async function countMessagesThrough(namespace: string, entityPath: string, token: string, maxSequence: number): Promise<number> {
+    const connection = new ServiceBusConnection(namespace, token);
+    try {
+        await connection.connect();
+        await connection.authenticateCBS(entityPath);
+        const managementClient = new ManagementClient(connection, entityPath);
+        await managementClient.open();
 
-            result.successCount++;
-        } catch (err) {
-            result.failureCount++;
-            result.errors.push({
-                messageId: lockToken,
-                error: (err as Error).message
-            });
+        let count = 0;
+        let from = 0;
+        while (true) {
+            const batch = (await managementClient.peekMessages(from, 250)).map(parseServiceBusMessage);
+            if (batch.length === 0) break;
+
+            count += batch.filter(m => (m.sequenceNumber ?? 0) <= maxSequence).length;
+            const last = batch[batch.length - 1].sequenceNumber ?? 0;
+            if (last >= maxSequence) break;
+            from = last + 1;
         }
-    }
 
-    // Close standard handles that were settled
-    for (const receiver of receiversToClose) {
-        try { receiver.close(); } catch {}
+        managementClient.close();
+        return count;
+    } finally {
+        connection.close();
     }
-    for (const connection of connectionsToClose) {
-        try { connection.close(); } catch {}
-    }
-
-    return result;
 }
 
 /**

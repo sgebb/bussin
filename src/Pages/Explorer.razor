@@ -1,6 +1,5 @@
 @page "/explorer"
 @using Microsoft.AspNetCore.Authorization
-@using Azure.Core
 @inject EntitySelectionState SelectionState
 @inject MessageListState MessageListState
 @inject PeekService PeekService
@@ -646,8 +645,7 @@
 
             // Get token for the subscription path
             string entityPath = $"{topicName}/subscriptions/{subscriptionName}";
-            string? token = await PeekService.GetTokenAsync(entityPath);
-            if (string.IsNullOrEmpty(token)) return;
+            var token = await PeekService.GetTokenAsync(entityPath);
 
             if (SelectionState.State.SelectedTopicName != topicName) return;
 

@@ -1,4 +1,3 @@
-using Azure.Core;
 using Bussin.Models;
 using System.Runtime.CompilerServices;
 
@@ -35,7 +34,7 @@ public class DemoAzureResourceService : IAzureResourceService
         };
     }
 
-    public async IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(TokenCredential credential, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusNamespaceInfo> ListServiceBusNamespacesAsync(ArmToken credential, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await _demoJsService.InitializeAsync();
         foreach (var ns in _namespaces)
@@ -46,7 +45,7 @@ public class DemoAzureResourceService : IAzureResourceService
         await Task.CompletedTask;
     }
 
-    public async IAsyncEnumerable<ServiceBusQueueInfo> ListQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusQueueInfo> ListQueuesAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested) yield break;
         if (namespaceInfo.Name == "bussin-demo-prod")
@@ -74,7 +73,7 @@ public class DemoAzureResourceService : IAzureResourceService
         };
     }
 
-    public async IAsyncEnumerable<ServiceBusTopicInfo> ListTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, [EnumeratorCancellation]CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusTopicInfo> ListTopicsAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, [EnumeratorCancellation]CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested) yield break;
         if (namespaceInfo.Name == "bussin-demo-prod")
@@ -89,7 +88,7 @@ public class DemoAzureResourceService : IAzureResourceService
         await Task.CompletedTask;
     }
 
-    public async IAsyncEnumerable<ServiceBusSubscriptionInfo> ListSubscriptionsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ServiceBusSubscriptionInfo> ListSubscriptionsAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, string topicName, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested) yield break;
         if (namespaceInfo.Name == "bussin-demo-prod" && topicName == "order-events")
@@ -119,7 +118,7 @@ public class DemoAzureResourceService : IAzureResourceService
         };
     }
 
-    public async IAsyncEnumerable<TenantInfo> ListTenantsAsync(TokenCredential credential, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<TenantInfo> ListTenantsAsync(ArmToken credential, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield return new TenantInfo { TenantId = "demo-tenant-id", DisplayName = "Demo Tenant", DefaultDomain = "demo.onmicrosoft.com", TenantType = "Demo" };
         await Task.CompletedTask;

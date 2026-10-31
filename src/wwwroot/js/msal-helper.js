@@ -106,35 +106,13 @@ window.msalHelper = {
     },
 
     // Returns { token, expiresOn } or { problem, message }.
-    acquireTokenSilent: async function (scope, tenantId) {
-        await ready;
-        try {
-            const home = homeAccount();
-            if (!home) {
-                return { problem: 'SignInRequired', message: 'Not signed in.' };
-            }
-
-            const request = {
-                scopes: [scope],
-                account: (tenantId && msalInstance.getAllAccounts().find(a => sameTenant(a.tenantId, tenantId))) || home,
-                authority: authorityFor(tenantId)
-            };
-
-            let response = await msalInstance.acquireTokenSilent(request);
-
-            // Until the user has an account entry for a guest tenant, the cache lookup goes through the home
-            // account and can return a home-tenant token. Skip the cache to get one from the requested tenant.
-            if (tenantId && !sameTenant(response.tenantId, tenantId)) {
-                response = await msalInstance.acquireTokenSilent({ ...request, forceRefresh: true });
-                if (!sameTenant(response.tenantId, tenantId)) {
-                    return { problem: 'SignInRequired', message: `Got a token for tenant ${response.tenantId} instead of ${tenantId}.` };
-                }
-            }
-
-            return { token: response.accessToken, expiresOn: response.expiresOn?.toISOString() };
-        } catch (error) {
-            return toProblem(error);
-        }
+    // Requests run one at a time: when cached tokens have expired, parallel requests each start their own
+    // hidden-iframe renewal, which can time out (monitor_window_timeout) and look like a lost sign-in.
+    // In sequence, the first renewal refreshes the cache and the rest are answered from it.
+    acquireTokenSilent: function (scope, tenantId) {
+        const next = silentQueue.then(() => acquireTokenSilentNow(scope, tenantId));
+        silentQueue = next;
+        return next;
     },
 
     // One popup that signs the user in again if needed and asks consent for `scope` and `extraScopesToConsent`
@@ -194,3 +172,37 @@ window.msalHelper = {
         return returnUrl;
     }
 };
+
+// Never rejects: failures come back as { problem, message }, so one failed request can't stall the queue.
+let silentQueue = Promise.resolve();
+
+async function acquireTokenSilentNow(scope, tenantId) {
+    await ready;
+    try {
+        const home = homeAccount();
+        if (!home) {
+            return { problem: 'SignInRequired', message: 'Not signed in.' };
+        }
+
+        const request = {
+            scopes: [scope],
+            account: (tenantId && msalInstance.getAllAccounts().find(a => sameTenant(a.tenantId, tenantId))) || home,
+            authority: authorityFor(tenantId)
+        };
+
+        let response = await msalInstance.acquireTokenSilent(request);
+
+        // Until the user has an account entry for a guest tenant, the cache lookup goes through the home
+        // account and can return a home-tenant token. Skip the cache to get one from the requested tenant.
+        if (tenantId && !sameTenant(response.tenantId, tenantId)) {
+            response = await msalInstance.acquireTokenSilent({ ...request, forceRefresh: true });
+            if (!sameTenant(response.tenantId, tenantId)) {
+                return { problem: 'SignInRequired', message: `Got a token for tenant ${response.tenantId} instead of ${tenantId}.` };
+            }
+        }
+
+        return { token: response.accessToken, expiresOn: response.expiresOn?.toISOString() };
+    } catch (error) {
+        return toProblem(error);
+    }
+}

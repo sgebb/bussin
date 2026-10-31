@@ -63,30 +63,12 @@ public sealed class BackgroundSearchService : IDisposable
         _ = Task.Run(async () =>
         {
             using var scope = _scopeFactory.CreateScope();
-            var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
             var jsInterop = scope.ServiceProvider.GetRequiredService<IServiceBusJsInteropService>();
             var notificationId = $"search-{operationId}";
             
             try
             {
-                var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
-                await navState.InitializeAsync();
-                var connection = navState.GetNamespaceConnection(options.NamespaceName);
-                string? token;
-                
-                if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
-                {
-                    token = ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, options.EntityPath, TimeSpan.FromHours(2));
-                }
-                else
-                {
-                    token = await authService.GetServiceBusTokenAsync();
-                }
-                
-                if (string.IsNullOrEmpty(token))
-                {
-                    throw new Exception("Service Bus token not available");
-                }
+                var token = await scope.ServiceProvider.GetRequiredService<ServiceBusTokenProvider>().GetTokenAsync(options.NamespaceName, options.EntityPath);
                 
                 var callback = new SearchProgressCallback((scanned, matches, newSequenceNumbers) =>
                 {
@@ -142,28 +124,33 @@ public sealed class BackgroundSearchService : IDisposable
                     operation.Controller = controller;
                     
                     // Wait for completion
-                    var finalResult = await jsInterop.JSRuntime.InvokeAsync<SearchResult>("awaitControllerPromise", controller);
+                    var finalResult = await jsInterop.AwaitControllerAsync<SearchResult>(controller);
                     
                     operation.MessagesScanned = finalResult.ScannedCount;
                     operation.MatchCount = finalResult.MatchCount;
                     operation.MatchingSequenceNumbers = finalResult.MatchingSequenceNumbers.ToList();
-                    operation.Status = SearchStatus.Completed;
                     operation.EndTime = DateTime.Now;
-                    
-                    _notificationService.NotifySuccess(
-                        $"Search complete: Found {finalResult.MatchCount:N0} matches in {finalResult.ScannedCount:N0} messages", 
-                        notificationId);
+
+                    // A stopped search resolves with what it found so far
+                    if (operation.Status == SearchStatus.Stopping)
+                    {
+                        operation.Status = SearchStatus.Cancelled;
+                        _notificationService.NotifyInfo(
+                            $"Search stopped: {finalResult.MatchCount:N0} matches in the {finalResult.ScannedCount:N0} messages scanned",
+                            notificationId);
+                    }
+                    else
+                    {
+                        operation.Status = SearchStatus.Completed;
+                        _notificationService.NotifySuccess(
+                            $"Search complete: Found {finalResult.MatchCount:N0} matches in {finalResult.ScannedCount:N0} messages",
+                            notificationId);
+                    }
                 }
                 else
                 {
                     throw new Exception("Failed to start search - controller is null");
                 }
-            }
-            catch (TaskCanceledException)
-            {
-                operation.Status = SearchStatus.Cancelled;
-                operation.EndTime = DateTime.Now;
-                _notificationService.NotifyInfo($"Search cancelled for {options.EntityPath}", notificationId);
             }
             catch (Exception ex)
             {

@@ -1,4 +1,3 @@
-using Azure.Core;
 using Bussin.Models;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
@@ -87,10 +86,10 @@ public sealed class AuthenticationService(
         return prefs.SelectedTenantId;
     }
 
-    public async Task<TokenCredential?> GetTokenCredentialAsync() =>
+    public async Task<ArmToken?> GetTokenCredentialAsync() =>
         ToCredential(await AcquireTokenSilentAsync(ArmScope, await GetCurrentTenantIdAsync()));
 
-    public async Task<TokenCredential?> GetHomeTokenCredentialAsync() =>
+    public async Task<ArmToken?> GetHomeTokenCredentialAsync() =>
         ToCredential(await AcquireTokenSilentAsync(ArmScope, tenantId: null));
 
     public async Task<string?> GetServiceBusTokenAsync() =>
@@ -138,8 +137,8 @@ public sealed class AuthenticationService(
         }
     }
 
-    private static TokenCredential? ToCredential(SilentTokenResult result) =>
-        result.Token is null ? null : new AccessTokenCredential(result.Token, result.ExpiresOn);
+    private static ArmToken? ToCredential(SilentTokenResult result) =>
+        result.Token is null ? null : new ArmToken(result.Token, result.ExpiresOn ?? DateTimeOffset.UtcNow.AddHours(1));
 
     // Shape returned by msalHelper.acquireTokenSilent: either Token, or Problem (an AccessProblem name) and Message.
     private sealed record SilentTokenResult(string? Token, DateTimeOffset? ExpiresOn, string? Problem, string? Message)
@@ -148,13 +147,4 @@ public sealed class AuthenticationService(
             : Enum.TryParse<AccessProblem>(Problem, out var problem) ? problem
             : AccessProblem.Failed;
     }
-}
-
-internal sealed class AccessTokenCredential(string token, DateTimeOffset? expiresOn = null) : TokenCredential
-{
-    private readonly DateTimeOffset _expiresOn = expiresOn ?? DateTimeOffset.UtcNow.AddHours(1);
-    public override Azure.Core.AccessToken GetToken(Azure.Core.TokenRequestContext requestContext, CancellationToken cancellationToken)
-        => new Azure.Core.AccessToken(token, _expiresOn);
-    public override ValueTask<Azure.Core.AccessToken> GetTokenAsync(Azure.Core.TokenRequestContext requestContext, CancellationToken cancellationToken)
-        => new ValueTask<Azure.Core.AccessToken>(new Azure.Core.AccessToken(token, _expiresOn));
 }

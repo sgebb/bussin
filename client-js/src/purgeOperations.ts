@@ -1,7 +1,10 @@
 import { ServiceBusConnection } from './connection.js';
 import { ManagementClient } from './managementClient.js';
 import { MessageReceiver } from './messageReceiver.js';
+import { parseServiceBusMessage } from './messageParser.js';
 import { formatAmqpError } from './types.js';
+import { settleBySequence } from './peekOperations.js';
+import type { SettleBySequenceResult } from './peekOperations.js';
 import type { ProgressCallback, PurgeController } from './types.js';
 
 /**
@@ -38,7 +41,22 @@ export async function purgeSubscription(
     return await purgeEntity(namespace, entityPath, token, onProgress, requiresSession);
 }
 
-// Internal implementation - OPTIMIZED VERSION
+// Batch delete accepts at most 4000 messages per request on Premium and 500 on Standard. The smaller size is
+// tried before falling back to receivers, and is kept for the rest of the purge.
+const BATCH_DELETE_SIZES = [4000, 500];
+const PARALLEL_RECEIVERS = 4;
+const RECEIVER_BATCH_SIZE = 2000;
+const MAX_THROTTLE_RETRIES = 8;
+
+function isThrottled(err: unknown): boolean {
+    return /server-busy|serverbusy|throttl|\b503\b/i.test((err as Error)?.message ?? String(err));
+}
+
+function isBatchTooLarge(err: unknown): boolean {
+    return /argument-out-of-range/i.test((err as Error)?.message ?? String(err));
+}
+
+// Internal implementation
 async function purgeEntity(
     namespace: string,
     entityPath: string,
@@ -49,316 +67,293 @@ async function purgeEntity(
     const connection = new ServiceBusConnection(namespace, token);
     let isRunning = true;
     let deletedCount = 0;
+    // Messages that arrive while the purge runs are left alone, so a busy producer can't keep it going forever
+    const purgeStartedAt = new Date();
 
     try {
         await connection.connect();
         await connection.authenticateCBS(entityPath);
-
-        const purgePromise = new Promise<number>(async (resolve, reject) => {
-            try {
-                {
-                    console.log('[Purge] Attempting FAST batch delete API (portal method)...');
-
-                    const managementClient = new ManagementClient(connection, entityPath);
-                    await managementClient.open();
-
-                    // Delete in batches of 4000 (Premium tier limit) or 500 (Standard tier)
-                    // Start with 4000 and if it fails, we'll catch and fall back
-                    const batchSize = 4000;
-                    let totalDeleted = 0;
-                    let lastBatchCount = 0;
-
-                    do {
-                        if (!isRunning) break;
-
-                        try {
-                            lastBatchCount = await managementClient.purgeMessages(batchSize);
-                            totalDeleted += lastBatchCount;
-                            deletedCount = totalDeleted;
-
-                            if (onProgress && lastBatchCount > 0) {
-                                onProgress(totalDeleted);
-                            }
-
-                            console.log(`[Purge] Batch delete: ${lastBatchCount} messages (total: ${totalDeleted})`);
-
-                            // If we got less than batch size, we're done
-                            if (lastBatchCount < batchSize) {
-                                break;
-                            }
-                        } catch (batchErr: any) {
-                            // If batch delete is not supported or fails, fall back to parallel receivers
-                            console.log(`[Purge] Batch delete failed (${batchErr.message}), falling back to parallel receivers...`);
-                            managementClient.close();
-
-                            // Fall through to Strategy 2
-                            throw new Error('FALLBACK_TO_PARALLEL');
-                        }
-                    } while (isRunning && lastBatchCount > 0);
-
-                    managementClient.close();
-                    connection.close();
-                    resolve(totalDeleted);
-                    return;
-                }
-            } catch (err: any) {
-                if (err.message === 'FALLBACK_TO_PARALLEL') {
-                    console.log('[Purge] Using parallel receiver strategy...');
-                } else {
-                    throw err;
-                }
-            }
-
-            const isSessionEnabled = requiresSession;
-
-            if (isSessionEnabled) {
-                console.log('[Purge] Queue requires sessions, starting session-based purge loop...');
-                // Session-based purge: lock next-available session, receive & delete, repeat
-                let consecutiveEmptySessions = 0;
-                const maxEmptySessions = 3; // Stop after 3 consecutive attempts yielding 0 messages
-                
-                const sessionConn = new ServiceBusConnection(namespace, token);
-                try {
-                    await sessionConn.connect();
-                    await sessionConn.authenticateCBS(entityPath);
-                    
-                    while (isRunning && consecutiveEmptySessions < maxEmptySessions) {
-                        const sessionDeleted = await new Promise<number>((resolveSession, rejectSession) => {
-                            let messagesInSession = 0;
-                            let sessionTimeout: NodeJS.Timeout | null = null;
-                            let timedOut = false;
-                            
-                            const source = {
-                                address: entityPath,
-                                filter: {
-                                    'com.microsoft:session-filter': null // next available
-                                }
-                            };
-                            
-                            const rx = sessionConn.connection!.open_receiver({
-                                source: source,
-                                credit_window: 0,
-                                autoaccept: true,
-                                rcv_settle_mode: 0 // Receive and Delete
-                            });
-                            
-                            const closeAndResolve = () => {
-                                if (timedOut) return;
-                                timedOut = true;
-                                if (sessionTimeout) clearTimeout(sessionTimeout);
-                                rx.close();
-                                resolveSession(messagesInSession);
-                            };
-                            
-                            rx.on('message', () => {
-                                if (sessionTimeout) {
-                                    clearTimeout(sessionTimeout);
-                                    sessionTimeout = null;
-                                }
-                                messagesInSession++;
-                                deletedCount++;
-                                if (onProgress) {
-                                    onProgress(deletedCount);
-                                }
-                                
-                                rx.add_credit(1);
-                                sessionTimeout = setTimeout(closeAndResolve, 500);
-                            });
-                            
-                            rx.on('receiver_error', (context) => {
-                                if (sessionTimeout) clearTimeout(sessionTimeout);
-                                rx.close();
-                                const err = context.receiver.error ? formatAmqpError(context.receiver.error) : '';
-                                if (err.includes('timeout') || err.includes('Timeout') || err.includes('no-session') || err.includes('No session available')) {
-                                    resolveSession(0);
-                                } else {
-                                    rejectSession(new Error(`Session receiver error: ${err}`));
-                                }
-                            });
-                            
-                            rx.add_credit(1);
-                            sessionTimeout = setTimeout(closeAndResolve, 2000);
-                        });
-                        
-                        if (sessionDeleted > 0) {
-                            consecutiveEmptySessions = 0;
-                            console.log(`[Purge] Drained session: deleted ${sessionDeleted} messages (total: ${deletedCount})`);
-                        } else {
-                            consecutiveEmptySessions++;
-                        }
-                    }
-                } finally {
-                    sessionConn.close();
-                }
-                
-                resolve(deletedCount);
-                return;
-            }
-
-            // Strategy 2: Parallel Receivers (FAST - 4-5x faster than single receiver)
-            const parallelReceivers = 4; // Use 4 parallel receivers for 4x speed
-            const receivers: MessageReceiver[] = [];
-            const receiverPromises: Promise<number>[] = [];
-            const receiverCounts: number[] = new Array(parallelReceivers).fill(0);
-
-            console.log(`[Purge] Starting ${parallelReceivers} parallel receivers...`);
-
-            for (let i = 0; i < parallelReceivers; i++) {
-                // Each receiver needs its own connection for true parallelism
-                const conn = new ServiceBusConnection(namespace, token);
-                await conn.connect();
-                await conn.authenticateCBS(entityPath);
-
-                const receiver = new MessageReceiver(conn, entityPath, {
-                    peekMode: false,  // Receive and delete mode
-                    maxMessages: null,  // Continuous
-                    autoClose: false
-                });
-
-                receivers.push(receiver);
-
-                const receiverPromise = new Promise<number>((resolveReceiver, rejectReceiver) => {
-                    const batchSize = 2000; // 2000 messages per receiver batch
-                    let batchMessages: any[] = [];
-                    let consecutiveEmptyBatches = 0;
-                    const maxEmptyBatches = 3;
-                    let batchTimeout: NodeJS.Timeout | null = null;
-                    let hasReceivedAnyMessages = false;
-
-                    const processBatch = () => {
-                        if (batchMessages.length > 0) {
-                            receiverCounts[i] += batchMessages.length;
-                            deletedCount = receiverCounts.reduce((sum, count) => sum + count, 0);
-
-                            if (onProgress) {
-                                onProgress(deletedCount);
-                            }
-
-                            console.log(`[Purge-R${i}] Deleted ${batchMessages.length} messages (receiver total: ${receiverCounts[i]}, global: ${deletedCount})`);
-                            batchMessages = [];
-                            consecutiveEmptyBatches = 0;
-                        } else {
-                            consecutiveEmptyBatches++;
-                        }
-
-                        if (!isRunning || consecutiveEmptyBatches >= maxEmptyBatches) {
-                            receiver.close();
-                            conn.close();
-                            resolveReceiver(receiverCounts[i]);
-                        } else {
-                            // Request next batch
-                            receiver.add_credit(batchSize);
-
-                            // Set timeout - shorter if we've seen messages
-                            const timeout = !hasReceivedAnyMessages ? 1000 : (consecutiveEmptyBatches > 0 ? 1500 : 300);
-                            batchTimeout = setTimeout(() => {
-                                processBatch();
-                            }, timeout);
-                        }
-                    };
-
-                    receiver.receive(
-                        (message: any) => {
-                            if (batchTimeout) {
-                                clearTimeout(batchTimeout);
-                                batchTimeout = null;
-                            }
-
-                            batchMessages.push(message);
-                            hasReceivedAnyMessages = true;
-
-                            // If we hit batch size, process immediately
-                            if (batchMessages.length >= batchSize) {
-                                receiverCounts[i] += batchMessages.length;
-                                deletedCount = receiverCounts.reduce((sum, count) => sum + count, 0);
-
-                                if (onProgress) {
-                                    onProgress(deletedCount);
-                                }
-
-                                batchMessages = [];
-                                consecutiveEmptyBatches = 0;
-
-                                if (isRunning) {
-                                    receiver.add_credit(batchSize);
-                                }
-                            } else {
-                                // Set short timeout for partial batch
-                                if (batchTimeout) clearTimeout(batchTimeout);
-                                batchTimeout = setTimeout(() => {
-                                    processBatch();
-                                }, 50);
-                            }
-                        },
-                        (error: any) => {
-                            if (batchTimeout) {
-                                clearTimeout(batchTimeout);
-                            }
-                            receiver.close();
-                            conn.close();
-
-                            let errorMsg = 'Unknown error';
-                            if (error) {
-                                if (typeof error === 'string') {
-                                    errorMsg = error;
-                                } else if (error.message) {
-                                    errorMsg = error.message;
-                                } else if (error.description) {
-                                    errorMsg = error.description;
-                                } else if (error.condition) {
-                                    errorMsg = error.condition;
-                                } else if (error.toString && error.toString() !== '[object Object]') {
-                                    errorMsg = error.toString();
-                                }
-                            }
-
-                            rejectReceiver(new Error(`Purge failed: ${errorMsg}`));
-                        }
-                    );
-
-                    // Start receiving first batch
-                    receiver.add_credit(batchSize);
-
-                    // Set initial timeout
-                    batchTimeout = setTimeout(() => {
-                        processBatch();
-                    }, 1000);
-                });
-
-                receiverPromises.push(receiverPromise);
-            }
-
-            // Wait for all receivers to complete
-            try {
-                await Promise.all(receiverPromises);
-                const totalDeleted = receiverCounts.reduce((sum, count) => sum + count, 0);
-                console.log(`[Purge] All receivers complete. Total deleted: ${totalDeleted}`);
-                resolve(totalDeleted);
-            } catch (err) {
-                // Clean up any remaining receivers
-                receivers.forEach((r, idx) => {
-                    try {
-                        r.close();
-                    } catch { }
-                });
-                reject(err);
-            } finally {
-                connection.close();
-            }
-        });
-
-        return {
-            promise: purgePromise,
-            stop: () => {
-                isRunning = false;
-                return deletedCount;
-            },
-            getCount: () => deletedCount
-        };
     } catch (err) {
         connection.close();
         throw new Error(`Failed to start purge: ${(err as Error).message}`);
     }
+
+    const report = (count: number) => {
+        deletedCount += count;
+        if (onProgress && count > 0) {
+            onProgress(deletedCount);
+        }
+    };
+
+    const sleepWhileRunning = async (ms: number) => {
+        const until = Date.now() + ms;
+        while (isRunning && Date.now() < until) {
+            await new Promise(r => setTimeout(r, Math.min(250, until - Date.now())));
+        }
+    };
+
+    // A busy namespace (shared Standard tier especially) answers with ServerBusy: back off and retry
+    // instead of failing. Returns 0 if the purge is stopped while waiting.
+    const retryThrottled = async (op: () => Promise<number>): Promise<number> => {
+        for (let failures = 0; ;) {
+            const countBefore = deletedCount;
+            try {
+                return await op();
+            } catch (err) {
+                if (!isThrottled(err)) throw err;
+                if (deletedCount > countBefore) failures = 0;
+                if (++failures > MAX_THROTTLE_RETRIES) {
+                    throw new Error(`Namespace kept throttling after ${MAX_THROTTLE_RETRIES} retries: ${(err as Error).message}`);
+                }
+                const delay = Math.min(1000 * 2 ** (failures - 1), 30000);
+                console.log(`[Purge] Namespace is throttling, retrying in ${delay}ms (${(err as Error).message})`);
+                await sleepWhileRunning(delay);
+                if (!isRunning) return 0;
+            }
+        }
+    };
+
+    // Server-side batch delete (what the Azure Portal uses). Returns false if the entity rejects it,
+    // for example a partitioned entity, which batch delete does not support.
+    const purgeWithBatchDelete = async (): Promise<boolean> => {
+        const managementClient = new ManagementClient(connection, entityPath);
+        await managementClient.open();
+        try {
+            let sizeIndex = 0;
+            while (isRunning) {
+                const batchSize = BATCH_DELETE_SIZES[sizeIndex];
+                let count: number;
+                try {
+                    count = await retryThrottled(() => managementClient.batchDeleteMessages(batchSize, purgeStartedAt));
+                } catch (err) {
+                    if (isThrottled(err)) throw err;
+                    // Standard namespaces reject batches above 500 with argument-out-of-range
+                    if (isBatchTooLarge(err) && sizeIndex + 1 < BATCH_DELETE_SIZES.length) {
+                        sizeIndex++;
+                        console.log(`[Purge] This namespace allows smaller batches, deleting ${BATCH_DELETE_SIZES[sizeIndex]} at a time`);
+                        continue;
+                    }
+                    console.log(`[Purge] Batch delete is not available here (${(err as Error).message})`);
+                    return false;
+                }
+                report(count);
+                console.log(`[Purge] Batch delete: ${count} messages (total: ${deletedCount})`);
+                // The service can delete fewer than asked while more remain, so only an empty batch means done
+                if (count === 0) break;
+            }
+            return true;
+        } finally {
+            managementClient.close();
+        }
+    };
+
+    // Lock the next available session and receive-and-delete until it goes quiet. Resolves 0 if no session is available.
+    const drainNextSession = (sessionConn: ServiceBusConnection) => new Promise<number>((resolve, reject) => {
+        let messagesInSession = 0;
+        let sessionTimeout: ReturnType<typeof setTimeout> | null = null;
+        let done = false;
+
+        const rx = sessionConn.connection!.open_receiver({
+            source: {
+                address: entityPath,
+                filter: {
+                    'com.microsoft:session-filter': null // next available
+                }
+            },
+            credit_window: 0,
+            autoaccept: true,
+            rcv_settle_mode: 0 // Receive and Delete
+        });
+
+        const closeAndResolve = () => {
+            if (done) return;
+            done = true;
+            if (sessionTimeout) clearTimeout(sessionTimeout);
+            rx.close();
+            resolve(messagesInSession);
+        };
+
+        rx.on('message', () => {
+            if (sessionTimeout) clearTimeout(sessionTimeout);
+            messagesInSession++;
+            report(1);
+            rx.add_credit(1);
+            sessionTimeout = setTimeout(closeAndResolve, 500);
+        });
+
+        rx.on('receiver_error', (context) => {
+            if (sessionTimeout) clearTimeout(sessionTimeout);
+            done = true;
+            rx.close();
+            const err = context.receiver.error ? formatAmqpError(context.receiver.error) : '';
+            if (err.includes('timeout') || err.includes('Timeout') || err.includes('no-session') || err.includes('No session available')) {
+                resolve(0);
+            } else {
+                reject(new Error(`Session receiver error: ${err}`));
+            }
+        });
+
+        rx.add_credit(1);
+        sessionTimeout = setTimeout(closeAndResolve, 2000);
+    });
+
+    const purgeSessions = async () => {
+        const sessionConn = new ServiceBusConnection(namespace, token);
+        try {
+            await sessionConn.connect();
+            await sessionConn.authenticateCBS(entityPath);
+
+            // Stop after 3 consecutive attempts yielding 0 messages
+            let consecutiveEmptySessions = 0;
+            while (isRunning && consecutiveEmptySessions < 3) {
+                const sessionDeleted = await retryThrottled(() => drainNextSession(sessionConn));
+                if (sessionDeleted > 0) {
+                    consecutiveEmptySessions = 0;
+                    console.log(`[Purge] Drained session: deleted ${sessionDeleted} messages (total: ${deletedCount})`);
+                } else {
+                    consecutiveEmptySessions++;
+                }
+            }
+        } finally {
+            sessionConn.close();
+        }
+    };
+
+    // Receive-and-delete on one connection until 3 consecutive batches come back empty
+    const drainWithReceiver = (conn: ServiceBusConnection, aborted: () => boolean) => new Promise<void>((resolve, reject) => {
+        const receiver = new MessageReceiver(conn, entityPath, {
+            peekMode: false,  // Receive and delete mode
+            maxMessages: null,  // Continuous
+            autoClose: false
+        });
+        let pending = 0;
+        let consecutiveEmptyBatches = 0;
+        let hasReceivedAnyMessages = false;
+        let batchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+        const processBatch = () => {
+            if (pending > 0) {
+                report(pending);
+                pending = 0;
+                consecutiveEmptyBatches = 0;
+            } else {
+                consecutiveEmptyBatches++;
+            }
+
+            if (!isRunning || aborted() || consecutiveEmptyBatches >= 3) {
+                receiver.close();
+                resolve();
+                return;
+            }
+
+            receiver.add_credit(RECEIVER_BATCH_SIZE);
+            // Wait longer for the first messages and once batches start coming back empty
+            const timeout = !hasReceivedAnyMessages ? 1000 : (consecutiveEmptyBatches > 0 ? 1500 : 300);
+            batchTimeout = setTimeout(processBatch, timeout);
+        };
+
+        receiver.receive(
+            () => {
+                if (batchTimeout) clearTimeout(batchTimeout);
+                pending++;
+                hasReceivedAnyMessages = true;
+
+                if (pending >= RECEIVER_BATCH_SIZE) {
+                    report(pending);
+                    pending = 0;
+                    consecutiveEmptyBatches = 0;
+                    if (isRunning) {
+                        receiver.add_credit(RECEIVER_BATCH_SIZE);
+                    }
+                } else {
+                    batchTimeout = setTimeout(processBatch, 50);
+                }
+            },
+            (error: Error) => {
+                if (batchTimeout) clearTimeout(batchTimeout);
+                receiver.close();
+                report(pending); // received in receive-and-delete mode, so already gone
+                pending = 0;
+                reject(new Error(`Purge failed: ${error.message}`));
+            }
+        );
+
+        receiver.add_credit(RECEIVER_BATCH_SIZE);
+        batchTimeout = setTimeout(processBatch, 1000);
+    });
+
+    // Parallel receivers, each on its own connection for true parallelism. Returns the number deleted.
+    const drainWithReceivers = async (): Promise<number> => {
+        const countBefore = deletedCount;
+        const connections: ServiceBusConnection[] = [];
+        let aborted = false;
+        try {
+            for (let i = 0; i < PARALLEL_RECEIVERS; i++) {
+                const conn = new ServiceBusConnection(namespace, token);
+                connections.push(conn);
+                await conn.connect();
+                await conn.authenticateCBS(entityPath);
+            }
+            await Promise.all(connections.map(conn => drainWithReceiver(conn, () => aborted)));
+            return deletedCount - countBefore;
+        } finally {
+            aborted = true;
+            connections.forEach(conn => conn.close());
+        }
+    };
+
+    /** Whether the entity still holds a message that was there when the purge started. */
+    const hasMessagesLeft = async (): Promise<boolean> => {
+        const managementClient = new ManagementClient(connection, entityPath);
+        await managementClient.open();
+        try {
+            const [first] = (await managementClient.peekMessages(0, 1)).map(parseServiceBusMessage);
+            return !!first && (!first.enqueuedTime || new Date(first.enqueuedTime) < purgeStartedAt);
+        } finally {
+            managementClient.close();
+        }
+    };
+
+    // Receivers conclude the entity is empty after a few seconds without messages, which a slow or busy
+    // namespace also causes. Keep draining until a peek confirms nothing from before the purge is left.
+    const purgeWithReceivers = async () => {
+        while (isRunning) {
+            const deleted = await retryThrottled(drainWithReceivers);
+            if (!isRunning || !(await hasMessagesLeft())) return;
+            if (deleted === 0) {
+                throw new Error(`Deleted ${deletedCount} messages, but the rest can't be received: they are scheduled, deferred or locked by another receiver`);
+            }
+            console.log(`[Purge] Messages remain after ${deletedCount} deleted, draining again...`);
+        }
+    };
+
+    const run = async (): Promise<number> => {
+        try {
+            if (await purgeWithBatchDelete()) {
+                return deletedCount;
+            }
+            if (requiresSession) {
+                console.log('[Purge] Falling back to session-by-session receive-and-delete...');
+                await purgeSessions();
+            } else {
+                console.log(`[Purge] Falling back to ${PARALLEL_RECEIVERS} parallel receivers...`);
+                await purgeWithReceivers();
+            }
+            console.log(`[Purge] Complete. Total deleted: ${deletedCount}`);
+            return deletedCount;
+        } finally {
+            connection.close();
+        }
+    };
+
+    return {
+        promise: run(),
+        stop: () => {
+            isRunning = false;
+            return deletedCount;
+        },
+        getCount: () => deletedCount
+    };
 }
 
 /**
@@ -391,7 +386,7 @@ export async function purgeSubscriptionDirect(
 }
 
 /**
- * Delete messages from a queue by sequence numbers (direct, no lock needed)
+ * Delete messages from a queue by sequence numbers
  * @param fromDeadLetter - If true, deletes from the dead letter queue
  */
 export async function deleteQueueMessagesBySequence(
@@ -399,14 +394,15 @@ export async function deleteQueueMessagesBySequence(
     queueName: string,
     token: string,
     sequenceNumbers: number[],
-    fromDeadLetter: boolean = false
-): Promise<void> {
+    fromDeadLetter: boolean = false,
+    sessionId?: string
+): Promise<SettleBySequenceResult> {
     const entityPath = fromDeadLetter ? `${queueName}/$DeadLetterQueue` : queueName;
-    return await deleteMessagesBySequence(namespace, entityPath, token, sequenceNumbers);
+    return await settleBySequence(namespace, entityPath, token, sequenceNumbers, 'complete', {}, sessionId);
 }
 
 /**
- * Delete messages from a subscription by sequence numbers (direct, no lock needed)
+ * Delete messages from a subscription by sequence numbers
  * @param fromDeadLetter - If true, deletes from the dead letter queue
  */
 export async function deleteSubscriptionMessagesBySequence(
@@ -415,41 +411,16 @@ export async function deleteSubscriptionMessagesBySequence(
     subscriptionName: string,
     token: string,
     sequenceNumbers: number[],
-    fromDeadLetter: boolean = false
-): Promise<void> {
+    fromDeadLetter: boolean = false,
+    sessionId?: string
+): Promise<SettleBySequenceResult> {
     const subscriptionPath = `${topicName}/subscriptions/${subscriptionName}`;
     const entityPath = fromDeadLetter ? `${subscriptionPath}/$DeadLetterQueue` : subscriptionPath;
-    return await deleteMessagesBySequence(namespace, entityPath, token, sequenceNumbers);
-}
-
-// Internal implementation
-async function deleteMessagesBySequence(
-    namespace: string,
-    entityPath: string,
-    token: string,
-    sequenceNumbers: number[]
-): Promise<void> {
-    const connection = new ServiceBusConnection(namespace, token);
-
-    try {
-        await connection.connect();
-        await connection.authenticateCBS(entityPath);
-
-        const managementClient = new ManagementClient(connection, entityPath);
-        await managementClient.open();
-
-        await managementClient.receiveAndDeleteBySequenceNumbers(sequenceNumbers);
-
-        managementClient.close();
-        connection.close();
-    } catch (err) {
-        connection.close();
-        throw new Error(`Delete by sequence failed: ${(err as Error).message}`);
-    }
+    return await settleBySequence(namespace, entityPath, token, sequenceNumbers, 'complete', {}, sessionId);
 }
 
 /**
- * Dead letter messages from a queue by sequence numbers (direct, no FIFO lock needed)
+ * Dead letter messages from a queue by sequence numbers
  */
 export async function deadLetterQueueMessagesBySequence(
     namespace: string,
@@ -457,13 +428,15 @@ export async function deadLetterQueueMessagesBySequence(
     token: string,
     sequenceNumbers: number[],
     reason: string = 'Manual dead letter',
-    description: string = 'Moved by user'
-): Promise<void> {
-    return await deadLetterMessagesBySequence(namespace, queueName, token, sequenceNumbers, reason, description);
+    description: string = 'Moved by user',
+    sessionId?: string
+): Promise<SettleBySequenceResult> {
+    return await settleBySequence(namespace, queueName, token, sequenceNumbers, 'deadLetter',
+        { deadLetterReason: reason, deadLetterErrorDescription: description }, sessionId);
 }
 
 /**
- * Dead letter messages from a subscription by sequence numbers (direct, no FIFO lock needed)
+ * Dead letter messages from a subscription by sequence numbers
  */
 export async function deadLetterSubscriptionMessagesBySequence(
     namespace: string,
@@ -472,43 +445,10 @@ export async function deadLetterSubscriptionMessagesBySequence(
     token: string,
     sequenceNumbers: number[],
     reason: string = 'Manual dead letter',
-    description: string = 'Moved by user'
-): Promise<void> {
+    description: string = 'Moved by user',
+    sessionId?: string
+): Promise<SettleBySequenceResult> {
     const subscriptionPath = `${topicName}/subscriptions/${subscriptionName}`;
-    return await deadLetterMessagesBySequence(namespace, subscriptionPath, token, sequenceNumbers, reason, description);
-}
-
-// Internal implementation
-async function deadLetterMessagesBySequence(
-    namespace: string,
-    entityPath: string,
-    token: string,
-    sequenceNumbers: number[],
-    reason: string,
-    description: string
-): Promise<void> {
-    const connection = new ServiceBusConnection(namespace, token);
-
-    try {
-        await connection.connect();
-        await connection.authenticateCBS(entityPath);
-
-        const managementClient = new ManagementClient(connection, entityPath);
-        await managementClient.open();
-
-        // Lock by sequence number (returns lock tokens for exactly those messages)
-        const locked = await managementClient.lockBySequenceNumbers(sequenceNumbers);
-
-        if (locked.length > 0) {
-            // Dead letter using update-disposition
-            const lockTokens = locked.map(l => l.lockToken);
-            await managementClient.updateDisposition(lockTokens, 'suspended', reason, description);
-        }
-
-        managementClient.close();
-        connection.close();
-    } catch (err) {
-        connection.close();
-        throw new Error(`Dead letter by sequence failed: ${(err as Error).message}`);
-    }
+    return await settleBySequence(namespace, subscriptionPath, token, sequenceNumbers, 'deadLetter',
+        { deadLetterReason: reason, deadLetterErrorDescription: description }, sessionId);
 }

@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
-using Azure.Core;
 using Bussin.Models;
 
 namespace Bussin.Services;
@@ -304,10 +303,10 @@ public sealed class EntitySelectionState : IDisposable
         }
     }
 
-    private Task LoadQueuesAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenQueues, CancellationToken ct)
+    private Task LoadQueuesAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenQueues, CancellationToken ct)
         => StreamEntitiesAsync(_resourceService.ListQueuesAsync(credential, namespaceInfo, ct), QueueDict, seenQueues, namespaceInfo, q => q.Name, ct);
 
-    private Task LoadTopicsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenTopics, CancellationToken ct)
+    private Task LoadTopicsAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, HashSet<string> seenTopics, CancellationToken ct)
         => StreamEntitiesAsync(_resourceService.ListTopicsAsync(credential, namespaceInfo, ct), TopicDict, seenTopics, namespaceInfo, t => t.Name, ct);
 
     private async Task StreamEntitiesAsync<T>(

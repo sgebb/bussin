@@ -1,4 +1,3 @@
-using Azure.Core;
 using Bussin.Models;
 
 namespace Bussin.Services.Demo;
@@ -7,17 +6,17 @@ public class DemoMetricsService : IMetricsService
 {
     private readonly Random _random = new();
 
-    public Task<EntityMetrics> GetNamespaceMetricsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, TimeSpan period, CancellationToken cancellationToken = default)
+    public Task<EntityMetrics> GetNamespaceMetricsAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, TimeSpan period, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(CreateRandomMetrics(period));
     }
 
-    public Task<EntityMetrics> GetQueueMetricsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string queueName, TimeSpan period, CancellationToken cancellationToken = default)
+    public Task<EntityMetrics> GetQueueMetricsAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, string queueName, TimeSpan period, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(CreateRandomMetrics(period));
     }
 
-    public Task<EntityMetrics> GetTopicMetricsAsync(TokenCredential credential, ServiceBusNamespaceInfo namespaceInfo, string topicName, TimeSpan period, CancellationToken cancellationToken = default)
+    public Task<EntityMetrics> GetTopicMetricsAsync(ArmToken credential, ServiceBusNamespaceInfo namespaceInfo, string topicName, TimeSpan period, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(CreateRandomMetrics(period));
     }

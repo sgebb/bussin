@@ -15,7 +15,10 @@ public sealed class BackgroundPurgeService : IDisposable
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INotificationService _notificationService;
     
+    /// <summary>An operation started, changed status or was removed.</summary>
     public event Action? OnOperationsChanged;
+    /// <summary>A running operation reported a new count; only progress displays need this.</summary>
+    public event Action? OnProgressChanged;
     public event Action<PurgeOperation>? OnPurgeCompleted;
     
     public IReadOnlyList<PurgeOperation> ActiveOperations => _activeOperations.Values.OrderBy(o => o.StartTime).ToList();
@@ -47,35 +50,17 @@ public sealed class BackgroundPurgeService : IDisposable
         _ = Task.Run(async () =>
         {
             using var scope = _scopeFactory.CreateScope();
-            var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
             var jsInterop = scope.ServiceProvider.GetRequiredService<IServiceBusJsInteropService>();
             var notificationId = $"purge-{operationId}";
             
             try
             {
-                var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
-                await navState.InitializeAsync();
-                var connection = navState.GetNamespaceConnection(namespaceName);
-                string? token;
-                
-                if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
-                {
-                    token = ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, entityPath, TimeSpan.FromHours(2));
-                }
-                else
-                {
-                    token = await authService.GetServiceBusTokenAsync();
-                }
-                
-                if (string.IsNullOrEmpty(token))
-                {
-                    throw new Exception("Service Bus token not available");
-                }
+                var token = await scope.ServiceProvider.GetRequiredService<ServiceBusTokenProvider>().GetTokenAsync(namespaceName, entityPath);
                 
                 var callback = new PurgeProgressCallback(count =>
                 {
                     operation.MessagesDeleted = count;
-                    NotifyChanged();
+                    OnProgressChanged?.Invoke();
                 });
                 
                 using var callbackRef = DotNetObjectReference.Create(callback);
@@ -128,7 +113,7 @@ public sealed class BackgroundPurgeService : IDisposable
                 if (controller != null)
                 {
                     operation.Controller = controller;
-                    var finalCount = await jsInterop.JSRuntime.InvokeAsync<int>("awaitControllerPromise", controller);
+                    var finalCount = await jsInterop.AwaitControllerAsync<int>(controller);
                     operation.MessagesDeleted = finalCount;
                     operation.Status = PurgeStatus.Completed;
                     operation.EndTime = DateTime.Now;

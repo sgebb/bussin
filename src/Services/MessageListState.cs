@@ -35,7 +35,7 @@ public sealed class MessageListState
     public ServiceBusMessage? SelectedMessage { get; set; }
     public bool HasPeeked { get; set; }
     public int PeekCount { get; set; } = DefaultPeekCount;
-    public int PeekFromSequence { get; set; } = (int)DefaultFromSequenceNumber;
+    public long PeekFromSequence { get; set; } = DefaultFromSequenceNumber;
     public PeekOptions? LastPeekOptions { get; set; }
 
     public int NavigatedIndex { get; set; } = -1;
@@ -74,7 +74,7 @@ public sealed class MessageListState
         _filteredCache = null;
         SelectedMessage = null;
         HasPeeked = false;
-        PeekFromSequence = (int)DefaultFromSequenceNumber;
+        PeekFromSequence = DefaultFromSequenceNumber;
         LastPeekOptions = null;
         _searchTerm = "";
         NavigatedIndex = -1;

@@ -99,12 +99,18 @@ interface BussinClient {
 
     deleteQueueMessagesBySequence(
         ns: string, queue: string, token: string, sequenceNumbers: number[], fromDeadLetter?: boolean
-    ): Promise<void>;
+    ): Promise<SettleBySequenceResult>;
 
     deadLetterQueueMessagesBySequence(
         ns: string, queue: string, token: string, sequenceNumbers: number[],
         reason?: string, description?: string
-    ): Promise<void>;
+    ): Promise<SettleBySequenceResult>;
+}
+
+/** Messages are found by locking from the head of the entity, so some requested ones may be missing. */
+export interface SettleBySequenceResult {
+    settled: number[];
+    notFound: number[];
 }
 
 let cached: BussinClient | null = null;

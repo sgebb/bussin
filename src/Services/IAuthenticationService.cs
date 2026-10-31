@@ -1,4 +1,3 @@
-using Azure.Core;
 using Bussin.Models;
 
 namespace Bussin.Services;
@@ -16,9 +15,9 @@ public interface IAuthenticationService
     Task<string?> GetCurrentTenantIdAsync();
 
     /// <summary>Azure Resource Manager token for the selected tenant, or null.</summary>
-    Task<TokenCredential?> GetTokenCredentialAsync();
+    Task<ArmToken?> GetTokenCredentialAsync();
     /// <summary>Azure Resource Manager token for the home tenant, or null.</summary>
-    Task<TokenCredential?> GetHomeTokenCredentialAsync();
+    Task<ArmToken?> GetHomeTokenCredentialAsync();
     /// <summary>Service Bus token for the selected tenant, or null.</summary>
     Task<string?> GetServiceBusTokenAsync();
 

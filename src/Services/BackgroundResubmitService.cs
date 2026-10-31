@@ -15,6 +15,7 @@ public sealed class BackgroundResubmitService : IDisposable
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INotificationService _notificationService;
     
+    /// <summary>An operation started, changed status or was removed.</summary>
     public event Action? OnOperationsChanged;
     public event Action<ResubmitOperation>? OnResubmitCompleted;
 
@@ -49,42 +50,10 @@ public sealed class BackgroundResubmitService : IDisposable
             using var scope = _scopeFactory.CreateScope();
             var operationsService = scope.ServiceProvider.GetRequiredService<IServiceBusOperationsService>();
             var jsInterop = scope.ServiceProvider.GetRequiredService<IServiceBusJsInteropService>();
-            var authService = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
             var notificationId = $"resubmit-{operationId}";
             
             try
             {
-                var navState = scope.ServiceProvider.GetRequiredService<NavigationStateService>();
-                await navState.InitializeAsync();
-                var connection = navState.GetNamespaceConnection(namespaceName);
-                string? token;
-                
-                if (connection != null && !string.IsNullOrEmpty(connection.ConnectionString))
-                {
-                    // For resubmitting from DLQ, the entityPath is queueName/$DeadLetterQueue or subPath/$DeadLetterQueue
-                    var dlqPath = entityPath;
-                    if (entityType == "queue")
-                    {
-                        dlqPath = $"{entityPath}/$DeadLetterQueue";
-                    }
-                    else
-                    {
-                        var parts = entityPath.Split('/');
-                        var subPath = parts.Length >= 3 ? $"{parts[0]}/subscriptions/{parts[2]}" : entityPath;
-                        dlqPath = $"{subPath}/$DeadLetterQueue";
-                    }
-                    token = ServiceBusConnectionStringHelper.GenerateSasToken(connection.ConnectionString, dlqPath, TimeSpan.FromHours(2));
-                }
-                else
-                {
-                    token = await authService.GetServiceBusTokenAsync();
-                }
-                
-                if (string.IsNullOrEmpty(token))
-                {
-                    throw new Exception("Service Bus token not available");
-                }
-                
                 // Parse entity path
                 string? queueName = null;
                 string? topicName = null;
@@ -113,9 +82,14 @@ public sealed class BackgroundResubmitService : IDisposable
                     }
                 }
                 
+                var dlqPath = queueName != null
+                    ? $"{queueName}/$DeadLetterQueue"
+                    : $"{topicName}/subscriptions/{subscriptionName}/$DeadLetterQueue";
+                var token = await scope.ServiceProvider.GetRequiredService<ServiceBusTokenProvider>().GetTokenAsync(namespaceName, dlqPath);
+
                 // Iteratively peek all messages from DLQ and resubmit them
                 const int batchSize = 250;
-                int fromSequence = 0;
+                long fromSequence = 0;
                 int totalResubmitted = 0;
                 bool hasMoreMessages = true;
                 
@@ -159,13 +133,12 @@ public sealed class BackgroundResubmitService : IDisposable
                         
                         totalResubmitted += sequenceNumbers.Length;
                         operation.MessagesResubmitted = totalResubmitted;
-                        NotifyChanged();
                         
                     }
                     
                     // Update sequence for next batch
                     var maxSeq = messages.Max(m => m.SequenceNumber ?? 0);
-                    fromSequence = (int)(maxSeq + 1);
+                    fromSequence = maxSeq + 1;
                     
                     // If we got fewer messages than batch size, we're done
                     if (messages.Count < batchSize)

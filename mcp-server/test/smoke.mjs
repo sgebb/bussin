@@ -163,11 +163,32 @@ console.log('\n=== tool behaviour (simulator) ===');
     r = await s.call('peek_messages', { queue: 'orders', count: 20 });
     check('the sent message appears on the queue', JSON.parse(r.text).returned === 3);
 
+    // orders now holds the two seeded messages plus sent-1; act on the middle one and the last one.
+    const [, middle, last] = JSON.parse(r.text).messages.map(m => m.sequenceNumber);
+
+    r = await s.call('dead_letter_messages', { queue: 'orders', sequenceNumbers: [middle], reason: 'smoke' });
+    const dlq = JSON.parse(r.text);
+    check('dead_letter_messages moves the requested message', !r.isError && dlq.movedToDeadLetter.length === 1 &&
+        dlq.movedToDeadLetter[0] === middle, r.text.slice(0, 120));
+
+    r = await s.call('peek_messages', { queue: 'orders', count: 20, fromDeadLetter: true });
+    check('the dead-lettered message is in the DLQ',
+        JSON.parse(r.text).messages.some(m => m.sequenceNumber === middle));
+
+    r = await s.call('delete_messages', { queue: 'orders', sequenceNumbers: [last, 987654] });
+    const del = JSON.parse(r.text);
+    check('delete_messages deletes the requested message and reports the missing one',
+        !r.isError && del.deleted.length === 1 && del.notFound.length === 1 && del.notFound[0] === 987654,
+        r.text.slice(0, 160));
+
+    r = await s.call('peek_messages', { queue: 'orders', count: 20 });
+    check('only the untouched message is left on the queue', JSON.parse(r.text).returned === 1);
+
     r = await s.call('purge_entity', { queue: 'orders', confirm: 'wrong-name' });
     check('purge refuses a mismatched confirm', r.isError && /Refusing to purge/.test(r.text));
 
     r = await s.call('peek_messages', { queue: 'orders', count: 20 });
-    check('queue is untouched after a refused purge', JSON.parse(r.text).returned === 3);
+    check('queue is untouched after a refused purge', JSON.parse(r.text).returned === 1);
 
     r = await s.call('purge_entity', { queue: 'notifications', confirm: 'notifications' });
     check('purge with the correct confirm runs', !r.isError && JSON.parse(r.text).deletedCount === 2);

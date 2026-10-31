@@ -7,10 +7,6 @@ namespace Bussin.Services;
 /// </summary>
 public interface IServiceBusOperationsService
 {
-    // Peek operations (non-destructive, read-only)
-    Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, int count = 10, bool fromDeadLetter = false);
-    Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, int count = 10, bool fromDeadLetter = false);
-    
     // Send operations
     Task SendQueueMessageAsync(string namespaceName, string queueName, object messageBody, MessageProperties? properties = null);
     Task SendTopicMessageAsync(string namespaceName, string topicName, object messageBody, MessageProperties? properties = null);
@@ -18,10 +14,6 @@ public interface IServiceBusOperationsService
     // Batch Send operations
     Task<BatchOperationResult> SendQueueMessagesBatchAsync(string namespaceName, string queueName, List<object> messages);
     Task<BatchOperationResult> SendTopicMessagesBatchAsync(string namespaceName, string topicName, List<object> messages);
-    
-    // Purge operations
-    Task<int> PurgeQueueAsync(string namespaceName, string queueName, bool fromDeadLetter = false);
-    Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, bool fromDeadLetter = false);
     
     // Lock settlement operations (used by ReceiveAndLockModal)
     Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens);

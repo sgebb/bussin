@@ -4,6 +4,7 @@ using Moq;
 using Xunit;
 using Bussin.Models;
 using Bussin.Services;
+using System.Text.Json;
 
 namespace Bussin.Tests.Simulator;
 
@@ -21,28 +22,17 @@ public class SimulatorTopologyTests
     [Fact]
     public async Task Topic_FanOut_And_DLQ_Isolation_Workflow()
     {
-        // 1. Arrange: Setup Topic with 2 Subscriptions
+        // 1. Arrange
         var ns = "bussin-ns";
         var topic = "orders-topic";
-        var sub1 = "inventory-sub";
-        var sub2 = "billing-sub";
         var message = new { orderId = 123, status = "New" };
         var properties = new MessageProperties { AdditionalProperties = new Dictionary<string, object> { { "Region", "US" } } };
 
-        // 2. Act: Orchestrate the Fan-out simulation
-        await _service.CreateTopic(ns, topic);
-        await _service.CreateSubscription(ns, topic, sub1);
-        await _service.CreateSubscription(ns, topic, sub2);
-        
+        // 2. Act: Send to the topic, which fans out to both subscriptions in the simulator
         await _service.SendTopicMessageAsync(ns, topic, "token", message, properties);
 
-        // 3. Verify: Check that interop called correctly for both fan-out and properties
-        _jsRuntimeMock.Verify(js => js.InvokeAsync<object>(
-            "ServiceBusAPI.seedTopic", 
-            It.Is<object?[]>(args => args.Contains(topic))), 
-            Times.Once);
-
-        _jsRuntimeMock.Verify(js => js.InvokeAsync<object>(
+        // 3. Verify: Check that interop was called with the message and its properties
+        _jsRuntimeMock.Verify(js => js.InvokeAsync<It.IsAnyType>(
             "ServiceBusAPI.sendTopicMessage", 
             It.Is<object?[]>(args => args.Contains(topic) && args.Contains(message))), 
             Times.Once);
@@ -78,11 +68,11 @@ public class SimulatorTopologyTests
         };
 
         // Setup the JS mock to return our message on the first Peek, and empty on the second Peek (after DLQ)
-        _jsRuntimeMock.SetupSequence(js => js.InvokeAsync<List<ServiceBusMessage>>(
+        _jsRuntimeMock.SetupSequence(js => js.InvokeAsync<JsonElement[]>(
             "ServiceBusAPI.peekQueueMessages",
             It.Is<object?[]>(args => args.Contains(queue) && args.Length > 5 && args[5] is bool && Equals(args[5], false)))) // not DLQ
-            .ReturnsAsync(returnedMessages)
-            .ReturnsAsync(new List<ServiceBusMessage>());
+            .ReturnsAsync(AsJson(returnedMessages))
+            .ReturnsAsync([]);
 
         // 2. Act: Send
         await _service.SendQueueMessageAsync(ns, queue, "token", message);
@@ -96,7 +86,7 @@ public class SimulatorTopologyTests
         Assert.Equal(42, peeked[0].SequenceNumber);
 
         // 4. Act: DLQ the peeked message
-        await _service.DeadLetterQueueMessagesBySequenceAsync(ns, queue, "token", new[] { peeked[0].SequenceNumber ?? 0 }, "User Action");
+        await _service.DeadLetterQueueMessagesBySequenceAsync(ns, queue, "token", new[] { peeked[0].SequenceNumber ?? 0 }, "User Action", "Moved by test");
 
         // 5. Act: Peek again (should be empty this time)
         var peekedAfterDlq = await _service.PeekQueueMessagesAsync(ns, queue, "token", 10, 0, false);
@@ -104,12 +94,12 @@ public class SimulatorTopologyTests
         // 6. Verify Interop Workflow
         Assert.Empty(peekedAfterDlq);
 
-        _jsRuntimeMock.Verify(js => js.InvokeAsync<object>(
+        _jsRuntimeMock.Verify(js => js.InvokeAsync<It.IsAnyType>(
             "ServiceBusAPI.sendQueueMessage",
             It.Is<object?[]>(args => args.Contains(queue) && args.Contains(message))),
             Times.Once);
 
-        _jsRuntimeMock.Verify(js => js.InvokeAsync<object>(
+        _jsRuntimeMock.Verify(js => js.InvokeAsync<SettleBySequenceResult>(
             "ServiceBusAPI.deadLetterQueueMessagesBySequence",
             It.Is<object?[]>(args => args.Contains(queue) && args.Length > 3 && (args[3] as long[]) != null && ((long[])args[3]!).Contains(42))),
             Times.Once);
@@ -132,10 +122,10 @@ public class SimulatorTopologyTests
         };
 
         // Mock Peek to return the message in the DLQ
-        _jsRuntimeMock.Setup(js => js.InvokeAsync<List<ServiceBusMessage>>(
+        _jsRuntimeMock.Setup(js => js.InvokeAsync<JsonElement[]>(
             "ServiceBusAPI.peekQueueMessagesBySequence",
             It.Is<object?[]>(args => args.Contains(queue) && args.Length > 4 && args[4] is bool && Equals(args[4], true)))) // is DLQ
-            .ReturnsAsync(new List<ServiceBusMessage> { originalMessage });
+            .ReturnsAsync(AsJson([originalMessage]));
 
         // 2. Act: Run the resubmit operation
         var authMock = new Mock<IAuthenticationService>();
@@ -146,16 +136,15 @@ public class SimulatorTopologyTests
         var navState = new NavigationStateService(prefMock.Object);
         
         var serviceBusOps = new ServiceBusOperationsService(
-            _service, 
-            authMock.Object, 
+            _service,
             new Mock<INotificationService>().Object,
-            navState
+            new ServiceBusTokenProvider(navState, authMock.Object)
         );
         
         await serviceBusOps.ResendQueueMessagesAsync(ns, queue, new[] { 1L }, fromDeadLetter: true, deleteOriginal: false);
 
         // 3. Verify: Check that the sent message contains the preserved properties
-        _jsRuntimeMock.Verify(js => js.InvokeAsync<object>(
+        _jsRuntimeMock.Verify(js => js.InvokeAsync<It.IsAnyType>(
             "ServiceBusAPI.sendQueueMessageBatch",
             It.Is<object?[]>(args => 
                 args.Length > 3 && 
@@ -163,6 +152,10 @@ public class SimulatorTopologyTests
             )),
             Times.Once);
     }
+
+    // The interop service reads messages as raw JSON, the way the browser hands them over
+    private static JsonElement[] AsJson(List<ServiceBusMessage> messages) =>
+        JsonSerializer.SerializeToElement(messages).EnumerateArray().ToArray();
 
     private bool HasSingleResentMessage(object? value, ServiceBusMessage original)
     {

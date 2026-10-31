@@ -6,16 +6,19 @@
 import rhea from 'rhea';
 import type { ServiceBusConnection } from './connection.js';
 import type { Sender, Receiver } from 'rhea';
-import { parseServiceBusMessage } from './messageParser.js';
-import type { LockedMessage } from './types.js';
 import { formatAmqpError } from './types.js';
+
+interface ManagementResponse {
+    statusCode: number;
+    errorCondition?: string;
+    body: any;
+}
 
 /**
  * Management Client - for management operations like true peek
  */
 export class ManagementClient {
     private readonly connection: ServiceBusConnection;
-    private readonly entityPath: string;
     private readonly managementAddress: string;
     private sender: Sender | null = null;
     private receiver: Receiver | null = null;
@@ -24,13 +27,12 @@ export class ManagementClient {
 
     constructor(connection: ServiceBusConnection, entityPath: string, amqpSession?: any) {
         this.connection = connection;
-        this.entityPath = entityPath;
         this.managementAddress = `${entityPath}/$management`;
         this.amqpSession = amqpSession;
     }
 
     /**
-     * Open management sender/receiver
+     * Open management sender/receiver. On failure the links are closed again.
      */
     async open(): Promise<void> {
         if (!this.connection.connection) {
@@ -56,9 +58,20 @@ export class ManagementClient {
 
             let senderOpen = false;
             let receiverOpen = false;
+            let settled = false;
+
+            const fail = (error: Error) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                this.close();
+                reject(error);
+            };
 
             const checkBothOpen = () => {
-                if (senderOpen && receiverOpen) {
+                if (senderOpen && receiverOpen && !settled) {
+                    settled = true;
+                    clearTimeout(timeout);
                     resolve();
                 }
             };
@@ -74,14 +87,63 @@ export class ManagementClient {
             });
 
             sender.on('sender_error', (context: any) => {
-                reject(new Error(context.sender.error ? formatAmqpError(context.sender.error) : 'Sender error'));
+                fail(new Error(context.sender.error ? formatAmqpError(context.sender.error) : 'Sender error'));
             });
 
             receiver.on('receiver_error', (context: any) => {
-                reject(new Error(context.receiver.error ? formatAmqpError(context.receiver.error) : 'Receiver error'));
+                fail(new Error(context.receiver.error ? formatAmqpError(context.receiver.error) : 'Receiver error'));
             });
 
-            setTimeout(() => reject(new Error('Management client open timeout')), 10000);
+            const timeout = setTimeout(() => fail(new Error('Management client open timeout')), 10000);
+        });
+    }
+
+    /**
+     * Sends one request to the $management node and waits for its response.
+     * Resolves with any status in okStatuses; anything else rejects with "<label> failed: ...".
+     */
+    private request(
+        operation: string,
+        body: Record<string, any>,
+        label: string,
+        okStatuses: number[] = [200, 204],
+        timeoutMs: number = 10000
+    ): Promise<ManagementResponse> {
+        if (!this.sender || !this.receiver || !this.replyTo) {
+            return Promise.reject(new Error('Management client not opened'));
+        }
+        const receiver = this.receiver;
+
+        return new Promise((resolve, reject) => {
+            const messageId = `${operation}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+            const responseHandler = (context: any) => {
+                if (context.message.correlation_id !== messageId) return;
+                clearTimeout(timeout);
+                receiver.removeListener('message', responseHandler);
+
+                const props = context.message.application_properties ?? {};
+                if (okStatuses.includes(props.statusCode)) {
+                    resolve({ statusCode: props.statusCode, errorCondition: props.errorCondition, body: context.message.body });
+                } else {
+                    const condition = props.errorCondition ? ` (${props.errorCondition})` : '';
+                    reject(new Error(`${label} failed: ${props.statusCode} - ${props.statusDescription}${condition}`));
+                }
+            };
+
+            receiver.on('message', responseHandler);
+
+            this.sender!.send({
+                body,
+                reply_to: this.replyTo!,
+                application_properties: { operation },
+                message_id: messageId
+            });
+
+            const timeout = setTimeout(() => {
+                receiver.removeListener('message', responseHandler);
+                reject(new Error(`${label} request timeout`));
+            }, timeoutMs);
         });
     }
 
@@ -89,822 +151,188 @@ export class ManagementClient {
      * Peek messages without locking (true peek)
      */
     async peekMessages(fromSequenceNumber: number = 0, messageCount: number = 1, sessionId?: string): Promise<any[]> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
+        const messageBody: Record<string, any> = {
+            'from-sequence-number': rhea.types.wrap_long(fromSequenceNumber),
+            'message-count': rhea.types.wrap_int(messageCount)
+        };
+        if (sessionId) {
+            messageBody['session-id'] = sessionId;
         }
 
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
+        // 204 = No Content (no messages found)
+        const { statusCode, body } = await this.request('com.microsoft:peek-message', messageBody, 'Peek');
+        if (statusCode === 204 || !body?.messages) return [];
 
-            const messageId = `peek-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                // Ensure this response is actually for our specific request
-                if (context.message.correlation_id !== messageId) {
-                    return;
+        // Body is a map with 'messages' key containing array of {message: Buffer}
+        const messages: any[] = [];
+        const msgArray = Array.isArray(body.messages) ? body.messages : [body.messages];
+        for (const item of msgArray) {
+            if (item.message) {
+                // The message is an encoded AMQP message buffer
+                try {
+                    messages.push(decodeEncodedMessage(item.message));
+                } catch (err) {
+                    console.error('Failed to decode message:', err);
                 }
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                // 204 = No Content (no messages found), 200 = Success
-                if (statusCode === 200 || statusCode === 204) {
-                    const body = context.message.body;
-                    let messages: any[] = [];
-
-                    // Status 204 means no messages
-                    if (statusCode === 204) {
-                        resolve([]);
-                        this.receiver!.removeListener('message', responseHandler);
-                        return;
-                    }
-
-                    // Body is a map with 'messages' key containing array of {message: Buffer}
-                    if (body && body.messages) {
-                        const msgArray = Array.isArray(body.messages) ? body.messages : [body.messages];
-
-                        for (const item of msgArray) {
-                            if (item.message) {
-                                // The message is an encoded AMQP message buffer
-                                try {
-                                    const decodedMessage = decodeEncodedMessage(item.message);
-                                    messages.push(decodedMessage);
-                                } catch (err) {
-                                    console.error('Failed to decode message:', err);
-                                }
-                            }
-                        }
-                    }
-
-                    resolve(messages);
-                } else {
-                    reject(new Error(`Peek failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            // Build request body with proper AMQP types
-            const messageBody: Record<string, any> = {};
-            messageBody['from-sequence-number'] = rhea.types.wrap_long(fromSequenceNumber);
-            messageBody['message-count'] = rhea.types.wrap_int(messageCount);
-            if (sessionId) {
-                messageBody['session-id'] = sessionId;
             }
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:peek-message'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            // Timeout
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Peek request timeout'));
-            }, 10000);
-        });
-    }
-
-    /**
-     * Receive and delete messages by sequence numbers (batch operation)
-     * Uses receive-by-sequence-number with receive-and-delete mode
-     */
-    async receiveAndDeleteBySequenceNumbers(sequenceNumbers: number[]): Promise<void> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
         }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `delete-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    resolve();
-                } else {
-                    reject(new Error(`Delete failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            // Build sequence number array as 8-byte big-endian buffers, wrapped as AMQP long array (0x81)
-            const seqNumBuffers = sequenceNumbers.map(seq => longToBytes(seq));
-            const wrappedSeqNums = rhea.types.wrap_array(seqNumBuffers, 0x81, undefined);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['sequence-numbers'] = wrappedSeqNums;
-            messageBody['receiver-settle-mode'] = rhea.types.wrap_uint(0); // 0 = receive-and-delete
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:receive-by-sequence-number'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Delete request timeout'));
-            }, 10000);
-        });
+        return messages;
     }
 
-    /**
-     * Lock messages by sequence numbers (peek-lock mode)
-     * Returns lock tokens that can be used to complete/abandon/dead-letter
-     */
-    async lockBySequenceNumbers(sequenceNumbers: number[]): Promise<LockedMessage[]> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `lock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200) {
-                    // Response body contains messages with lock tokens
-                    const body = context.message.body;
-                    const results: LockedMessage[] = [];
-
-                    if (body && body.messages) {
-                        const msgArray = Array.isArray(body.messages) ? body.messages : [body.messages];
-                        for (let i = 0; i < msgArray.length; i++) {
-                            const item = msgArray[i];
-                            // Lock token is in the 'lock-token' field as a UUID
-                            if (item['lock-token']) {
-                                const lockToken = uuidFromBuffer(item['lock-token']);
-                                const rawMessage = item['message'];
-                                let parsed: any = {};
-                                if (rawMessage) {
-                                    const decoded = rhea.message.decode(rawMessage);
-                                    parsed = parseServiceBusMessage(decoded);
-                                }
-                                parsed.lockToken = lockToken;
-                                results.push(parsed as LockedMessage);
-                            }
-                        }
-                    }
-                    resolve(results);
-                } else if (statusCode === 204) {
-                    resolve([]); // No messages found
-                } else {
-                    reject(new Error(`Lock by sequence failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            // Build sequence number array as 8-byte big-endian buffers, wrapped as AMQP long array (0x81)
-            const seqNumBuffers = sequenceNumbers.map(seq => longToBytes(seq));
-            const wrappedSeqNums = rhea.types.wrap_array(seqNumBuffers, 0x81, undefined);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['sequence-numbers'] = wrappedSeqNums;
-            messageBody['receiver-settle-mode'] = rhea.types.wrap_uint(1); // 1 = peek-lock
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:receive-by-sequence-number'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Lock by sequence request timeout'));
-            }, 10000);
-        });
-    }
     /**
      * Cancel scheduled messages by sequence numbers
      */
     async cancelScheduledMessages(sequenceNumbers: number[]): Promise<void> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `cancel-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    resolve();
-                } else {
-                    reject(new Error(`Cancel scheduled messages failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            // Build sequence number array as 8-byte big-endian buffers, wrapped as AMQP long array (0x81)
-            const seqNumBuffers = sequenceNumbers.map(seq => longToBytes(seq));
-            const wrappedSeqNums = rhea.types.wrap_array(seqNumBuffers, 0x81, undefined);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['sequence-numbers'] = wrappedSeqNums;
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:cancel-scheduled-message'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Cancel scheduled messages request timeout'));
-            }, 10000);
-        });
+        // Sequence numbers as 8-byte big-endian buffers, wrapped as AMQP long array (0x81)
+        const seqNumBuffers = sequenceNumbers.map(seq => longToBytes(seq));
+        await this.request('com.microsoft:cancel-scheduled-message', {
+            'sequence-numbers': rhea.types.wrap_array(seqNumBuffers, 0x81, undefined)
+        }, 'Cancel scheduled messages');
     }
 
     /**
-     * Update disposition of locked messages (complete, abandon, dead-letter)
-     */
-    async updateDisposition(lockTokens: string[], disposition: 'completed' | 'abandoned' | 'suspended', deadLetterReason?: string, deadLetterDescription?: string): Promise<void> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `disposition-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    resolve();
-                } else {
-                    reject(new Error(`Update disposition failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            // Convert string UUIDs to binary format
-            const lockTokenBuffers = lockTokens.map(uuid => uuidToBuffer(uuid));
-
-            const messageBody: Record<string, any> = {};
-            messageBody['lock-tokens'] = lockTokenBuffers;
-            messageBody['disposition-status'] = disposition; // 'completed', 'abandoned', or 'suspended' (dead-letter)
-
-            if (disposition === 'suspended' && deadLetterReason) {
-                messageBody['deadletter-reason'] = deadLetterReason;
-                messageBody['deadletter-description'] = deadLetterDescription || '';
-            }
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:update-disposition'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Update disposition request timeout'));
-            }, 10000);
-        });
-    }
-
-    /**
-     * Purge messages using batch delete API (what Azure Portal uses)
-     * This is the FASTEST way to purge - server-side batch deletion
-     * @param messageCount - Number of messages to delete in this batch (max 4000 for Premium, 500 for Standard)
-     * @param beforeEnqueueTime - Optional: only delete messages enqueued before this time
+     * Batch delete: deletes up to messageCount messages enqueued before enqueuedBefore, on the server,
+     * without receiving them. This is the operation the Azure SDKs call DeleteMessagesAsync.
+     * The service may delete fewer than requested even when more are eligible.
+     * @param messageCount - At most 4000 on Premium, 500 on Standard
      * @returns Number of messages actually deleted
      */
-    async purgeMessages(messageCount: number = 4000, beforeEnqueueTime?: Date): Promise<number> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
+    async batchDeleteMessages(messageCount: number, enqueuedBefore: Date): Promise<number> {
+        // 204 means nothing was eligible; 404 message-not-found still carries the count it deleted
+        const { statusCode, errorCondition, body } = await this.request('com.microsoft:batch-delete-messages', {
+            'message-count': rhea.types.wrap_int(messageCount),
+            'enqueued-time-utc': rhea.types.wrap_timestamp(enqueuedBefore.getTime())
+        }, 'Batch delete', [200, 204, 404], 30000);
+
+        if (statusCode === 404 && errorCondition !== 'com.microsoft:message-not-found') {
+            throw new Error(`Batch delete failed: 404 (${errorCondition})`);
         }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `purge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200) {
-                    // Response contains the count of deleted messages
-                    const body = context.message.body;
-                    const deletedCount = body?.['message-count'] || body?.messageCount || 0;
-                    resolve(deletedCount);
-                } else if (statusCode === 204) {
-                    // No messages to delete
-                    resolve(0);
-                } else {
-                    reject(new Error(`Purge failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['message-count'] = rhea.types.wrap_int(messageCount);
-
-            if (beforeEnqueueTime) {
-                messageBody['before-enqueue-time'] = rhea.types.wrap_timestamp(beforeEnqueueTime.getTime());
-            }
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:purge-messages'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Purge request timeout'));
-            }, 30000); // Longer timeout for large batch operations
-        });
+        return statusCode === 204 ? 0 : Number(body?.['message-count'] ?? 0);
     }
 
     /**
      * Enumerate rules for a subscription
      */
     async enumerateRules(skip: number = 0, top: number = 100): Promise<any[]> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
+        const { statusCode, body } = await this.request('com.microsoft:enumerate-rules', {
+            'skip': rhea.types.wrap_int(skip),
+            'top': rhea.types.wrap_int(top)
+        }, 'Enumerate rules');
+        if (statusCode === 204 || !body || !body.rules) return [];
 
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `rules-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    const body = context.message.body;
-                    let rulesList: any[] = [];
-                    
-                    if (statusCode === 204 || !body || !body.rules) {
-                        resolve([]);
-                        this.receiver!.removeListener('message', responseHandler);
-                        return;
-                    }
-                    
-                    const rawRules = Array.isArray(body.rules) ? body.rules : [body.rules];
-                    for (const rule of rawRules) {
-                        if (!rule) continue;
-                        const ruleDesc = rule['rule-description'] !== undefined ? rule['rule-description'] : (rule.get ? rule.get('rule-description') : null);
-                        const ruleValue = ruleDesc ? ruleDesc.value : null;
-                        if (ruleValue) {
-                            let filterVal: any = null;
-                            let actionVal: any = null;
-                            if (Array.isArray(ruleValue)) {
-                                filterVal = ruleValue[0];
-                                actionVal = ruleValue[1];
-                            } else {
-                                // Handle map-based rule description
-                                filterVal = ruleValue['sql-filter'] !== undefined ? ruleValue['sql-filter'] :
-                                            (ruleValue['correlation-filter'] !== undefined ? ruleValue['correlation-filter'] :
-                                            (ruleValue['true-filter'] !== undefined ? ruleValue['true-filter'] :
-                                            (ruleValue['false-filter'] !== undefined ? ruleValue['false-filter'] :
-                                            (ruleValue.get ? (ruleValue.get('sql-filter') || ruleValue.get('correlation-filter') || ruleValue.get('true-filter') || ruleValue.get('false-filter')) : null))));
-                                            
-                                actionVal = ruleValue['sql-rule-action'] !== undefined ? ruleValue['sql-rule-action'] :
-                                            (ruleValue.get ? ruleValue.get('sql-rule-action') : null);
-                            }
-
-                            const filter = parseFilter(filterVal);
-                            const actionExpression = parseAction(actionVal);
-                            const name = rule['rule-name'] !== undefined ? rule['rule-name'] : 
-                                         (rule.get ? rule.get('rule-name') : (Array.isArray(ruleValue) ? (ruleValue[2] || '') : ''));
-                            
-                            rulesList.push({
-                                name,
-                                filterType: filter.filterType,
-                                sqlExpression: filter.sqlExpression,
-                                correlationId: filter.correlationId,
-                                messageId: filter.messageId,
-                                to: filter.to,
-                                replyTo: filter.replyTo,
-                                label: filter.label,
-                                sessionId: filter.sessionId,
-                                replyToSessionId: filter.replyToSessionId,
-                                contentType: filter.contentType,
-                                properties: filter.properties,
-                                actionExpression
-                            });
-                        }
-                    }
-                    
-                    resolve(rulesList);
+        const rulesList: any[] = [];
+        const rawRules = Array.isArray(body.rules) ? body.rules : [body.rules];
+        for (const rule of rawRules) {
+            if (!rule) continue;
+            const ruleDesc = rule['rule-description'] !== undefined ? rule['rule-description'] : (rule.get ? rule.get('rule-description') : null);
+            const ruleValue = ruleDesc ? ruleDesc.value : null;
+            if (ruleValue) {
+                let filterVal: any = null;
+                let actionVal: any = null;
+                if (Array.isArray(ruleValue)) {
+                    filterVal = ruleValue[0];
+                    actionVal = ruleValue[1];
                 } else {
-                    reject(new Error(`Enumerate rules failed: ${statusCode} - ${statusDescription}`));
+                    // Handle map-based rule description
+                    filterVal = ruleValue['sql-filter'] !== undefined ? ruleValue['sql-filter'] :
+                                (ruleValue['correlation-filter'] !== undefined ? ruleValue['correlation-filter'] :
+                                (ruleValue['true-filter'] !== undefined ? ruleValue['true-filter'] :
+                                (ruleValue['false-filter'] !== undefined ? ruleValue['false-filter'] :
+                                (ruleValue.get ? (ruleValue.get('sql-filter') || ruleValue.get('correlation-filter') || ruleValue.get('true-filter') || ruleValue.get('false-filter')) : null))));
+
+                    actionVal = ruleValue['sql-rule-action'] !== undefined ? ruleValue['sql-rule-action'] :
+                                (ruleValue.get ? ruleValue.get('sql-rule-action') : null);
                 }
 
-                this.receiver!.removeListener('message', responseHandler);
-            };
+                const filter = parseFilter(filterVal);
+                const actionExpression = parseAction(actionVal);
+                const name = rule['rule-name'] !== undefined ? rule['rule-name'] :
+                             (rule.get ? rule.get('rule-name') : (Array.isArray(ruleValue) ? (ruleValue[2] || '') : ''));
 
-            this.receiver!.on('message', responseHandler);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['skip'] = rhea.types.wrap_int(skip);
-            messageBody['top'] = rhea.types.wrap_int(top);
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:enumerate-rules'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Enumerate rules request timeout'));
-            }, 10000);
-        });
+                rulesList.push({
+                    name,
+                    filterType: filter.filterType,
+                    sqlExpression: filter.sqlExpression,
+                    correlationId: filter.correlationId,
+                    messageId: filter.messageId,
+                    to: filter.to,
+                    replyTo: filter.replyTo,
+                    label: filter.label,
+                    sessionId: filter.sessionId,
+                    replyToSessionId: filter.replyToSessionId,
+                    contentType: filter.contentType,
+                    properties: filter.properties,
+                    actionExpression
+                });
+            }
+        }
+        return rulesList;
     }
 
     /**
      * Add a rule to a subscription
      */
     async addRule(
-        ruleName: string, 
-        filterType: 'Sql' | 'Correlation', 
-        expressionOrFilter: any, 
+        ruleName: string,
+        filterType: 'Sql' | 'Correlation',
+        expressionOrFilter: any,
         actionExpression?: string
     ): Promise<void> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
+        // Wrap rule description as a map according to the Service Bus AMQP request-response management protocol
+        const ruleDescription: Record<string, any> = {};
+
+        if (filterType === 'Sql') {
+            ruleDescription['sql-filter'] = {
+                'expression': expressionOrFilter
+            };
+        } else {
+            const f = expressionOrFilter || {};
+            const correlationFilter: Record<string, any> = {};
+            if (f.correlationId !== undefined && f.correlationId !== null) correlationFilter['correlation-id'] = f.correlationId;
+            if (f.messageId !== undefined && f.messageId !== null) correlationFilter['message-id'] = f.messageId;
+            if (f.to !== undefined && f.to !== null) correlationFilter['to'] = f.to;
+            if (f.replyTo !== undefined && f.replyTo !== null) correlationFilter['reply-to'] = f.replyTo;
+            if (f.label !== undefined && f.label !== null) correlationFilter['label'] = f.label;
+            if (f.sessionId !== undefined && f.sessionId !== null) correlationFilter['session-id'] = f.sessionId;
+            if (f.replyToSessionId !== undefined && f.replyToSessionId !== null) correlationFilter['reply-to-session-id'] = f.replyToSessionId;
+            if (f.contentType !== undefined && f.contentType !== null) correlationFilter['content-type'] = f.contentType;
+            if (f.properties !== undefined && f.properties !== null) correlationFilter['properties'] = f.properties;
+
+            ruleDescription['correlation-filter'] = correlationFilter;
         }
 
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `addrule-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    resolve();
-                } else {
-                    reject(new Error(`Add rule failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
+        if (actionExpression) {
+            ruleDescription['sql-rule-action'] = {
+                'expression': actionExpression
             };
+        }
 
-            this.receiver!.on('message', responseHandler);
-
-            // Wrap rule description as a map according to the Service Bus AMQP request-response management protocol
-            const ruleDescription: Record<string, any> = {};
-
-            if (filterType === 'Sql') {
-                ruleDescription['sql-filter'] = {
-                    'expression': expressionOrFilter
-                };
-            } else {
-                const f = expressionOrFilter || {};
-                const correlationFilter: Record<string, any> = {};
-                if (f.correlationId !== undefined && f.correlationId !== null) correlationFilter['correlation-id'] = f.correlationId;
-                if (f.messageId !== undefined && f.messageId !== null) correlationFilter['message-id'] = f.messageId;
-                if (f.to !== undefined && f.to !== null) correlationFilter['to'] = f.to;
-                if (f.replyTo !== undefined && f.replyTo !== null) correlationFilter['reply-to'] = f.replyTo;
-                if (f.label !== undefined && f.label !== null) correlationFilter['label'] = f.label;
-                if (f.sessionId !== undefined && f.sessionId !== null) correlationFilter['session-id'] = f.sessionId;
-                if (f.replyToSessionId !== undefined && f.replyToSessionId !== null) correlationFilter['reply-to-session-id'] = f.replyToSessionId;
-                if (f.contentType !== undefined && f.contentType !== null) correlationFilter['content-type'] = f.contentType;
-                if (f.properties !== undefined && f.properties !== null) correlationFilter['properties'] = f.properties;
-                
-                ruleDescription['correlation-filter'] = correlationFilter;
-            }
-
-            if (actionExpression) {
-                ruleDescription['sql-rule-action'] = {
-                    'expression': actionExpression
-                };
-            }
-
-            const messageBody: Record<string, any> = {};
-            messageBody['rule-name'] = ruleName;
-            messageBody['rule-description'] = ruleDescription;
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:add-rule'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Add rule request timeout'));
-            }, 10000);
-        });
+        await this.request('com.microsoft:add-rule', {
+            'rule-name': ruleName,
+            'rule-description': ruleDescription
+        }, 'Add rule');
     }
 
     /**
      * Remove a rule from a subscription
      */
     async removeRule(ruleName: string): Promise<void> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `remerule-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    resolve();
-                } else {
-                    reject(new Error(`Remove rule failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['rule-name'] = ruleName;
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:remove-rule'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Remove rule request timeout'));
-            }, 10000);
-        });
+        await this.request('com.microsoft:remove-rule', { 'rule-name': ruleName }, 'Remove rule');
     }
 
     /**
      * Get active message sessions
      */
     async getMessageSessions(lastUpdatedTime?: Date, skip: number = 0, top: number = 100): Promise<string[]> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
+        const filterTime = lastUpdatedTime || new Date(0);
+        const { body } = await this.request('com.microsoft:get-message-sessions', {
+            'last-updated-time': rhea.types.wrap_timestamp(filterTime.getTime()),
+            'skip': rhea.types.wrap_int(skip),
+            'top': rhea.types.wrap_int(top)
+        }, 'Get message sessions');
 
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `sessions-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    const body = context.message.body;
-                    let sessionIds: string[] = [];
-                    if (body && body['sessions-ids']) {
-                        sessionIds = Array.isArray(body['sessions-ids']) ? body['sessions-ids'] : [body['sessions-ids']];
-                    }
-                    resolve(sessionIds);
-                } else {
-                    reject(new Error(`Get message sessions failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            const messageBody: Record<string, any> = {};
-            const filterTime = lastUpdatedTime || new Date(0);
-            messageBody['last-updated-time'] = rhea.types.wrap_timestamp(filterTime.getTime());
-            messageBody['skip'] = rhea.types.wrap_int(skip);
-            messageBody['top'] = rhea.types.wrap_int(top);
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:get-message-sessions'
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Get message sessions request timeout'));
-            }, 10000);
-        });
-    }
-
-    /**
-     * Get session state
-     */
-    async getSessionState(sessionId: string, associatedLinkName?: string): Promise<string> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `getstate-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    const body = context.message.body;
-                    let stateVal = '';
-                    if (body && body['session-state'] !== undefined && body['session-state'] !== null) {
-                        const rawState = body['session-state'];
-                        if (typeof rawState === 'string') {
-                            stateVal = rawState;
-                        } else if (rawState && typeof rawState === 'object') {
-                            let data: Uint8Array;
-                            if (rawState instanceof Uint8Array) {
-                                data = rawState;
-                            } else if (rawState.data && Array.isArray(rawState.data)) {
-                                data = new Uint8Array(rawState.data);
-                            } else {
-                                data = new Uint8Array(Object.values(rawState));
-                            }
-                            stateVal = new TextDecoder().decode(data);
-                        }
-                    }
-                    resolve(stateVal);
-                } else {
-                    reject(new Error(`Get session state failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['session-id'] = sessionId;
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:get-session-state',
-                    ...(associatedLinkName ? { 'associated-link-name': associatedLinkName } : {})
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Get session state request timeout'));
-            }, 10000);
-        });
-    }
-
-    async setSessionState(sessionId: string, state: string | null, associatedLinkName?: string): Promise<void> {
-        if (!this.sender || !this.receiver || !this.replyTo) {
-            throw new Error('Management client not opened');
-        }
-
-        return new Promise((resolve, reject) => {
-            const replyTo = this.replyTo!;
-            const messageId = `setstate-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            const responseHandler = (context: any) => {
-                if (context.message.correlation_id !== messageId) return;
-
-                const statusCode = context.message.application_properties?.statusCode;
-                const statusDescription = context.message.application_properties?.statusDescription;
-
-                if (statusCode === 200 || statusCode === 204) {
-                    resolve();
-                } else {
-                    reject(new Error(`Set session state failed: ${statusCode} - ${statusDescription}`));
-                }
-
-                this.receiver!.removeListener('message', responseHandler);
-            };
-
-            this.receiver!.on('message', responseHandler);
-
-            const messageBody: Record<string, any> = {};
-            messageBody['session-id'] = sessionId;
-            if (state !== null && state !== undefined) {
-                const encodedState = new TextEncoder().encode(state);
-                messageBody['session-state'] = rhea.types.wrap_binary(encodedState);
-            } else {
-                messageBody['session-state'] = null;
-            }
-
-            const request = {
-                body: messageBody,
-                reply_to: replyTo,
-                application_properties: {
-                    operation: 'com.microsoft:set-session-state',
-                    ...(associatedLinkName ? { 'associated-link-name': associatedLinkName } : {})
-                },
-                message_id: messageId
-            };
-
-            this.sender!.send(request);
-
-            setTimeout(() => {
-                this.receiver!.removeListener('message', responseHandler);
-                reject(new Error('Set session state request timeout'));
-            }, 10000);
-        });
+        const ids = body?.['sessions-ids'];
+        return ids ? (Array.isArray(ids) ? ids : [ids]) : [];
     }
 
     /**

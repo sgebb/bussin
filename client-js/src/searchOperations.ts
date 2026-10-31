@@ -3,6 +3,9 @@ import { ManagementClient } from './managementClient.js';
 import { parseServiceBusMessage } from './messageParser.js';
 import type { ServiceBusMessage } from './types.js';
 
+// Consecutive failed batches before a search gives up
+const MAX_CONSECUTIVE_FAILURES = 3;
+
 export interface SearchController {
     promise: Promise<SearchResult>;
     stop: () => void;
@@ -80,97 +83,99 @@ async function searchMessages(
         await connection.connect();
         await connection.authenticateCBS(entityPath);
 
-        const searchPromise = new Promise<SearchResult>(async (resolve, reject) => {
+        const runSearch = async (): Promise<SearchResult> => {
+            const managementClient = new ManagementClient(connection, entityPath);
             try {
-                const managementClient = new ManagementClient(connection, entityPath);
                 await managementClient.open();
 
                 const batchSize = 100;
                 let currentSequence = 0;
                 let consecutiveEmptyBatches = 0;
                 const maxEmptyBatches = 3;
+                let consecutiveFailures = 0;
 
                 while (isRunning && scannedCount < maxMessages && matchingSequenceNumbers.length < maxMatches) {
+                    let messages: any[];
                     try {
-                        const messages = await managementClient.peekMessages(currentSequence, batchSize);
+                        messages = await managementClient.peekMessages(currentSequence, batchSize);
+                        consecutiveFailures = 0;
+                    } catch (batchErr) {
+                        // Retry the same batch a few times; a persistent failure (expired token,
+                        // dropped link) ends the search with its cause rather than skipping messages.
+                        if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) throw batchErr;
+                        console.warn('[Search] Batch failed, retrying:', batchErr);
+                        continue;
+                    }
 
-                        if (messages.length === 0) {
-                            consecutiveEmptyBatches++;
-                            if (consecutiveEmptyBatches >= maxEmptyBatches) {
-                                break; // No more messages
-                            }
-                            continue;
+                    if (messages.length === 0) {
+                        consecutiveEmptyBatches++;
+                        if (consecutiveEmptyBatches >= maxEmptyBatches) {
+                            break; // No more messages
+                        }
+                        continue;
+                    }
+
+                    consecutiveEmptyBatches = 0;
+                    const newMatches: number[] = [];
+
+                    for (const rawMsg of messages) {
+                        if (!isRunning) break;
+
+                        const msg = parseServiceBusMessage(rawMsg);
+                        const seqNum = msg.sequenceNumber;
+
+                        if (seqNum !== undefined && seqNum > currentSequence) {
+                            currentSequence = seqNum;
                         }
 
-                        consecutiveEmptyBatches = 0;
-                        const newMatches: number[] = [];
+                        scannedCount++;
 
-                        for (const rawMsg of messages) {
-                            if (!isRunning) break;
+                        // Check filters (all must match if specified)
+                        let matches = true;
 
-                            const msg = parseServiceBusMessage(rawMsg);
-                            const seqNum = msg.sequenceNumber;
-
-                            if (seqNum !== undefined && seqNum > currentSequence) {
-                                currentSequence = seqNum;
-                            }
-
-                            scannedCount++;
-
-                            // Check filters (all must match if specified)
-                            let matches = true;
-
-                            if (bodyFilter && matches) {
-                                const body = typeof msg.body === 'string' ? msg.body : JSON.stringify(msg.body);
-                                matches = body?.toLowerCase().includes(bodyFilter.toLowerCase()) ?? false;
-                            }
-
-                            if (messageIdFilter && matches) {
-                                matches = msg.messageId?.toLowerCase().includes(messageIdFilter.toLowerCase()) ?? false;
-                            }
-
-                            if (subjectFilter && matches) {
-                                matches = msg.subject?.toLowerCase().includes(subjectFilter.toLowerCase()) ?? false;
-                            }
-
-                            if (matches && seqNum !== undefined) {
-                                matchingSequenceNumbers.push(seqNum);
-                                newMatches.push(seqNum);
-                            }
+                        if (bodyFilter && matches) {
+                            const body = typeof msg.body === 'string' ? msg.body : JSON.stringify(msg.body);
+                            matches = body?.toLowerCase().includes(bodyFilter.toLowerCase()) ?? false;
                         }
 
-                        // Update sequence for next batch
-                        currentSequence++;
-
-                        // Report progress
-                        if (onProgress) {
-                            onProgress(scannedCount, matchingSequenceNumbers.length, newMatches);
+                        if (messageIdFilter && matches) {
+                            matches = msg.messageId?.toLowerCase().includes(messageIdFilter.toLowerCase()) ?? false;
                         }
 
-                    } catch (batchErr: any) {
-                        console.error('[Search] Batch error:', batchErr);
-                        // Continue to next batch on non-fatal errors
-                        currentSequence++;
+                        if (subjectFilter && matches) {
+                            matches = msg.subject?.toLowerCase().includes(subjectFilter.toLowerCase()) ?? false;
+                        }
+
+                        if (matches && seqNum !== undefined) {
+                            matchingSequenceNumbers.push(seqNum);
+                            newMatches.push(seqNum);
+                        }
+                    }
+
+                    // Update sequence for next batch
+                    currentSequence++;
+
+                    // Report progress
+                    if (onProgress) {
+                        onProgress(scannedCount, matchingSequenceNumbers.length, newMatches);
                     }
                 }
 
-                managementClient.close();
-                connection.close();
-
-                resolve({
+                return {
                     scannedCount,
                     matchCount: matchingSequenceNumbers.length,
                     matchingSequenceNumbers
-                });
-
+                };
             } catch (err) {
+                throw new Error(`Search failed after scanning ${scannedCount} messages: ${(err as Error).message}`);
+            } finally {
+                managementClient.close();
                 connection.close();
-                reject(new Error(`Search failed: ${(err as Error).message}`));
             }
-        });
+        };
 
         return {
-            promise: searchPromise,
+            promise: runSearch(),
             stop: () => {
                 isRunning = false;
             },

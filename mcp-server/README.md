@@ -137,6 +137,10 @@ Additional guards:
 
 - **`delete_messages`**: permanently delete specific messages by sequence number
 - **`dead_letter_messages`**: move active messages to the dead-letter queue
+
+Service Bus only receives deferred messages by sequence number, so both tools lock messages from the
+head of the queue up to the requested ones, settle those and release the rest. Their result lists what
+was settled and, under `notFound`, any sequence numbers that weren't.
 - **`purge_entity`**: delete every message from a queue, subscription, or DLQ
 
 ## Example prompts

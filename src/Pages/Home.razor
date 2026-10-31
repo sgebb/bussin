@@ -613,13 +613,20 @@ else
                 return;
             }
 
+            var seen = new HashSet<string>();
             await foreach (var ns in ResourceService.ListServiceBusNamespacesAsync(credential, ct))
             {
-                if (ct.IsCancellationRequested) break;
+                if (ct.IsCancellationRequested) return;
+                seen.Add(ns.Name);
                 namespaceDict[ns.Name] = ns;
                 StateHasChanged();
             }
-            
+
+            // The listing completed, so anything it didn't return no longer exists.
+            foreach (var name in namespaceDict.Keys.Where(name => !seen.Contains(name)).ToList())
+            {
+                namespaceDict.Remove(name);
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)

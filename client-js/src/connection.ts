@@ -10,6 +10,8 @@ import { formatAmqpError } from './types.js';
 
 import { GlobalMockBroker } from './mockBroker.js';
 
+const CONNECT_TIMEOUT_MS = 15000;
+
 /**
  * Service Bus Connection with CBS authentication
  */
@@ -18,7 +20,6 @@ export class ServiceBusConnection {
     public readonly hostname: string;
     public connection: Connection | null = null;
     public token: string;
-    private cbsAuthenticated: boolean = false;
     private useMock: boolean = false;
     private readonly customWebSocketUrl: string | null = null;
 
@@ -53,10 +54,25 @@ export class ServiceBusConnection {
     }
 
     /**
-     * Connect to Service Bus via AMQP over WebSocket
+     * Connect to Service Bus via AMQP over WebSocket. Rejects if the connection fails, drops or has not
+     * opened within CONNECT_TIMEOUT_MS. Safe to call again after a drop: each call opens a new connection.
      */
     async connect(): Promise<void> {
         return new Promise((resolve, reject) => {
+            let settled = false;
+            const settle = (error?: Error) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                if (error) {
+                    this.close();
+                    reject(error);
+                } else {
+                    resolve();
+                }
+            };
+            const timeout = setTimeout(() => settle(new Error(`Connecting to ${this.hostname} timed out`)), CONNECT_TIMEOUT_MS);
+
             const wsUrl = this.customWebSocketUrl || `wss://${this.hostname}:443/$servicebus/websocket`;
             const isSecure = wsUrl.startsWith('wss://');
             let port = 443;
@@ -68,7 +84,7 @@ export class ServiceBusConnection {
             if ((globalThis as any).__BUSSIN_SIMULATOR_ACTIVE__) {
                 console.log(`[ServiceBusConnection] Initializing Mock Connection for ${this.namespace}`);
                 this.connection = GlobalMockBroker.connect({ container_id: `bussin-${this.namespace}` }) as any as Connection;
-                resolve();
+                settle();
                 return;
             } else {
                 // Use rhea's websocket_connect helper with browser's native WebSocket
@@ -86,18 +102,17 @@ export class ServiceBusConnection {
 
             this.connection!.on('connection_open', () => {
                 console.log(`[ServiceBusConnection] Connection OPEN for ${this.namespace}`);
-                resolve();
+                settle();
             });
 
             this.connection.on('connection_error', (context: any) => {
                 console.error(`[ServiceBusConnection] Connection ERROR:`, context.error);
-                reject(new Error(context.error ? formatAmqpError(context.error) : 'Connection error'));
+                settle(new Error(context.error ? formatAmqpError(context.error) : 'Connection error'));
             });
 
+            // Only matters before the connection opened; settle ignores later calls
             this.connection.on('disconnected', (context: any) => {
-                if (context.error && !this.cbsAuthenticated) {
-                    reject(new Error(formatAmqpError(context.error)));
-                }
+                settle(new Error(context.error ? formatAmqpError(context.error) : `Disconnected from ${this.hostname}`));
             });
         });
     }
@@ -111,34 +126,40 @@ export class ServiceBusConnection {
         }
 
         return new Promise((resolve, reject) => {
-            let authTimeout: any;
-            
             const cbsSender = this.connection!.open_sender('$cbs');
             const cbsReceiver = this.connection!.open_receiver('$cbs');
-            
-            authTimeout = setTimeout(() => {
-                reject(new Error('CBS authentication timeout'));
+
+            // The $cbs links are closed however authentication ends
+            let settled = false;
+            const settle = (outcome: () => void) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(authTimeout);
+                cbsReceiver.close();
+                cbsSender.close();
+                outcome();
+            };
+
+            const authTimeout = setTimeout(() => {
+                settle(() => reject(new Error('CBS authentication timeout')));
             }, 5000);
-            
+
             cbsReceiver.on('message', (context: any) => {
                 const msg = context.message;
                 const statusCode = msg.application_properties?.['status-code'];
                 const statusDesc = msg.application_properties?.['status-description'];
-                
-                console.log(`[ServiceBusConnection] CBS Message Received: ${statusCode} - ${statusDesc}. Resolving...`);
-                
-                if (authTimeout) clearTimeout(authTimeout);
-                cbsReceiver.close();
-                cbsSender.close();
-                
-                if (statusCode === 200 || statusCode === 202) {
-                    this.cbsAuthenticated = true;
-                    resolve({ statusCode, statusDesc });
-                    console.log(`[ServiceBusConnection] CBS Promise Resolved.`);
-                } else {
-                    reject(new Error(`CBS auth failed: ${statusCode} - ${statusDesc}`));
-                }
+
+                console.log(`[ServiceBusConnection] CBS Message Received: ${statusCode} - ${statusDesc}`);
+
+                settle(() => statusCode === 200 || statusCode === 202
+                    ? resolve({ statusCode, statusDesc })
+                    : reject(new Error(`CBS auth failed: ${statusCode} - ${statusDesc}`)));
             });
+
+            const linkError = (error: any) =>
+                settle(() => reject(new Error(`CBS authentication failed: ${error ? formatAmqpError(error) : 'link error'}`)));
+            cbsSender.on('sender_error', (context: any) => linkError(context.sender.error));
+            cbsReceiver.on('receiver_error', (context: any) => linkError(context.receiver.error));
             
             cbsSender.on('sender_open', () => {
                 console.log(`[ServiceBusConnection] CBS Sender OPEN - Sending token for ${entityPath}`);

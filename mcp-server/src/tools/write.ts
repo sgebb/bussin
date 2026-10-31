@@ -109,8 +109,7 @@ export function registerSendTools(server: McpServer, ctx: Ctx): void {
         let removed = 0;
         if (a.removeOriginals) {
             const seqs = originals.map(m => m.sequenceNumber).filter((s): s is number => typeof s === 'number');
-            await client.deleteQueueMessagesBySequence(ns, a.queue, token, seqs, true);
-            removed = seqs.length;
+            removed = (await client.deleteQueueMessagesBySequence(ns, a.queue, token, seqs, true)).settled.length;
         }
 
         return json({
@@ -132,6 +131,8 @@ export function registerDestructiveTools(server: McpServer, ctx: Ctx): void {
         description:
             'Permanently delete messages by sequence number from a queue or its dead-letter queue. ' +
             'This cannot be undone. Peek or search first to confirm the sequence numbers. ' +
+            'Messages ahead of them are briefly locked and then released. notFound in the result lists ' +
+            'sequence numbers that were not deleted (already gone, or locked by another receiver). ' +
             'Requires --allow-destructive.',
         inputSchema: {
             namespace: nsArg,
@@ -149,14 +150,16 @@ export function registerDestructiveTools(server: McpServer, ctx: Ctx): void {
         const doomed = await client.peekQueueMessagesBySequence(
             ns, a.queue, token, a.sequenceNumbers, a.fromDeadLetter
         );
-        await client.deleteQueueMessagesBySequence(ns, a.queue, token, a.sequenceNumbers, a.fromDeadLetter);
+        const result = await client.deleteQueueMessagesBySequence(ns, a.queue, token, a.sequenceNumbers, a.fromDeadLetter);
+        const settled = new Set(result.settled);
 
         return json({
             namespace: ns,
             queue: a.queue,
             deadLetter: a.fromDeadLetter,
             requested: a.sequenceNumbers.length,
-            deleted: doomed.map(m => summarize(m, 200))
+            deleted: doomed.filter(m => settled.has(m.sequenceNumber!)).map(m => summarize(m, 200)),
+            notFound: result.notFound
         });
     }));
 
@@ -167,7 +170,9 @@ export function registerDestructiveTools(server: McpServer, ctx: Ctx): void {
             'The messages stop being delivered to consumers and will not be retried, but they are not ' +
             'destroyed: they can be read with peek_messages using fromDeadLetter, and put back with ' +
             'resubmit_dead_letter. Use this to quarantine a poison message rather than delete it. ' +
-            'Peek or search first to confirm the sequence numbers. Requires --allow-destructive.',
+            'Peek or search first to confirm the sequence numbers. Messages ahead of them are briefly locked ' +
+            'and then released. notFound in the result lists sequence numbers that were not moved. ' +
+            'Requires --allow-destructive.',
         inputSchema: {
             namespace: nsArg,
             queue: z.string().describe('Queue name.'),
@@ -180,11 +185,11 @@ export function registerDestructiveTools(server: McpServer, ctx: Ctx): void {
         const ns = resolveNamespace(ctx, a.namespace);
         const token = await ctx.tokens.getDataPlaneToken();
         const client = await getClient();
-        await client.deadLetterQueueMessagesBySequence(
+        const result = await client.deadLetterQueueMessagesBySequence(
             ns, a.queue, token, a.sequenceNumbers, a.reason, a.description
         );
         return json({
-            namespace: ns, queue: a.queue, movedToDeadLetter: a.sequenceNumbers.length, reason: a.reason
+            namespace: ns, queue: a.queue, movedToDeadLetter: result.settled, notFound: result.notFound, reason: a.reason
         });
     }));
 

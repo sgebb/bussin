@@ -1,15 +1,13 @@
-using System.Text.Json;
 using Bussin.Models;
 using Microsoft.JSInterop;
 
 namespace Bussin.Services.Demo;
 
-/**
- * High-fidelity Demo Service that uses the TypeScript AMQP Simulator
- */
-public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJsInteropService
+/// <summary>
+/// The real interop service with the client-js simulator (an in-browser mock broker) switched on and seeded.
+/// </summary>
+public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : ServiceBusJsInteropService(jsRuntime)
 {
-    public IJSRuntime JSRuntime { get; } = jsRuntime;
     private IJSInProcessRuntime? InProcessRuntime => JSRuntime as IJSInProcessRuntime;
     private bool _isInitialized = false;
 
@@ -21,26 +19,14 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
     public async Task InitializeAsync()
     {
         if (_isInitialized) return;
-        
+
         await JSRuntime.InvokeAsync<object>("ServiceBusAPI.enableSimulator", true);
         await SeedInitialDataAsync();
-        
+
         _isInitialized = true;
     }
 
-    private async Task EnsureSimulatorAsync() => await InitializeAsync();
-
-    private async Task<T> InvokeSimulatorAsync<T>(string method, params object?[] args)
-    {
-        await EnsureSimulatorAsync();
-        return await JSRuntime.InvokeAsync<T>($"ServiceBusAPI.{method}", args);
-    }
-
-    private async Task InvokeSimulatorVoidAsync(string method, params object?[] args)
-    {
-        await EnsureSimulatorAsync();
-        await JSRuntime.InvokeAsync<object>($"ServiceBusAPI.{method}", args);
-    }
+    protected override Task EnsureReadyAsync() => InitializeAsync();
 
     private async Task SeedInitialDataAsync()
     {
@@ -90,133 +76,4 @@ public class DemoServiceBusJsInteropService(IJSRuntime jsRuntime) : IServiceBusJ
         };
         await JSRuntime.InvokeAsync<object>("ServiceBusAPI.seedSubscriptionData", devNs, "dev-events", "sub-1", subMessages);
     }
-
-    // Proxy everything to the real JS API
-
-    public Task SetupEmulatorAsync(object? options) => Task.CompletedTask;
-
-    public async Task<List<ServiceBusMessage>> PeekQueueMessagesAsync(string namespaceName, string queueName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekQueueMessages", namespaceName, queueName, token, count, fromSequence, fromDeadLetter, sessionId);
-
-    public async Task SendQueueMessageAsync(string namespaceName, string queueName, string token, object messageBody, MessageProperties? properties = null)
-        => await InvokeSimulatorVoidAsync("sendQueueMessage", namespaceName, queueName, token, messageBody, properties);
-
-    public async ValueTask CreateTopic(string @namespace, string topicName)
-    {
-        await JSRuntime.InvokeAsync<object>("ServiceBusAPI.seedTopic", @namespace, topicName);
-    }
-
-    public async ValueTask CreateSubscription(string @namespace, string topicName, string subscriptionName)
-    {
-        await JSRuntime.InvokeAsync<object>("ServiceBusAPI.seedSubscription", @namespace, topicName, subscriptionName);
-    }
-
-    public async Task<int> PurgeQueueAsync(string namespaceName, string queueName, string token, bool fromDeadLetter = false)
-    {
-        var result = await InvokeSimulatorAsync<JsonElement>("purgeQueueDirect", namespaceName, queueName, token, fromDeadLetter);
-        return result.TryGetProperty("deletedCount", out var prop) ? prop.GetInt32() : 0;
-    }
-
-    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int count = 10, int fromSequence = 0, bool fromDeadLetter = false, string? sessionId = null)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekSubscriptionMessages", namespaceName, topicName, subscriptionName, token, count, fromSequence, fromDeadLetter, sessionId);
-
-    public async Task SendTopicMessageAsync(string namespaceName, string topicName, string token, object messageBody, MessageProperties? properties = null)
-        => await InvokeSimulatorVoidAsync("sendTopicMessage", namespaceName, topicName, token, messageBody, properties);
-
-    public async Task<int> PurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, bool fromDeadLetter = false)
-    {
-        var result = await InvokeSimulatorAsync<JsonElement>("purgeSubscriptionDirect", namespaceName, topicName, subscriptionName, token, fromDeadLetter);
-        return result.TryGetProperty("deletedCount", out var prop) ? prop.GetInt32() : 0;
-    }
-
-    public async Task SendQueueMessageBatchAsync(string namespaceName, string queueName, string token, object[] messages)
-    {
-        await InvokeSimulatorVoidAsync("sendQueueMessageBatch", namespaceName, queueName, token, messages);
-    }
-
-    public async Task SendTopicMessageBatchAsync(string namespaceName, string topicName, string token, object[] messages)
-    {
-        await InvokeSimulatorVoidAsync("sendTopicMessageBatch", namespaceName, topicName, token, messages);
-    }
-
-    public async Task<List<ServiceBusMessage>> ReceiveAndLockQueueMessagesAsync(string namespaceName, string queueName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("receiveAndLockQueueMessage", namespaceName, queueName, token, timeoutSeconds, fromDeadLetter, count, sessionId);
-
-    public async Task<List<ServiceBusMessage>> ReceiveAndLockSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, string token, int timeoutSeconds = 5, bool fromDeadLetter = false, int count = 1, string? sessionId = null)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("receiveAndLockSubscriptionMessage", namespaceName, topicName, subscriptionName, token, timeoutSeconds, fromDeadLetter, count, sessionId);
-
-    public async Task<BatchOperationResult> CompleteMessagesAsync(string[] lockTokens)
-        => await InvokeSimulatorAsync<BatchOperationResult>("complete", (object)lockTokens);
-
-    public async Task<BatchOperationResult> AbandonMessagesAsync(string[] lockTokens)
-        => await InvokeSimulatorAsync<BatchOperationResult>("abandon", (object)lockTokens);
-
-    public async Task<BatchOperationResult> DeadLetterMessagesAsync(string[] lockTokens, DeadLetterOptions? options = null)
-        => await InvokeSimulatorAsync<BatchOperationResult>("deadLetter", (object)lockTokens, options);
-
-    public async Task<IJSObjectReference> StartMonitoringAsync(string namespaceName, string entityPath, string token, DotNetObjectReference<MessageMonitorCallback> callbackRef)
-    {
-        await EnsureSimulatorAsync();
-        return await JSRuntime.InvokeAsync<IJSObjectReference>("startMonitoring", namespaceName, entityPath, token, callbackRef);
-    }
-
-    public async Task StopMonitoringAsync(IJSObjectReference monitorController)
-    {
-        if (monitorController != null) await monitorController.InvokeVoidAsync("stop");
-    }
-
-    public async Task<IJSObjectReference> StartPurgeQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false)
-        => await InvokeSimulatorAsync<IJSObjectReference>("purgeQueue", namespaceName, queueName, token, callbackRef, fromDeadLetter, requiresSession);
-
-    public async Task<IJSObjectReference> StartPurgeSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<PurgeProgressCallback> callbackRef, bool fromDeadLetter = false, bool requiresSession = false)
-        => await InvokeSimulatorAsync<IJSObjectReference>("purgeSubscription", namespaceName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, requiresSession);
-
-    public async Task DeleteQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
-        => await InvokeSimulatorVoidAsync("deleteQueueMessagesBySequence", namespaceName, queueName, token, sequenceNumbers, fromDeadLetter);
-
-    public async Task DeleteSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
-        => await InvokeSimulatorVoidAsync("deleteSubscriptionMessagesBySequence", namespaceName, topicName, subscriptionName, token, sequenceNumbers, fromDeadLetter);
-
-    public async Task CancelScheduledQueueMessagesAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers)
-        => await InvokeSimulatorVoidAsync("cancelScheduledQueueMessages", namespaceName, queueName, token, sequenceNumbers);
-
-    public async Task CancelScheduledTopicMessagesAsync(string namespaceName, string topicName, string token, long[] sequenceNumbers)
-        => await InvokeSimulatorVoidAsync("cancelScheduledTopicMessages", namespaceName, topicName, token, sequenceNumbers);
-
-    public async Task DeadLetterQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, string reason = "Manual dead letter", string description = "Moved by user")
-        => await InvokeSimulatorVoidAsync("deadLetterQueueMessagesBySequence", namespaceName, queueName, token, sequenceNumbers, reason, description);
-
-    public async Task DeadLetterSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, string reason = "Manual dead letter", string description = "Moved by user")
-        => await InvokeSimulatorVoidAsync("deadLetterSubscriptionMessagesBySequence", namespaceName, topicName, subscriptionName, token, sequenceNumbers, reason, description);
-
-    public async Task<IJSObjectReference> StartSearchQueueAsync(string namespaceName, string queueName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
-        => await InvokeSimulatorAsync<IJSObjectReference>("searchQueueMessages", namespaceName, queueName, token, callbackRef, fromDeadLetter, bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches);
-
-    public async Task<IJSObjectReference> StartSearchSubscriptionAsync(string namespaceName, string topicName, string subscriptionName, string token, DotNetObjectReference<SearchProgressCallback> callbackRef, bool fromDeadLetter, string? bodyFilter, string? messageIdFilter, string? subjectFilter, int maxMessages, int maxMatches = 50)
-        => await InvokeSimulatorAsync<IJSObjectReference>("searchSubscriptionMessages", namespaceName, topicName, subscriptionName, token, callbackRef, fromDeadLetter, bodyFilter, messageIdFilter, subjectFilter, maxMessages, maxMatches);
-
-    public async Task<List<ServiceBusMessage>> PeekQueueMessagesBySequenceAsync(string namespaceName, string queueName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekQueueMessagesBySequence", namespaceName, queueName, token, sequenceNumbers, fromDeadLetter);
-
-    public async Task<List<ServiceBusMessage>> PeekSubscriptionMessagesBySequenceAsync(string namespaceName, string topicName, string subscriptionName, string token, long[] sequenceNumbers, bool fromDeadLetter = false)
-        => await InvokeSimulatorAsync<List<ServiceBusMessage>>("peekSubscriptionMessagesBySequence", namespaceName, topicName, subscriptionName, token, sequenceNumbers, fromDeadLetter);
-    public async Task<List<SubscriptionRule>> EnumerateRulesAsync(string namespaceName, string topicName, string subscriptionName, string token)
-    {
-        var result = await InvokeSimulatorAsync<JsonElement[]>("enumerateRules", namespaceName, topicName, subscriptionName, token);
-        return result.Select(elem => JsonSerializer.Deserialize<SubscriptionRule>(elem.GetRawText())!).ToList();
-    }
-
-    public async Task AddRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName, string filterType, object filterExpression, string? action)
-        => await InvokeSimulatorVoidAsync("addRule", namespaceName, topicName, subscriptionName, token, ruleName, filterType, filterExpression, action);
-
-    public async Task RemoveRuleAsync(string namespaceName, string topicName, string subscriptionName, string token, string ruleName)
-        => await InvokeSimulatorVoidAsync("removeRule", namespaceName, topicName, subscriptionName, token, ruleName);
-
-    public async Task<List<string>> GetMessageSessionsAsync(string namespaceName, string entityPath, string token, DateTime? lastUpdatedTime = null, int skip = 0, int top = 100)
-    {
-        var result = await InvokeSimulatorAsync<List<string>>("getMessageSessions", namespaceName, entityPath, token, lastUpdatedTime, skip, top);
-        return result ?? new List<string>();
-    }
-
 }
-

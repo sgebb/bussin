@@ -4,41 +4,39 @@ using System.Collections.Concurrent;
 namespace Bussin.Services;
 
 /// <summary>
-/// Short-lived, immutable snapshots of Service Bus management resources.
+/// Last known, immutable snapshots of Service Bus management resources, shown instantly while
+/// every read fetches fresh data in the background, so they never expire.
 /// A cache hit never exposes the list stored by the cache to callers.
 /// </summary>
 public sealed class ServiceBusEntityCache
 {
-    private static readonly TimeSpan NamespaceExpiry = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan EntityExpiry = TimeSpan.FromSeconds(30);
-
     private readonly ConcurrentDictionary<string, CacheEntry<ServiceBusQueueInfo>> _queues = new();
     private readonly ConcurrentDictionary<string, CacheEntry<ServiceBusTopicInfo>> _topics = new();
     private readonly ConcurrentDictionary<string, CacheEntry<ServiceBusSubscriptionInfo>> _subscriptions = new();
     private CacheEntry<ServiceBusNamespaceInfo>? _namespaces;
 
-    public List<ServiceBusNamespaceInfo>? GetNamespaces() => GetValidSnapshot(_namespaces, NamespaceExpiry);
+    public List<ServiceBusNamespaceInfo>? GetNamespaces() => GetSnapshot(_namespaces);
 
     public void SetNamespaces(IEnumerable<ServiceBusNamespaceInfo> namespaces) =>
-        _namespaces = new CacheEntry<ServiceBusNamespaceInfo>(namespaces.ToArray(), DateTimeOffset.UtcNow);
+        _namespaces = new CacheEntry<ServiceBusNamespaceInfo>(namespaces.ToArray());
 
     public List<ServiceBusQueueInfo>? GetQueues(string namespaceKey) =>
-        GetValidSnapshot(_queues.TryGetValue(namespaceKey, out var entry) ? entry : null, EntityExpiry);
+        GetSnapshot(_queues.TryGetValue(namespaceKey, out var entry) ? entry : null);
 
     public void SetQueues(string namespaceKey, IEnumerable<ServiceBusQueueInfo> queues) =>
-        _queues[namespaceKey] = new CacheEntry<ServiceBusQueueInfo>(queues.ToArray(), DateTimeOffset.UtcNow);
+        _queues[namespaceKey] = new CacheEntry<ServiceBusQueueInfo>(queues.ToArray());
 
     public List<ServiceBusTopicInfo>? GetTopics(string namespaceKey) =>
-        GetValidSnapshot(_topics.TryGetValue(namespaceKey, out var entry) ? entry : null, EntityExpiry);
+        GetSnapshot(_topics.TryGetValue(namespaceKey, out var entry) ? entry : null);
 
     public void SetTopics(string namespaceKey, IEnumerable<ServiceBusTopicInfo> topics) =>
-        _topics[namespaceKey] = new CacheEntry<ServiceBusTopicInfo>(topics.ToArray(), DateTimeOffset.UtcNow);
+        _topics[namespaceKey] = new CacheEntry<ServiceBusTopicInfo>(topics.ToArray());
 
     public List<ServiceBusSubscriptionInfo>? GetSubscriptions(string subscriptionKey) =>
-        GetValidSnapshot(_subscriptions.TryGetValue(subscriptionKey, out var entry) ? entry : null, EntityExpiry);
+        GetSnapshot(_subscriptions.TryGetValue(subscriptionKey, out var entry) ? entry : null);
 
     public void SetSubscriptions(string subscriptionKey, IEnumerable<ServiceBusSubscriptionInfo> subscriptions) =>
-        _subscriptions[subscriptionKey] = new CacheEntry<ServiceBusSubscriptionInfo>(subscriptions.ToArray(), DateTimeOffset.UtcNow);
+        _subscriptions[subscriptionKey] = new CacheEntry<ServiceBusSubscriptionInfo>(subscriptions.ToArray());
     public void Clear()
     {
         _namespaces = null;
@@ -47,13 +45,7 @@ public sealed class ServiceBusEntityCache
         _subscriptions.Clear();
     }
 
-    private static List<T>? GetValidSnapshot<T>(CacheEntry<T>? entry, TimeSpan expiry)
-    {
-        if (entry is null || DateTimeOffset.UtcNow - entry.CreatedAt >= expiry)
-            return null;
+    private static List<T>? GetSnapshot<T>(CacheEntry<T>? entry) => entry?.Items.ToList();
 
-        return entry.Items.ToList();
-    }
-
-    private sealed record CacheEntry<T>(IReadOnlyList<T> Items, DateTimeOffset CreatedAt);
+    private sealed record CacheEntry<T>(IReadOnlyList<T> Items);
 }

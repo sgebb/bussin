@@ -92,7 +92,6 @@ public sealed class SearchStateService : IDisposable
                 }
 
                 var token = await _peekService.GetTokenAsync(entityPath);
-                if (string.IsNullOrEmpty(token)) return;
 
                 List<ServiceBusMessage> loadedMessages;
                 if (operation.EntityType == "queue")
