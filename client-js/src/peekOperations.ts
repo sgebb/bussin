@@ -190,7 +190,11 @@ async function _receiveAndLockMessagesInternal(
             });
 
             receiver.on('message', (context: any) => {
-                if (timedOut) return;
+                // Arrived after we returned: hand it straight back instead of leaving it locked until the lock expires
+                if (timedOut) {
+                    try { context.delivery.release(); } catch {}
+                    return;
+                }
                 console.log(`[ServiceBusAPI] Message event received on ${entityPath}`);
 
                 try {
@@ -265,7 +269,7 @@ async function _receiveAndLockMessagesInternal(
     }
 }
 
-type Settle = (delivery: any) => void;
+export type Settle = (delivery: any) => void;
 
 const accept: Settle = delivery => delivery.accept();
 const release: Settle = delivery => delivery.release();
@@ -279,6 +283,21 @@ const deadLetterWith = (options: DeadLetterOptions): Settle => delivery => deliv
 });
 
 /**
+ * Applies each settlement, highest delivery id first.
+ *
+ * rhea batches the dispositions queued in one tick into ranges of consecutive delivery ids, and it
+ * does not compare outcomes while a range holds a single delivery (rhea 3.0.5, session.js
+ * write_dispositions). Settling #1 with release and #2 with dead-letter in that order sends one
+ * "released" for #1-#2, so the dead-letter never happens. In descending order no two neighbours
+ * are consecutive, so every delivery gets its own disposition with its own outcome.
+ */
+export function settleDeliveries(settlements: Array<[delivery: any, settle: Settle]>): void {
+    [...settlements]
+        .sort(([a], [b]) => (b.id ?? 0) - (a.id ?? 0))
+        .forEach(([delivery, settle]) => settle(delivery));
+}
+
+/**
  * Settles each locked message on the receiver that delivered it. A receiver (and its connection)
  * is closed once none of its messages are still locked, so settling part of a batch keeps the
  * locks on the rest.
@@ -287,6 +306,7 @@ function settleLocked(settlements: Array<[lockToken: string, settle: Settle]>): 
     const result: BatchOperationResult = { successCount: 0, failureCount: 0, errors: [] };
     const touched = new Map<any, any>(); // receiver -> connection
 
+    const found: Array<[lockToken: string, handle: MessageHandle, settle: Settle]> = [];
     for (const [lockToken, settle] of settlements) {
         const handle = messageHandles.get(lockToken);
         if (!handle) {
@@ -294,9 +314,12 @@ function settleLocked(settlements: Array<[lockToken: string, settle: Settle]>): 
             result.errors.push({ messageId: lockToken, error: 'Message not found or lock expired' });
             continue;
         }
+        found.push([lockToken, handle, settle]);
+    }
 
+    settleDeliveries(found.map(([lockToken, handle, settle]) => [handle.delivery, delivery => {
         try {
-            settle(handle.delivery);
+            settle(delivery);
             result.successCount++;
         } catch (err) {
             result.failureCount++;
@@ -304,7 +327,7 @@ function settleLocked(settlements: Array<[lockToken: string, settle: Settle]>): 
         }
         messageHandles.delete(lockToken);
         touched.set(handle.receiver, handle.connection);
-    }
+    }]));
 
     const stillLocked = new Set([...messageHandles.values()].map(h => h.receiver));
     for (const [receiver, connection] of touched) {

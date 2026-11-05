@@ -476,12 +476,21 @@ class MockReceiver extends EventEmitter {
     constructor(private broker: MockBroker, public address: string, public connection: MockConnection) {
         super();
         this.source.address = address;
-        const cleanAddr = this.broker.normalizePath(address);
-        if (cleanAddr.includes('$') || cleanAddr.includes('reply')) this.credit = 999;
+        if (this.isSystem(this.broker.normalizePath(address))) this.credit = 999;
         setTimeout(() => this.emit('receiver_open', { receiver: this }), 1);
     }
     public isOpen() { return true; }
     public isClosed() { return false; }
+    // Management and reply links get unlimited credit; a dead-letter queue is a normal entity
+    private isSystem(cleanAddr: string) {
+        return (cleanAddr.includes('$') && !cleanAddr.includes('$deadletterqueue')) || cleanAddr.includes('reply');
+    }
+    // A released message goes back to its place by sequence number, like on the real broker
+    private putBack(m: any) {
+        const q = this.broker.getMessages(this.address);
+        const idx = q.findIndex(other => other._sequenceNumber > m._sequenceNumber);
+        q.splice(idx === -1 ? q.length : idx, 0, m);
+    }
     public add_credit(n: number) {
         this.credit += n;
         queueMicrotask(() => this.deliverMessages(this.address));
@@ -499,16 +508,14 @@ class MockReceiver extends EventEmitter {
                 accept: () => { this.broker.log(`SETTLEMENT_ACCEPT (${this.address})`); },
                 release: () => {
                     this.broker.log(`SETTLEMENT_RELEASE (${this.address})`);
-                    const q = this.broker.getMessages(this.address);
-                    q.unshift(m); // Put back at front of queue
+                    this.putBack(m);
                 },
                 modify: (options: any) => {
                     this.broker.log(`SETTLEMENT_MODIFY (${this.address})`);
-                    const q = this.broker.getMessages(this.address);
                     if (options?.undeliverable_here) {
                         this.broker.pushMessage(`${this.address}/$deadletterqueue`, m);
                     } else {
-                        q.unshift(m); // Put back at front
+                        this.putBack(m);
                     }
                 },
                 reject: (err: any) => {
@@ -519,8 +526,7 @@ class MockReceiver extends EventEmitter {
                 }
             };
             this.emit('message', { message: m, delivery: d, receiver: this, connection: this.connection, session: this.connection.session });
-            const isSystem = queueToCheck.includes('$') || queueToCheck.includes('reply');
-            if (!isSystem) this.credit--;
+            if (!this.isSystem(queueToCheck)) this.credit--;
         }
     }
     public close() {

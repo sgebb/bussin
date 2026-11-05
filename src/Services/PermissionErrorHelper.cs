@@ -10,7 +10,7 @@ public static class PermissionErrorHelper
     /// </summary>
     public static bool IsPermissionError(string errorMessage)
     {
-        if (string.IsNullOrEmpty(errorMessage))
+        if (string.IsNullOrEmpty(errorMessage) || IsNetworkBlocked(errorMessage))
             return false;
 
         var lowerError = errorMessage.ToLowerInvariant();
@@ -18,6 +18,21 @@ public static class PermissionErrorHelper
                ContainsSendError(lowerError) ||
                ContainsManageError(lowerError) ||
                Contains401Error(lowerError);
+    }
+
+    /// <summary>
+    /// Checks if the namespace refused the connection because of its IP firewall, virtual network
+    /// rules or disabled public access. Service Bus returns these as a 401, like missing permissions.
+    /// </summary>
+    public static bool IsNetworkBlocked(string errorMessage)
+    {
+        if (string.IsNullOrEmpty(errorMessage))
+            return false;
+
+        var lowerError = errorMessage.ToLowerInvariant();
+        return lowerError.Contains("ip has been prevented to connect") ||
+               lowerError.Contains("public network access") ||
+               lowerError.Contains("virtual network service endpoints");
     }
 
     /// <summary>
@@ -48,6 +63,12 @@ public static class PermissionErrorHelper
     {
         if (string.IsNullOrEmpty(errorMessage))
             return errorMessage;
+
+        // Service Bus reports a firewall block as a 401 too, so this has to come before the permission checks
+        if (IsNetworkBlocked(errorMessage))
+        {
+            return "Network access denied: the namespace's firewall or network settings block your IP address.";
+        }
 
         var lowerError = errorMessage.ToLowerInvariant();
 

@@ -22,6 +22,7 @@ public class SettleBySequenceResult
         Errors = NotFound.Select(seq => new BatchOperationError
         {
             MessageId = $"#{seq}",
+            SequenceNumber = seq,
             Error = "Not found: it may already be gone, or be locked by another receiver"
         }).ToList()
     };

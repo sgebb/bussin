@@ -87,65 +87,57 @@ public sealed class BackgroundResubmitService : IDisposable
                     : $"{topicName}/subscriptions/{subscriptionName}/$DeadLetterQueue";
                 var token = await scope.ServiceProvider.GetRequiredService<ServiceBusTokenProvider>().GetTokenAsync(namespaceName, dlqPath);
 
-                // Iteratively peek all messages from DLQ and resubmit them
                 const int batchSize = 250;
                 long fromSequence = 0;
                 int totalResubmitted = 0;
-                bool hasMoreMessages = true;
-                
-                while (hasMoreMessages && operation.Status == ResubmitStatus.Running)
+
+                while (operation.Status == ResubmitStatus.Running)
                 {
-                    // Peek a batch of messages from DLQ
-                    List<ServiceBusMessage> messages;
-                    
-                    if (queueName != null)
+                    if (deleteAfterResubmit)
                     {
-                        messages = await jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, batchSize, fromSequence, true);
+                        // Lock a batch from the head of the DLQ, send the copies, then complete the originals.
+                        // An original only leaves the DLQ once its copy is sent; completed ones are gone, so the
+                        // next receive picks up the following batch.
+                        var locked = queueName != null
+                            ? await jsInterop.ReceiveAndLockQueueMessagesAsync(namespaceName, queueName, token, 5, true, batchSize)
+                            : await jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, token, 5, true, batchSize);
+                        if (locked.Count == 0) break;
+
+                        var lockTokens = locked.Select(m => m.LockToken!).ToArray();
+                        try
+                        {
+                            await operationsService.SendResubmitCopiesAsync(namespaceName, queueName, topicName, locked, fromDeadLetter: true);
+                        }
+                        catch
+                        {
+                            // Nothing was resubmitted: put the batch back, but report the send failure rather than this
+                            try { await operationsService.AbandonMessagesAsync(lockTokens); } catch { }
+                            throw;
+                        }
+
+                        var completion = await operationsService.CompleteMessagesAsync(lockTokens);
+                        totalResubmitted += locked.Count;
+                        operation.MessagesResubmitted = totalResubmitted;
+                        if (completion.FailureCount > 0)
+                        {
+                            // Those originals go back to the DLQ head, so carrying on would resend them again
+                            throw new Exception($"{completion.FailureCount} message(s) were resubmitted but could not be removed from the DLQ, so they now exist in both. Stopped after {totalResubmitted:N0} resubmitted.");
+                        }
                     }
                     else
                     {
-                        messages = await jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, token, batchSize, fromSequence, true);
-                    }
-                    
-                    if (messages.Count == 0)
-                    {
-                        hasMoreMessages = false;
-                        break;
-                    }
-                    
-                    // Get sequence numbers for this batch
-                    var sequenceNumbers = messages
-                        .Where(m => m.SequenceNumber.HasValue)
-                        .Select(m => m.SequenceNumber!.Value)
-                        .ToArray();
-                    
-                    if (sequenceNumbers.Length > 0)
-                    {
-                        // Resubmit this batch
-                        if (queueName != null)
-                        {
-                            await operationsService.ResendQueueMessagesAsync(namespaceName, queueName, sequenceNumbers, true, deleteAfterResubmit);
-                        }
-                        else
-                        {
-                            await operationsService.ResendSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, sequenceNumbers, true, deleteAfterResubmit);
-                        }
-                        
-                        totalResubmitted += sequenceNumbers.Length;
+                        // Copies only: page through the DLQ and leave the originals where they are
+                        var peeked = queueName != null
+                            ? await jsInterop.PeekQueueMessagesAsync(namespaceName, queueName, token, batchSize, fromSequence, true)
+                            : await jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, token, batchSize, fromSequence, true);
+                        if (peeked.Count == 0) break;
+
+                        await operationsService.SendResubmitCopiesAsync(namespaceName, queueName, topicName, peeked, fromDeadLetter: true);
+                        totalResubmitted += peeked.Count;
                         operation.MessagesResubmitted = totalResubmitted;
-                        
+                        fromSequence = peeked.Max(m => m.SequenceNumber ?? 0) + 1;
                     }
-                    
-                    // Update sequence for next batch
-                    var maxSeq = messages.Max(m => m.SequenceNumber ?? 0);
-                    fromSequence = maxSeq + 1;
-                    
-                    // If we got fewer messages than batch size, we're done
-                    if (messages.Count < batchSize)
-                    {
-                        hasMoreMessages = false;
-                    }
-                    
+
                     // Small delay to avoid overwhelming the service
                     await Task.Delay(100);
                 }

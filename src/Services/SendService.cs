@@ -121,13 +121,24 @@ public sealed class SendService
             // 2. If it's a DLQ message and the user checked "delete original", delete it
             if (state.IsViewingDLQ && request.DeleteOriginal)
             {
-                if (state.IsQueueSelected)
+                // The edited message is already sent, so a failure here must not read as a failed resubmit
+                BatchOperationResult removal;
+                try
                 {
-                    await _operationsService.DeleteQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, new[] { request.OriginalSequenceNumber }, fromDeadLetter: true);
+                    removal = state.IsQueueSelected
+                        ? await _operationsService.DeleteQueueMessagesAsync(namespaceOnly, state.SelectedQueueName!, new[] { request.OriginalSequenceNumber }, fromDeadLetter: true)
+                        : await _operationsService.DeleteSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, new[] { request.OriginalSequenceNumber }, fromDeadLetter: true);
                 }
-                else if (state.IsSubscriptionSelected)
+                catch (Exception ex)
                 {
-                    await _operationsService.DeleteSubscriptionMessagesAsync(namespaceOnly, state.SelectedTopicName!, state.SelectedSubscriptionName!, new[] { request.OriginalSequenceNumber }, fromDeadLetter: true);
+                    removal = new BatchOperationResult { FailureCount = 1, Errors = { new BatchOperationError { Error = ex.Message } } };
+                }
+
+                if (removal.FailureCount > 0)
+                {
+                    _notificationService.NotifyWarning($"Message resubmitted, but the original #{request.OriginalSequenceNumber} could not be removed from the Dead Letter Queue. {removal.Errors[0].Error}");
+                    _ = _entitySelectionState.RefreshEntitiesAsync();
+                    return;
                 }
 
                 // Remove it from the local list

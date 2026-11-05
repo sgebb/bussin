@@ -98,8 +98,6 @@ public sealed class ExplorerDialogService : IDisposable
     public string MoveToDLQReason { get; set; } = "Manual move to DLQ";
     public string MoveToDLQErrorDescription { get; set; } = "Moved by user";
 
-
-
     // ConfirmModal Bridge
     public bool ConfirmModalVisible => _confirmModal.IsVisible;
     public string ConfirmModalTitle => _confirmModal.Title;
@@ -120,7 +118,19 @@ public sealed class ExplorerDialogService : IDisposable
     public ExplorerDialogService(IConfirmModalService confirmModal)
     {
         _confirmModal = confirmModal;
-        _confirmModal.OnChange += NotifyStateChanged;
+        _confirmModal.OnChange += OnConfirmModalChanged;
+    }
+
+    // The resubmit/move-to-DLQ extras belong to one dialog only; drop them whenever it closes (confirm or cancel)
+    // so they never show up on the next confirm dialog, e.g. purge or delete.
+    private void OnConfirmModalChanged()
+    {
+        if (!_confirmModal.IsVisible)
+        {
+            IsResubmitModal = false;
+            IsMoveToDLQModal = false;
+        }
+        NotifyStateChanged();
     }
 
     public Task OnConfirmModalConfirmAsync() => _confirmModal.ConfirmAsync();
@@ -134,6 +144,6 @@ public sealed class ExplorerDialogService : IDisposable
 
     public void Dispose()
     {
-        _confirmModal.OnChange -= NotifyStateChanged;
+        _confirmModal.OnChange -= OnConfirmModalChanged;
     }
 }

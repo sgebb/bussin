@@ -202,39 +202,32 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
                 ? await _jsInterop.PeekQueueMessagesBySequenceAsync(namespaceName, queueName, sourceToken, sequenceNumbers, fromDeadLetter)
                 : await _jsInterop.PeekSubscriptionMessagesBySequenceAsync(namespaceName, topicName!, subscriptionName!, sourceToken, sequenceNumbers, fromDeadLetter);
 
-            if (originals.Count == 0)
+            var resent = originals.Select(m => m.SequenceNumber!.Value).ToArray();
+            var result = new SettleBySequenceResult { NotFound = sequenceNumbers.Except(resent).ToArray() }.ToBatchResult();
+            if (resent.Length == 0)
             {
-                return new SettleBySequenceResult { NotFound = sequenceNumbers }.ToBatchResult();
+                return result;
             }
 
-            var batch = originals.Select(msg => new
-            {
-                body = msg.Body ?? "",
-                properties = CreateResendProperties(msg, fromDeadLetter)
-            }).ToArray<object>();
+            await SendResubmitCopiesAsync(namespaceName, queueName, topicName, originals, fromDeadLetter);
+            result.SuccessCount = resent.Length;
 
-            // Messages go back to the queue, or to the topic the subscription belongs to
-            var sendToken = await _tokenProvider.GetTokenAsync(namespaceName, queueName ?? topicName!);
-            if (queueName != null)
-            {
-                await _jsInterop.SendQueueMessageBatchAsync(namespaceName, queueName, sendToken, batch);
-            }
-            else
-            {
-                await _jsInterop.SendTopicMessageBatchAsync(namespaceName, topicName!, sendToken, batch);
-            }
-
-            var result = new BatchOperationResult { SuccessCount = originals.Count };
             if (deleteOriginal)
             {
-                var resent = originals.Select(m => m.SequenceNumber!.Value).ToArray();
-                var removal = await RemoveMessagesAsync(namespaceName, queueName, topicName, subscriptionName, resent, fromDeadLetter, sessionId);
-                result.FailureCount = removal.NotFound.Length;
-                result.Errors = removal.NotFound.Select(seq => new BatchOperationError
+                // The copies are already sent, so a failure here must not read as a failed resend
+                long[] notRemoved;
+                string error = "Resent, but the original could not be removed";
+                try
                 {
-                    MessageId = $"#{seq}",
-                    Error = "Resent, but the original could not be removed"
-                }).ToList();
+                    notRemoved = (await RemoveMessagesAsync(namespaceName, queueName, topicName, subscriptionName, resent, fromDeadLetter, sessionId)).NotFound;
+                }
+                catch (Exception ex)
+                {
+                    notRemoved = resent;
+                    error = $"Resent, but removing the original failed ({ex.Message})";
+                }
+                result.FailureCount += notRemoved.Length;
+                result.Errors.AddRange(notRemoved.Select(seq => new BatchOperationError { MessageId = $"#{seq}", SequenceNumber = seq, Error = error }));
             }
             return result;
         }
@@ -242,6 +235,26 @@ public sealed class ServiceBusOperationsService : IServiceBusOperationsService
         {
             _notificationService.NotifyError($"Failed to resend messages: {ex.Message}");
             throw;
+        }
+    }
+
+    public async Task SendResubmitCopiesAsync(string namespaceName, string? queueName, string? topicName, IReadOnlyList<ServiceBusMessage> originals, bool fromDeadLetter)
+    {
+        var batch = originals.Select(msg => new
+        {
+            body = msg.Body ?? "",
+            properties = CreateResendProperties(msg, fromDeadLetter)
+        }).ToArray<object>();
+
+        // Messages go back to the queue, or to the topic the subscription belongs to
+        var sendToken = await _tokenProvider.GetTokenAsync(namespaceName, queueName ?? topicName!);
+        if (queueName != null)
+        {
+            await _jsInterop.SendQueueMessageBatchAsync(namespaceName, queueName, sendToken, batch);
+        }
+        else
+        {
+            await _jsInterop.SendTopicMessageBatchAsync(namespaceName, topicName!, sendToken, batch);
         }
     }
 

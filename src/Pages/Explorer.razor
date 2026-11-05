@@ -178,24 +178,30 @@
         }
         @if (!string.IsNullOrEmpty(errorMsg))
         {
-            @if (PermissionErrorHelper.IsPermissionError(rawErrorMsg ?? ""))
+            var networkBlocked = PermissionErrorHelper.IsNetworkBlocked(rawErrorMsg ?? "");
+            @if (networkBlocked || PermissionErrorHelper.IsPermissionError(rawErrorMsg ?? ""))
             {
-                var permissionType = PermissionErrorHelper.GetPermissionType(rawErrorMsg ?? "");
-                var roles = PermissionErrorHelper.GetRecommendedRoles(permissionType);
                 <div class="alert alert-warning alert-dismissible mt-2">
                     <button type="button" class="btn-close" @onclick="ClearError"></button>
                     <div class="d-flex align-items-start">
-                        <i class="bi bi-shield-exclamation me-2 fs-5"></i>
+                        <i class="bi @(networkBlocked ? "bi-hdd-network" : "bi-shield-exclamation") me-2 fs-5"></i>
                         <div>
                             <strong>@errorMsg</strong>
                             <div class="mt-2">
-                                <small>To perform this operation, you need one of these Azure RBAC roles:</small>
-                                <ul class="mb-2 mt-1">
-                                    @foreach (var role in roles)
-                                    {
-                                        <li><code>@role</code></li>
-                                    }
-                                </ul>
+                                @if (networkBlocked)
+                                {
+                                    <small>Add your IP address to the namespace's firewall under <em>Networking</em> in the Azure portal, or connect through a network it allows (such as a VPN). Your roles are not the problem.</small>
+                                }
+                                else
+                                {
+                                    <small>To perform this operation, you need one of these Azure RBAC roles:</small>
+                                    <ul class="mb-2 mt-1">
+                                        @foreach (var role in PermissionErrorHelper.GetRecommendedRoles(PermissionErrorHelper.GetPermissionType(rawErrorMsg ?? "")))
+                                        {
+                                            <li><code>@role</code></li>
+                                        }
+                                    </ul>
+                                }
                             </div>
                             <details class="mt-2">
                                 <summary class="text-muted" style="cursor: pointer; font-size: 0.8rem;">
@@ -418,6 +424,7 @@
                 _loadedSubscriptionRules.Clear();
             }
             MessageListState.Clear();
+            ClearError();
         }
 
         await SelectionState.InitializeAsync(

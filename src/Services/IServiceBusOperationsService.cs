@@ -26,6 +26,8 @@ public interface IServiceBusOperationsService
     Task<BatchOperationResult> DeleteSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, string? sessionId = null);
     Task<BatchOperationResult> ResendQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true, string? sessionId = null);
     Task<BatchOperationResult> ResendSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, bool fromDeadLetter = false, bool deleteOriginal = true, string? sessionId = null);
+    /// <summary>Sends resubmitted copies of the given messages to the queue, or to the topic when queueName is null. Leaves the originals alone.</summary>
+    Task SendResubmitCopiesAsync(string namespaceName, string? queueName, string? topicName, IReadOnlyList<ServiceBusMessage> originals, bool fromDeadLetter);
     Task<BatchOperationResult> MoveToDLQQueueMessagesAsync(string namespaceName, string queueName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null);
     Task<BatchOperationResult> MoveToDLQSubscriptionMessagesAsync(string namespaceName, string topicName, string subscriptionName, long[] sequenceNumbers, string? reason = null, string? description = null, string? sessionId = null);
 
