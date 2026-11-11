@@ -153,6 +153,32 @@
             });
         };
 
+        // Hovering a truncated entity name shows the whole name in a bubble over it.
+        // Added outside the entity grid, which clips its overflow, but inside [data-theme] so the theme colours apply.
+        (() => {
+            const peek = document.createElement('div');
+            peek.className = 'entity-name-peek';
+            let current = null;
+            const hide = () => { current = null; peek.remove(); };
+            document.addEventListener('mouseover', (evt) => {
+                const name = evt.target.closest ? evt.target.closest('.entity-name') : null;
+                if (name === current) return;
+                hide();
+                if (!name || name.scrollWidth <= name.clientWidth) return;
+                current = name;
+                const r = name.getBoundingClientRect();
+                peek.textContent = name.textContent;
+                // Offsets are the bubble's padding + border (app.css), so its text lands on the original
+                Object.assign(peek.style, {
+                    left: (r.left - 9) + 'px', top: (r.top - 4) + 'px', lineHeight: r.height + 'px',
+                    font: getComputedStyle(name).font, maxWidth: (window.innerWidth - r.left) + 'px'
+                });
+                (name.closest('[data-theme]') || document.body).appendChild(peek);
+            });
+            document.addEventListener('scroll', hide, true);
+            document.documentElement.addEventListener('mouseleave', hide);
+        })();
+
         // Scroll active navigated message list item into view
         window.scrollNavigatedIntoView = function () {
             const el = document.getElementById('navigated-msg');

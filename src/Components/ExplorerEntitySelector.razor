@@ -54,7 +54,7 @@
                          @onclick="() => OnQueueSelected.InvokeAsync(queue.Name)" title="@queue.Name">
                         <div class="d-flex justify-content-between align-items-center w-100">
                             <span class="entity-name-with-icons text-truncate me-2">
-                                <span class="text-truncate">@queue.Name</span>
+                                <span class="entity-name text-truncate">@queue.Name</span>
                                 <span class="entity-icons">
                                     @if (queue.Status != "Active")
                                     {
@@ -76,17 +76,18 @@
                                     {
                                         <i class="bi bi-arrow-right-circle" title="Forwards to: @queue.ForwardTo"></i>
                                     }
-                                    @if (queue.ScheduledMessageCount > 0)
-                                    {
-                                        <i class="bi bi-clock" title="@queue.ScheduledMessageCount scheduled message(s)"></i>
-                                    }
                                 </span>
                             </span>
                             <div class="d-flex align-items-center gap-2">
-                                @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0)
+                                @if (queue.ActiveMessageCount > 0 || queue.DeadLetterMessageCount > 0 || queue.ScheduledMessageCount > 0)
                                 {
-                                    <span class="badge bg-secondary" title="@queue.ActiveMessageCount.ToString("N0") active / @queue.DeadLetterMessageCount.ToString("N0") dead-lettered">
-                                        @Compact(queue.ActiveMessageCount) / <span class="text-dlq-orange fw-bold">@Compact(queue.DeadLetterMessageCount)</span>
+                                    <span class="badge bg-secondary" title="@queue.ActiveMessageCount.ToString("N0") active (@queue.ScheduledMessageCount.ToString("N0") scheduled) / @queue.DeadLetterMessageCount.ToString("N0") dead-lettered">
+                                        @Compact(queue.ActiveMessageCount)
+                                        @if (queue.ScheduledMessageCount > 0)
+                                        {
+                                            <span class="text-info fw-bold">(@Compact(queue.ScheduledMessageCount))</span>
+                                        }
+                                        / <span class="text-dlq-orange fw-bold">@Compact(queue.DeadLetterMessageCount)</span>
                                     </span>
                                 }
                                 @PinButton(new PinnedEntity(Queue: queue.Name))
@@ -143,15 +144,15 @@
                          @onclick="() => SelectTopic(topic)" title="@topic.Name">
                         <div class="d-flex justify-content-between align-items-center w-100">
                             <span class="entity-name-with-icons text-truncate me-2">
-                                <span class="text-truncate">@topic.Name</span>
-                                <span class="entity-icons">
-                                    @if (topic.ScheduledMessageCount > 0)
-                                    {
-                                        <i class="bi bi-clock" title="@topic.ScheduledMessageCount scheduled message(s)"></i>
-                                    }
-                                </span>
+                                <span class="entity-name text-truncate">@topic.Name</span>
                             </span>
                             <div class="d-flex align-items-center gap-2">
+                                @if (topic.ScheduledMessageCount > 0)
+                                {
+                                    <span class="badge bg-secondary" title="@topic.ScheduledMessageCount.ToString("N0") scheduled">
+                                        <span class="text-info fw-bold">(@Compact(topic.ScheduledMessageCount))</span>
+                                    </span>
+                                }
                                 @PinButton(new PinnedEntity(Topic: topic.Name))
                                 @if (IsConnectionStringMode)
                                 {
@@ -220,7 +221,7 @@
                              @onclick="() => OnSubscriptionSelected.InvokeAsync(sub.Name)" title="@sub.Name">
                              <div class="d-flex justify-content-between align-items-center w-100">
                                  <span class="entity-name-with-icons text-truncate me-2">
-                                     <span class="text-truncate">@sub.Name</span>
+                                     <span class="entity-name text-truncate">@sub.Name</span>
                                      <span class="entity-icons">
                                          @if (sub.Status != "Active")
                                          {
