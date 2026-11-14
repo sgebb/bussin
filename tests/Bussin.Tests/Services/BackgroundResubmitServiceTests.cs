@@ -64,6 +64,29 @@ public sealed class BackgroundResubmitServiceTests
         _ops.Verify(o => o.CompleteMessagesAsync(It.IsAny<string[]>()), Times.Never);
     }
 
+    [Fact]
+    public async Task WithDelete_MessagesDeadLetteredAfterTheStart_AreLeftInTheDlqAndEndTheRun()
+    {
+        // The receiver of the resubmitted copies keeps failing, so the DLQ never runs dry
+        var before = DateTime.UtcNow.AddHours(-1);
+        _js.Reset();
+        _js.Setup(j => j.ReceiveAndLockQueueMessagesAsync(Ns, Queue, It.IsAny<string>(), It.IsAny<int>(), true, It.IsAny<int>(), null))
+            .ReturnsAsync(() =>
+            [
+                new ServiceBusMessage { SequenceNumber = 1, LockToken = "old", EnqueuedTime = before },
+                new ServiceBusMessage { SequenceNumber = 2, LockToken = "again", EnqueuedTime = DateTime.UtcNow }
+            ]);
+        _ops.Setup(o => o.CompleteMessagesAsync(It.IsAny<string[]>())).ReturnsAsync(new BatchOperationResult { SuccessCount = 1 });
+
+        var operation = await RunAsync();
+
+        Assert.Equal(ResubmitStatus.Completed, operation.Status);
+        Assert.Equal(1, operation.MessagesResubmitted);
+        _ops.Verify(o => o.SendResubmitCopiesAsync(Ns, Queue, null, It.Is<IReadOnlyList<ServiceBusMessage>>(b => b.Single().LockToken == "old"), true), Times.Once);
+        _ops.Verify(o => o.CompleteMessagesAsync(new[] { "old" }), Times.Once);
+        _ops.Verify(o => o.AbandonMessagesAsync(new[] { "again" }), Times.Once);
+    }
+
     private async Task<ResubmitOperation> RunAsync()
     {
         var id = await _service.StartResubmitAsync(Ns, "queue", Queue, deleteAfterResubmit: true);

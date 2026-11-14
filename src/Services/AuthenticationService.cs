@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Bussin.Services;
 
@@ -93,14 +94,14 @@ public sealed class AuthenticationService(
         ToCredential(await AcquireTokenSilentAsync(ArmScope, tenantId: null));
 
     public async Task<string?> GetServiceBusTokenAsync() =>
-        (await AcquireTokenSilentAsync(ServiceBusScope, await GetCurrentTenantIdAsync())).Token;
+        TokenOf(await AcquireTokenSilentAsync(ServiceBusScope, await GetCurrentTenantIdAsync()));
 
     public async Task<AccessStatus> CheckAccessAsync()
     {
         var tenantId = await GetCurrentTenantIdAsync();
         var management = await AcquireTokenSilentAsync(ArmScope, tenantId);
         var serviceBus = await AcquireTokenSilentAsync(ServiceBusScope, tenantId);
-        return new AccessStatus(management.AccessProblem, serviceBus.AccessProblem, management.Message ?? serviceBus.Message);
+        return new AccessStatus(ProblemOf(management), ProblemOf(serviceBus), MessageOf(management) ?? MessageOf(serviceBus));
     }
 
     public async Task<string?> GrantAccessAsync()
@@ -125,26 +126,39 @@ public sealed class AuthenticationService(
         try
         {
             var result = await jsRuntime.InvokeAsync<SilentTokenResult>("msalHelper.acquireTokenSilent", scope, tenantId);
-            if (result.Token is null)
+            if (result is TokenProblem problem)
             {
-                Console.WriteLine($"Silent token for {scope} failed ({result.Problem}): {result.Message}");
+                Console.WriteLine($"Silent token for {scope} failed ({problem.Problem}): {problem.Message}");
             }
             return result;
         }
-        catch (JSException ex)
+        catch (Exception ex) when (ex is JSException or JsonException)
         {
-            return new SilentTokenResult(null, null, nameof(AccessProblem.Failed), ex.Message);
+            return new TokenProblem(nameof(AccessProblem.Failed), ex.Message);
         }
     }
 
-    private static ArmToken? ToCredential(SilentTokenResult result) =>
-        result.Token is null ? null : new ArmToken(result.Token, result.ExpiresOn ?? DateTimeOffset.UtcNow.AddHours(1));
-
-    // Shape returned by msalHelper.acquireTokenSilent: either Token, or Problem (an AccessProblem name) and Message.
-    private sealed record SilentTokenResult(string? Token, DateTimeOffset? ExpiresOn, string? Problem, string? Message)
+    private static ArmToken? ToCredential(SilentTokenResult result) => result switch
     {
-        public AccessProblem AccessProblem => Token is not null ? AccessProblem.None
-            : Enum.TryParse<AccessProblem>(Problem, out var problem) ? problem
-            : AccessProblem.Failed;
-    }
+        TokenAcquired t => new ArmToken(t.Token, t.ExpiresOn ?? DateTimeOffset.UtcNow.AddHours(1)),
+        TokenProblem => null,
+    };
+
+    private static string? TokenOf(SilentTokenResult result) => result is TokenAcquired t ? t.Token : null;
+
+    private static AccessProblem ProblemOf(SilentTokenResult result) => result switch
+    {
+        TokenAcquired => AccessProblem.None,
+        TokenProblem p => Enum.TryParse<AccessProblem>(p.Problem, out var problem) ? problem : AccessProblem.Failed,
+    };
+
+    private static string? MessageOf(SilentTokenResult result) => result is TokenProblem p ? p.Message : null;
+
+    // Shapes returned by msalHelper.acquireTokenSilent: { token, expiresOn } or { problem, message },
+    // told apart by which properties are present. Problem is an AccessProblem name.
+    private sealed record TokenAcquired(string Token, DateTimeOffset? ExpiresOn);
+    private sealed record TokenProblem(string Problem, string? Message);
+
+    [JsonUnion(TypeClassifier = typeof(JsonUnionTypeStructuralClassifier))]
+    private union SilentTokenResult(TokenAcquired, TokenProblem);
 }

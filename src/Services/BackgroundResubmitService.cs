@@ -17,6 +17,8 @@ public sealed class BackgroundResubmitService : IDisposable
     
     /// <summary>An operation started, changed status or was removed.</summary>
     public event Action? OnOperationsChanged;
+    /// <summary>A running operation reported a new count; only progress displays need this.</summary>
+    public event Action? OnProgressChanged;
     public event Action<ResubmitOperation>? OnResubmitCompleted;
 
     public IReadOnlyList<ResubmitOperation> ActiveOperations => _activeOperations.Values.OrderBy(o => o.StartTime).ToList();
@@ -91,7 +93,14 @@ public sealed class BackgroundResubmitService : IDisposable
                 long fromSequence = 0;
                 int totalResubmitted = 0;
 
-                while (operation.Status == ResubmitStatus.Running)
+                // Only messages that were in the DLQ when the resubmit started. Dead-lettering keeps the enqueued
+                // time, so a resubmitted copy that is dead-lettered again shows up with a later one; resubmitting
+                // those would loop for as long as whatever dead-letters them keeps failing.
+                var startedAt = DateTime.UtcNow;
+                bool FromBeforeStart(ServiceBusMessage m) => m.EnqueuedTime is not { } t || t.ToUniversalTime() < startedAt;
+                bool reachedNewer = false;
+
+                while (operation.Status == ResubmitStatus.Running && !reachedNewer)
                 {
                     if (deleteAfterResubmit)
                     {
@@ -103,10 +112,19 @@ public sealed class BackgroundResubmitService : IDisposable
                             : await jsInterop.ReceiveAndLockSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, token, 5, true, batchSize);
                         if (locked.Count == 0) break;
 
-                        var lockTokens = locked.Select(m => m.LockToken!).ToArray();
+                        var batch = locked.Where(FromBeforeStart).ToList();
+                        var newer = locked.Except(batch).Select(m => m.LockToken!).ToArray();
+                        if (newer.Length > 0)
+                        {
+                            reachedNewer = true;
+                            try { await operationsService.AbandonMessagesAsync(newer); } catch { }
+                            if (batch.Count == 0) break;
+                        }
+
+                        var lockTokens = batch.Select(m => m.LockToken!).ToArray();
                         try
                         {
-                            await operationsService.SendResubmitCopiesAsync(namespaceName, queueName, topicName, locked, fromDeadLetter: true);
+                            await operationsService.SendResubmitCopiesAsync(namespaceName, queueName, topicName, batch, fromDeadLetter: true);
                         }
                         catch
                         {
@@ -116,8 +134,9 @@ public sealed class BackgroundResubmitService : IDisposable
                         }
 
                         var completion = await operationsService.CompleteMessagesAsync(lockTokens);
-                        totalResubmitted += locked.Count;
+                        totalResubmitted += batch.Count;
                         operation.MessagesResubmitted = totalResubmitted;
+                        OnProgressChanged?.Invoke();
                         if (completion.FailureCount > 0)
                         {
                             // Those originals go back to the DLQ head, so carrying on would resend them again
@@ -132,24 +151,34 @@ public sealed class BackgroundResubmitService : IDisposable
                             : await jsInterop.PeekSubscriptionMessagesAsync(namespaceName, topicName!, subscriptionName!, token, batchSize, fromSequence, true);
                         if (peeked.Count == 0) break;
 
-                        await operationsService.SendResubmitCopiesAsync(namespaceName, queueName, topicName, peeked, fromDeadLetter: true);
-                        totalResubmitted += peeked.Count;
+                        var batch = peeked.Where(FromBeforeStart).ToList();
+                        reachedNewer = batch.Count < peeked.Count;
+                        if (batch.Count == 0) break;
+
+                        await operationsService.SendResubmitCopiesAsync(namespaceName, queueName, topicName, batch, fromDeadLetter: true);
+                        totalResubmitted += batch.Count;
                         operation.MessagesResubmitted = totalResubmitted;
+                        OnProgressChanged?.Invoke();
                         fromSequence = peeked.Max(m => m.SequenceNumber ?? 0) + 1;
                     }
 
                     // Small delay to avoid overwhelming the service
                     await Task.Delay(100);
                 }
-                
-                operation.Status = operation.Status == ResubmitStatus.Running
-                    ? ResubmitStatus.Completed
-                    : ResubmitStatus.Cancelled;
+
+                var stopped = operation.Status != ResubmitStatus.Running;
+                operation.Status = stopped ? ResubmitStatus.Cancelled : ResubmitStatus.Completed;
                 operation.EndTime = DateTime.Now;
                 OnResubmitCompleted?.Invoke(operation);
 
                 string typeLabel = entityType == "queue" ? "queue" : "subscription";
-                _notificationService.NotifySuccess($"Resubmit complete: {totalResubmitted:N0} messages resubmitted from {typeLabel} '{entityPath}' DLQ", notificationId);
+                var summary = $"{totalResubmitted:N0} messages resubmitted from {typeLabel} '{entityPath}' DLQ";
+                if (stopped)
+                    _notificationService.NotifyInfo($"Resubmit stopped: {summary}", notificationId);
+                else if (reachedNewer)
+                    _notificationService.NotifyWarning($"Resubmit complete: {summary}. Messages dead-lettered after it started, such as resubmitted ones failing again, were left in the DLQ", notificationId);
+                else
+                    _notificationService.NotifySuccess($"Resubmit complete: {summary}", notificationId);
             }
             catch (Exception ex)
             {

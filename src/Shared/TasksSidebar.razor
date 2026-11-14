@@ -1,4 +1,5 @@
 @inject BackgroundPurgeService BackgroundPurge
+@inject BackgroundResubmitService BackgroundResubmit
 @inject BackgroundSearchService BackgroundSearch
 @implements IDisposable
 
@@ -92,6 +93,75 @@
                         </div>
                     }
                     
+                    @* Resubmit Operations *@
+                    @foreach (var task in BackgroundResubmit.ActiveOperations)
+                    {
+                        var isCompleted = task.Status == ResubmitStatus.Completed;
+                        var isFailed = task.Status == ResubmitStatus.Failed;
+                        var isRunning = task.Status == ResubmitStatus.Running;
+                        var isCancelled = task.Status == ResubmitStatus.Cancelled;
+
+                        <div class="task-card @(isCompleted ? "task-success" : "") @(isFailed ? "task-failed" : "")"
+                             title="Started: @task.StartTime.ToString("G")">
+                            <div class="task-card-header">
+                                <div class="task-icon">
+                                    @if (isRunning)
+                                    {
+                                        <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+                                    }
+                                    else if (isCompleted)
+                                    {
+                                        <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                    }
+                                    else if (isCancelled)
+                                    {
+                                        <i class="bi bi-slash-circle-fill text-secondary fs-5"></i>
+                                    }
+                                    else if (isFailed)
+                                    {
+                                        <i class="bi bi-exclamation-circle-fill text-danger fs-5"></i>
+                                    }
+                                </div>
+                                <div class="task-details">
+                                    <div class="task-name">
+                                        <i class="bi bi-arrow-repeat me-1"></i>Resubmitting @task.EntityPath
+                                    </div>
+                                    <div class="task-meta">
+                                        <span class="badge bg-secondary me-1">DLQ</span>
+                                        <span>@task.MessagesResubmitted.ToString("N0") resubmitted@(task.DeleteAfterResubmit ? "" : " (copies)")</span>
+                                        @if (isFailed) { <br/><span class="text-danger small">@task.ErrorMessage</span> }
+                                    </div>
+                                </div>
+                                @if (isRunning)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger task-cancel-btn"
+                                            @onclick="() => BackgroundResubmit.CancelResubmit(task.Id)"
+                                            title="Stop after the current batch">
+                                        <i class="bi bi-stop-fill"></i>
+                                    </button>
+                                }
+                            </div>
+                            <div class="progress mt-2" style="height: 3px;">
+                                @if (isRunning)
+                                {
+                                    <div class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                                }
+                                else if (isCompleted)
+                                {
+                                    <div class="progress-bar bg-success" style="width: 100%"></div>
+                                }
+                                else if (isCancelled)
+                                {
+                                    <div class="progress-bar bg-secondary" style="width: 100%"></div>
+                                }
+                                else
+                                {
+                                    <div class="progress-bar bg-danger" style="width: 100%"></div>
+                                }
+                            </div>
+                        </div>
+                    }
+
                     @* Search Operations *@
                     @foreach (var task in BackgroundSearch.ActiveOperations)
                     {
@@ -208,16 +278,20 @@
     [Parameter] public EventCallback<SearchOperation> OnViewSearchResults { get; set; }
     
     private bool isOpen = false;
-    private bool HasActiveTasks => BackgroundPurge.ActiveOperations.Any() || BackgroundSearch.ActiveOperations.Any();
-    private bool HasRunningTasks => 
-        BackgroundPurge.ActiveOperations.Any(o => o.Status == PurgeStatus.Running || o.Status == PurgeStatus.Stopping) || 
+    private bool HasActiveTasks => TotalTaskCount > 0;
+    private bool HasRunningTasks =>
+        BackgroundPurge.ActiveOperations.Any(o => o.Status == PurgeStatus.Running || o.Status == PurgeStatus.Stopping) ||
+        BackgroundResubmit.ActiveOperations.Any(o => o.Status == ResubmitStatus.Running) ||
         BackgroundSearch.ActiveOperations.Any(o => o.Status == SearchStatus.Running || o.Status == SearchStatus.Stopping);
-    private int TotalTaskCount => BackgroundPurge.ActiveOperations.Count + BackgroundSearch.ActiveOperations.Count;
+    private int TotalTaskCount =>
+        BackgroundPurge.ActiveOperations.Count + BackgroundResubmit.ActiveOperations.Count + BackgroundSearch.ActiveOperations.Count;
 
     protected override void OnInitialized()
     {
         BackgroundPurge.OnOperationsChanged += StateHasChanged;
         BackgroundPurge.OnProgressChanged += StateHasChanged;
+        BackgroundResubmit.OnOperationsChanged += StateHasChanged;
+        BackgroundResubmit.OnProgressChanged += StateHasChanged;
         BackgroundSearch.OnOperationsChanged += StateHasChanged;
     }
 
@@ -225,6 +299,8 @@
     {
         BackgroundPurge.OnOperationsChanged -= StateHasChanged;
         BackgroundPurge.OnProgressChanged -= StateHasChanged;
+        BackgroundResubmit.OnOperationsChanged -= StateHasChanged;
+        BackgroundResubmit.OnProgressChanged -= StateHasChanged;
         BackgroundSearch.OnOperationsChanged -= StateHasChanged;
     }
 
