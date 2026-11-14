@@ -13,7 +13,7 @@
 
 @if (isAuthenticated || NavState.RunWithoutLogin)
 {
-    <div class="container-fluid p-4">
+    <div class="container-fluid p-4 @(showNamespaceLoader ? "home-page-loading" : "")">
         @if (NavState.RunWithoutLogin)
         {
             <div class="alert alert-info border-info shadow-sm mb-4 py-3 d-flex align-items-center justify-content-between">
@@ -60,7 +60,7 @@
 
         @if (isAuthenticated)
         {
-            @if (hasArmPermission || isCheckingPermissions)
+            @if (showFilterBar)
             {
                 <div class="row justify-content-center mb-4 mt-2 namespace-filter-bar">
                     <div class="col-lg-8">
@@ -76,19 +76,28 @@
                                     </div>
                                 }
                             </div>
-                            <a href="user" class="text-secondary text-decoration-none text-nowrap small" title="Can't find your namespace? Check your tenant settings.">
-                                <small><i class="bi bi-question-circle"></i><span class="desktop-only ms-1">Wrong Tenant?</span></small>
-                            </a>
+                            @WrongTenantLink
                         </div>
                     </div>
                 </div>
             }
 
-            @if ((isCheckingPermissions || isRefreshing) && namespaces.Count == 0)
+            @if (showNamespaceLoader)
             {
-                <div class="text-center my-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">@(isCheckingPermissions ? "Checkin permissions..." : "Loadin namespaces...")</p>
+                @* Same columns as the filter bar, with an invisible copy of the link, so it centres under the input *@
+                <div class="row justify-content-center align-items-center flex-grow-1 my-5">
+                    <div class="col-lg-8">
+                        <div class="d-flex gap-3">
+                            <div class="flex-grow-1 text-center">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <p class="mt-2 mb-0 text-muted">@(isCheckingPermissions ? "Checkin permissions..." : "Loadin namespaces...")</p>
+                            </div>
+                            @if (showFilterBar)
+                            {
+                                <div class="invisible" aria-hidden="true">@WrongTenantLink</div>
+                            }
+                        </div>
+                    </div>
                 </div>
             }
             else if (access is { IsComplete: false } && !isGrantingAccess)
@@ -316,6 +325,13 @@ else
         backdrop-filter: blur(6px);
     }
 
+    /* While loading, the page fills main so the loader can centre in the space below the filter */
+    .home-page-loading {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+
     /* Symmetric padding keeps centred text clear of the spinner. */
     .namespace-filter-input {
         padding-inline: 2.75rem;
@@ -336,6 +352,11 @@ else
         /* Below the fixed mobile top bar */
         .namespace-filter-bar {
             top: 50px;
+        }
+
+        /* main scrolls with the page here and is offset by the fixed top bar */
+        .home-page-loading {
+            min-height: calc(100dvh - 50px);
         }
 
         /* Room for the placeholder matters more than perfect centring */
@@ -413,6 +434,13 @@ else
     private string? grantErrorMessage = null;
     private bool isCheckingPermissions = false;
     private bool isAuthenticated = false;
+    private bool showFilterBar => isAuthenticated && (hasArmPermission || isCheckingPermissions);
+    private bool showNamespaceLoader => isAuthenticated && (isCheckingPermissions || isRefreshing) && namespaces.Count == 0;
+
+    private RenderFragment WrongTenantLink =>
+        @<a href="user" class="text-secondary text-decoration-none text-nowrap small" title="Can't find your namespace? Check your tenant settings.">
+            <small><i class="bi bi-question-circle"></i><span class="desktop-only ms-1">Wrong Tenant?</span></small>
+        </a>;
 
     private string? currentTenantName;
     private string? currentTenantId;
